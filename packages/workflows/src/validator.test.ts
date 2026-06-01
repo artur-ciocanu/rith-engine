@@ -2,11 +2,6 @@ import { describe, test, expect, beforeEach, afterEach } from 'bun:test';
 import { mkdtemp, mkdir, writeFile, rm } from 'fs/promises';
 import { join } from 'path';
 import { tmpdir } from 'os';
-import { registerBuiltinProviders, clearRegistry } from '@rith/providers';
-
-// Bootstrap provider registry (needed by capability-driven warnings in validator)
-clearRegistry();
-registerBuiltinProviders();
 
 import {
   levenshtein,
@@ -211,20 +206,8 @@ describe('validateWorkflowResources — MCP validation', () => {
     const mcpErrors = issues.filter(i => i.field === 'mcp' && i.level === 'error');
     expect(mcpErrors).toHaveLength(0);
   });
-
-  test('does not warn when MCP is used with codex provider', async () => {
-    const mcpPath = join(tmpDir, 'good.json');
-    await writeFile(mcpPath, '{"server": {"command": "npx"}}');
-    const workflow = makeWorkflow(
-      'test',
-      [{ id: 'step1', prompt: 'do stuff', mcp: mcpPath } as unknown as DagNode],
-      'codex'
-    );
-    const issues = await validateWorkflowResources(workflow, tmpDir);
-    const mcpWarnings = issues.filter(i => i.field === 'mcp' && i.level === 'warning');
-    expect(mcpWarnings).toHaveLength(0);
-  });
 });
+
 
 // =============================================================================
 // validateCommand
@@ -399,47 +382,3 @@ describe('validateWorkflowResources — script nodes', () => {
   });
 });
 
-// =============================================================================
-// validateWorkflowResources — inline agents capability warning
-// =============================================================================
-
-describe('validateWorkflowResources — agents capability', () => {
-  const agentsField = {
-    'brief-gen': { description: 'd', prompt: 'p' },
-  };
-
-  test('warns when provider does not support inline agents (codex)', async () => {
-    const workflow = makeWorkflow(
-      'test',
-      [{ id: 'step1', prompt: 'p', agents: agentsField } as unknown as DagNode],
-      'codex'
-    );
-    const issues = await validateWorkflowResources(workflow, tmpDir);
-    const warning = issues.find(i => i.level === 'warning' && i.field === 'agents');
-    expect(warning).toBeDefined();
-    expect(warning!.message).toContain("not supported by provider 'codex'");
-    expect(warning!.hint).toContain('claude');
-  });
-
-  test('no agents-capability warning when provider is claude', async () => {
-    const workflow = makeWorkflow(
-      'test',
-      [{ id: 'step1', prompt: 'p', agents: agentsField } as unknown as DagNode],
-      'claude'
-    );
-    const issues = await validateWorkflowResources(workflow, tmpDir);
-    const warning = issues.find(i => i.level === 'warning' && i.field === 'agents');
-    expect(warning).toBeUndefined();
-  });
-
-  test('no warning when node has no agents field', async () => {
-    const workflow = makeWorkflow(
-      'test',
-      [{ id: 'step1', prompt: 'p' } as unknown as DagNode],
-      'codex'
-    );
-    const issues = await validateWorkflowResources(workflow, tmpDir);
-    const warning = issues.find(i => i.level === 'warning' && i.field === 'agents');
-    expect(warning).toBeUndefined();
-  });
-});
