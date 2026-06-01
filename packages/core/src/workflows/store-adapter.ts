@@ -10,7 +10,7 @@ import * as workflowDb from '../db/workflows';
 import * as workflowEventDb from '../db/workflow-events';
 import * as codebaseDb from '../db/codebases';
 import * as envVarDb from '../db/env-vars';
-import { getAgentProvider } from '@rith/providers';
+import { PiProvider } from '@rith/providers';
 import { loadConfig as loadMergedConfig } from '../config/config-loader';
 import { createLogger } from '@rith/paths';
 
@@ -69,7 +69,7 @@ export function createWorkflowStore(): IWorkflowStore {
 export function createWorkflowDeps(): WorkflowDeps {
   return {
     store: createWorkflowStore(),
-    getAgentProvider,
+    getAgentProvider: () => new PiProvider(),
     loadConfig: loadMergedConfig,
   };
 }

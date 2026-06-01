@@ -2,7 +2,7 @@
  * Web platform adapter implementing IPlatformAdapter with SSE stream management.
  * Bridge between the orchestrator and the React frontend via Server-Sent Events.
  */
-import type { IWebPlatformAdapter, MessageMetadata } from '@rith/core';
+import type { IPlatformAdapter, MessageMetadata } from '@rith/core';
 import type { MessageChunk } from '@rith/providers/types';
 import { createLogger } from '@rith/paths';
 import { MessagePersistence } from './web/persistence';
@@ -16,7 +16,7 @@ function getLog(): ReturnType<typeof createLogger> {
   return cachedLog;
 }
 
-export class WebAdapter implements IWebPlatformAdapter {
+export class WebAdapter implements IPlatformAdapter {
   /** Per-conversation tool call counter for unique SSE tool IDs */
   private toolCallCounter = new Map<string, number>();
   /**

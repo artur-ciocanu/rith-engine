@@ -13,7 +13,6 @@
 import { z } from '@hono/zod-openapi';
 import { stepRetryConfigSchema } from './retry';
 import { loopNodeConfigSchema } from './loop';
-import { workflowNodeHooksSchema } from './hooks';
 import { isValidCommandName } from '../command-validation';
 
 // ---------------------------------------------------------------------------
@@ -142,7 +141,6 @@ export const dagNodeBaseSchema = z.object({
   denied_tools: z.array(z.string()).optional(),
   idle_timeout: z.number().optional(),
   retry: stepRetryConfigSchema.optional(),
-  hooks: workflowNodeHooksSchema.optional(),
   mcp: z.string().min(1, "'mcp' must be a non-empty string path").optional(),
   skills: z
     .array(z.string().min(1, 'each skill must be a non-empty string'))
@@ -334,7 +332,6 @@ export const BASH_NODE_AI_FIELDS: readonly string[] = [
   'output_format',
   'allowed_tools',
   'denied_tools',
-  'hooks',
   'mcp',
   'skills',
   'agents',
@@ -559,7 +556,6 @@ export const dagNodeSchema = dagNodeBaseSchema
       ...(data.output_format !== undefined ? { output_format: data.output_format } : {}),
       ...(data.allowed_tools !== undefined ? { allowed_tools: data.allowed_tools } : {}),
       ...(data.denied_tools !== undefined ? { denied_tools: data.denied_tools } : {}),
-      ...(data.hooks !== undefined ? { hooks: data.hooks } : {}),
       ...(data.mcp !== undefined ? { mcp: data.mcp.trim() } : {}),
       ...(data.skills !== undefined ? { skills: data.skills.map(s => s.trim()) } : {}),
       ...(data.agents !== undefined ? { agents: data.agents } : {}),

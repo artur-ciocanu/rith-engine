@@ -9,12 +9,9 @@ import { join } from 'path';
 import type { IPlatformAdapter, MessageMetadata } from '@rith/core';
 import type { IsolationHints } from '@rith/isolation';
 import {
-  ConversationNotFoundError,
-  handleMessage,
   classifyAndFormatError,
   toError,
   getLinkedIssueNumbers,
-  onConversationClosed,
   ConversationLockManager,
 } from '@rith/core';
 import {
@@ -30,7 +27,6 @@ import {
   toRepoPath,
   toBranchName,
 } from '@rith/git';
-import * as db from '@rith/core/db/conversations';
 import * as codebaseDb from '@rith/core/db/codebases';
 import { resolveDefaultAssistant } from '@rith/core/config/resolve-assistant';
 import { createLogger } from '@rith/paths';
@@ -641,14 +637,8 @@ export class GitHubAdapter implements IPlatformAdapter {
     const conversationId = this.buildConversationId(owner, repo, number);
     getLog().info({ conversationId, merged }, 'github.isolation_cleanup_started');
 
-    try {
-      await onConversationClosed('github', conversationId, { merged });
-      getLog().info({ conversationId }, 'github.isolation_cleanup_completed');
-    } catch (error) {
-      const err = error as Error;
-      // Log full context for debugging - cleanup failures shouldn't break user flow
-      getLog().error({ err, conversationId }, 'github.isolation_cleanup_failed');
-    }
+      // TODO: removed with orchestrator
+      getLog().info({ conversationId }, 'github.isolation_cleanup_skipped');
   }
 
   /**
@@ -761,9 +751,7 @@ ${userComment}`;
     // 4. Build conversationId
     const conversationId = this.buildConversationId(owner, repo, number);
 
-    // 5. Check if new conversation
-    const existingConv = await db.getOrCreateConversation('github', conversationId);
-    const isNewConversation = !existingConv.codebase_id;
+    // TODO: conversation DB removed with orchestrator
 
     // 6. Get/create codebase (checks for existing first!)
     const {
@@ -771,26 +759,6 @@ ${userComment}`;
       repoPath,
       isNew: isNewCodebase,
     } = await this.getOrCreateCodebaseForRepo(owner, repo);
-
-    // 6b. Link conversation to codebase (fixes #97)
-    if (isNewConversation) {
-      try {
-        await db.updateConversation(existingConv.id, {
-          codebase_id: codebase.id,
-          cwd: repoPath,
-        });
-      } catch (updateError) {
-        if (updateError instanceof ConversationNotFoundError) {
-          getLog().error(
-            { conversationId: existingConv.id, codebaseId: codebase.id },
-            'github.conversation_codebase_link_failed'
-          );
-          // Re-throw as this is a critical setup step
-          throw new Error('Failed to set up GitHub conversation - please try again');
-        }
-        throw updateError;
-      }
-    }
 
     // 7. Get default branch
     let defaultBranch: string;
@@ -939,26 +907,10 @@ ${userComment}`;
     );
 
     // 13. Route to orchestrator with isolation hints (with lock for concurrency control)
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    void finalMessage; void contextToAppend; // consumed by orchestrator (removed)
     await this.lockManager.acquireLock(conversationId, async () => {
-      try {
-        await handleMessage(this, conversationId, finalMessage, {
-          issueContext: contextToAppend,
-          threadContext,
-          isolationHints,
-        });
-      } catch (error) {
-        const err = toError(error);
-        getLog().error({ err, conversationId }, 'github.message_handling_error');
-        try {
-          const userMessage = classifyAndFormatError(err);
-          await this.sendMessage(conversationId, userMessage);
-        } catch (sendError) {
-          getLog().error(
-            { err: toError(sendError), conversationId },
-            'github.error_message_send_failed'
-          );
-        }
-      }
+      throw new Error('Orchestrator not available');
     });
   }
 }

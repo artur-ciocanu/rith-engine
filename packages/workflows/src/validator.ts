@@ -22,7 +22,6 @@ import {
 import { execFileAsync } from '@rith/git';
 import { BUNDLED_COMMANDS, isBinaryBuild } from './defaults/bundled-defaults';
 import { isValidCommandName } from './command-validation';
-import { getProviderCapabilities, isRegisteredProvider } from '@rith/providers';
 
 /** Lazy-initialized logger */
 let cachedLog: ReturnType<typeof createLogger> | undefined;
@@ -31,7 +30,7 @@ function getLog(): ReturnType<typeof createLogger> {
   return cachedLog;
 }
 import { isScriptNode } from './schemas';
-import type { WorkflowDefinition, DagNode } from './schemas';
+import type { WorkflowDefinition } from './schemas';
 import type { ScriptRuntime } from './script-discovery';
 import { discoverScriptsForCwd } from './script-discovery';
 import { isInlineScript } from './executor-shared';
@@ -292,16 +291,6 @@ export async function checkRuntimeAvailable(runtime: ScriptRuntime): Promise<boo
 // Workflow resource validation (Level 3)
 // =============================================================================
 
-/** Get the resolved provider for a node (node-level > workflow-level > config default).
- *  Returns undefined only when no provider is set at any level. */
-function resolveProvider(
-  node: DagNode,
-  workflowProvider?: string,
-  defaultProvider?: string
-): string | undefined {
-  if ('provider' in node && node.provider) return node.provider;
-  return workflowProvider ?? defaultProvider;
-}
 
 /**
  * Validate a workflow's external resource references (Level 3).
@@ -312,14 +301,12 @@ function resolveProvider(
 export async function validateWorkflowResources(
   workflow: WorkflowDefinition,
   cwd: string,
-  config?: ValidationConfig,
-  defaultProvider?: string
+  config?: ValidationConfig
 ): Promise<ValidationIssue[]> {
   const issues: ValidationIssue[] = [];
   const availableCommands = await discoverAvailableCommands(cwd, config);
 
   for (const node of workflow.nodes) {
-    const provider = resolveProvider(node, workflow.provider, defaultProvider);
 
     // --- Command nodes: check file exists ---
     if ('command' in node && typeof node.command === 'string') {
@@ -390,19 +377,6 @@ export async function validateWorkflowResources(
         }
       }
 
-      // Warn if using MCP with a provider that doesn't support it
-      if (provider && isRegisteredProvider(provider)) {
-        const caps = getProviderCapabilities(provider);
-        if (!caps.mcp) {
-          issues.push({
-            level: 'warning',
-            nodeId: node.id,
-            field: 'mcp',
-            message: `MCP servers are not supported by provider '${provider}' — this will be ignored`,
-            hint: 'Remove the mcp field or switch to a provider that supports MCP',
-          });
-        }
-      }
     }
 
     // --- Skills nodes: check skill directories exist ---
@@ -421,60 +395,6 @@ export async function validateWorkflowResources(
             field: 'skills',
             message: `Skill '${skillName}' not found in .claude/skills/ or ~/.claude/skills/`,
             hint: `Install with: npx skills add <repo> — or create manually at .claude/skills/${skillName}/SKILL.md`,
-          });
-        }
-      }
-
-      // Warn if using skills with a provider that doesn't support them
-      if (provider && isRegisteredProvider(provider)) {
-        const caps = getProviderCapabilities(provider);
-        if (!caps.skills) {
-          issues.push({
-            level: 'warning',
-            nodeId: node.id,
-            field: 'skills',
-            message: `Skills are not supported by provider '${provider}' — this will be ignored`,
-            hint: 'Remove the skills field or switch to a provider that supports skills',
-          });
-        }
-      }
-    }
-
-    // --- Capability-driven warnings for hooks and tool restrictions ---
-    if (provider && isRegisteredProvider(provider)) {
-      const caps = getProviderCapabilities(provider);
-
-      if ('hooks' in node && node.hooks && !caps.hooks) {
-        issues.push({
-          level: 'warning',
-          nodeId: node.id,
-          field: 'hooks',
-          message: `Hooks are not supported by provider '${provider}' — this will be ignored`,
-          hint: 'Remove the hooks field or switch to a provider that supports hooks',
-        });
-      }
-
-      if ('agents' in node && node.agents && !caps.agents) {
-        issues.push({
-          level: 'warning',
-          nodeId: node.id,
-          field: 'agents',
-          message: `Inline agents are not supported by provider '${provider}' — this will be ignored`,
-          hint: 'Remove the agents field or switch to a provider that supports inline agents (e.g. claude)',
-        });
-      }
-
-      if (!caps.toolRestrictions) {
-        if (
-          ('allowed_tools' in node && node.allowed_tools !== undefined) ||
-          ('denied_tools' in node && node.denied_tools !== undefined)
-        ) {
-          issues.push({
-            level: 'warning',
-            nodeId: node.id,
-            field: 'allowed_tools/denied_tools',
-            message: `Tool restrictions are not supported by provider '${provider}' — this will be ignored`,
-            hint: 'Remove tool restriction fields or switch to a provider that supports them',
           });
         }
       }

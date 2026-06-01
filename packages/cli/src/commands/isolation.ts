@@ -14,10 +14,6 @@ import {
 } from '@rith/git';
 import { getIsolationProvider } from '@rith/isolation';
 import {
-  removeEnvironment,
-  type RemoveEnvironmentResult,
-} from '@rith/core/services/cleanup-service';
-import {
   listEnvironments,
   cleanupMergedEnvironments,
 } from '@rith/core/operations/isolation-operations';
@@ -301,37 +297,11 @@ export async function isolationCompleteCommand(
     }
 
     try {
-      const result: RemoveEnvironmentResult = await removeEnvironment(env.id, {
-        force: options.force,
-        deleteRemoteBranch: options.deleteRemote ?? true,
-      });
-
-      // Surface warnings from partial cleanup
-      for (const warning of result.warnings) {
-        console.warn(`  Warning: ${warning}`);
-      }
-
-      if (result.skippedReason) {
-        console.error(`  Blocked: ${branch} — ${result.skippedReason}`);
-        if (result.skippedReason === 'has uncommitted changes') {
-          console.error('    Use --force to override.');
-        }
-        failed++;
-      } else if (!result.worktreeRemoved) {
-        const parts: string[] = [];
-        if (result.branchDeleted) parts.push('branch deleted');
-        parts.push('DB updated');
-        console.error(
-          `  Partial: ${branch} — worktree was not removed from disk (${parts.join(', ')})`
-        );
-        for (const warning of result.warnings) {
-          console.error(`    ⚠ ${warning}`);
-        }
-        failed++;
-      } else {
-        console.log(`  Completed: ${branch}`);
-        completed++;
-      }
+      const provider = getIsolationProvider();
+      await provider.destroy(env.working_path);
+      await isolationDb.updateStatus(env.id, 'destroyed');
+      console.log(`  Completed: ${branch}`);
+      completed++;
     } catch (error) {
       const err = error as Error;
       getLog().warn({ err, branch, envId: env.id }, 'isolation.complete_failed');

@@ -16,14 +16,7 @@ export type { StepRetryConfig } from './retry';
 export { loopNodeConfigSchema } from './loop';
 export type { LoopNodeConfig } from './loop';
 
-// Hooks
-export {
-  workflowHookEventSchema,
-  workflowHookMatcherSchema,
-  workflowNodeHooksSchema,
-  WORKFLOW_HOOK_EVENTS,
-} from './hooks';
-export type { WorkflowHookEvent, WorkflowHookMatcher, WorkflowNodeHooks } from './hooks';
+// Hooks — removed (Pi-only, no hooks support)
 
 // DAG node types
 export {

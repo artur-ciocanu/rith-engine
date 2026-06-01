@@ -13,7 +13,6 @@ import { executeDagWorkflow } from './dag-executor';
 import { logWorkflowStart, logWorkflowError } from './logger';
 import { formatDuration, parseDbTimestamp } from './utils/duration';
 import { getWorkflowEventEmitter } from './event-emitter';
-import { isRegisteredProvider, getRegisteredProviders } from '@rith/providers';
 import { classifyError, safeSendMessage, type SendMessageContext } from './executor-shared';
 
 /** Lazy-initialized logger (deferred so test mocks can intercept createLogger) */
@@ -258,18 +257,8 @@ export async function executeWorkflow(
   const docsDir = config.docsPath ?? 'docs/';
 
   // Resolve provider and model once (used by all nodes).
-  // Provider is explicit: node.provider ?? workflow.provider ?? config.assistant.
-  // Model strings pass through to the SDK as-is — the SDK validates at request time.
-  const resolvedProvider: string = workflow.provider ?? config.assistant;
-  const providerSource = workflow.provider ? 'workflow definition' : 'config';
-  if (!isRegisteredProvider(resolvedProvider)) {
-    throw new Error(
-      `Workflow '${workflow.name}': unknown provider '${resolvedProvider}'. ` +
-        `Registered: ${getRegisteredProviders()
-          .map(p => p.id)
-          .join(', ')}`
-    );
-  }
+  // Pi is the sole provider. Model strings pass through to the SDK as-is.
+  const resolvedProvider = 'pi';
   const assistantDefaults = config.assistants[resolvedProvider];
   const resolvedModel = workflow.model ?? (assistantDefaults?.model as string | undefined);
 
@@ -277,7 +266,6 @@ export async function executeWorkflow(
     {
       workflowName: workflow.name,
       provider: resolvedProvider,
-      providerSource,
       model: resolvedModel,
     },
     'workflow_provider_resolved'
@@ -599,7 +587,6 @@ export async function executeWorkflow(
       cwd,
       workflow,
       workflowRun,
-      resolvedProvider,
       resolvedModel,
       artifactsDir,
       logDir,

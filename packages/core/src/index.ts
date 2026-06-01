@@ -13,16 +13,10 @@
 // Types
 // =============================================================================
 export {
-  ConversationNotFoundError,
-  type Conversation,
-  type HandleMessageContext,
   type AttachedFile,
   type Codebase,
-  type Session,
   type CommandResult,
   type IPlatformAdapter,
-  type IWebPlatformAdapter,
-  isWebAdapter,
   type MessageMetadata,
 } from './types';
 
@@ -40,15 +34,9 @@ export {
 export type { IDatabase, SqlDialect } from './db/adapters/types';
 
 // Namespaced db modules for explicit access
-export * as conversationDb from './db/conversations';
 export * as codebaseDb from './db/codebases';
-export * as sessionDb from './db/sessions';
 export * as isolationEnvDb from './db/isolation-environments';
 export * as workflowDb from './db/workflows';
-export * as messageDb from './db/messages';
-
-// Re-export SessionNotFoundError for error handling
-export { SessionNotFoundError } from './db/sessions';
 
 // =============================================================================
 // Workflows
@@ -67,19 +55,8 @@ export * as workflowOperations from './operations/workflow-operations';
 export * as isolationOperations from './operations/isolation-operations';
 
 // =============================================================================
-// Orchestrator
-// =============================================================================
-export { handleMessage } from './orchestrator/orchestrator-agent';
-export {
-  buildOrchestratorPrompt,
-  buildProjectScopedPrompt,
-  buildOrchestratorSystemAppend,
-} from './orchestrator/prompt-builder';
-
-// =============================================================================
 // Handlers
 // =============================================================================
-export { handleCommand, parseCommand } from './handlers/command-handler';
 export { cloneRepository, registerRepository, type RegisterResult } from './handlers/clone';
 
 // =============================================================================
@@ -89,7 +66,6 @@ export {
   type GlobalConfig,
   type RepoConfig,
   type MergedConfig,
-  type SafeConfig,
 } from './config/config-types';
 
 export {
@@ -99,32 +75,8 @@ export {
   loadConfig,
   clearConfigCache,
   logConfig,
-  toSafeConfig,
   updateGlobalConfig,
 } from './config/config-loader';
-
-// =============================================================================
-// Services
-// =============================================================================
-export {
-  startCleanupScheduler,
-  stopCleanupScheduler,
-  onConversationClosed,
-  SESSION_RETENTION_DAYS,
-} from './services/cleanup-service';
-
-export { generateAndSetTitle } from './services/title-generator';
-
-// =============================================================================
-// State
-// =============================================================================
-export {
-  type TransitionTrigger,
-  shouldCreateNewSession,
-  shouldDeactivateSession,
-  detectPlanToExecuteTransition,
-  getTriggerForCommand,
-} from './state/session-transitions';
 
 // =============================================================================
 // Utils

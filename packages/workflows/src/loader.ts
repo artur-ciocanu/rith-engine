@@ -1,10 +1,9 @@
 /**
  * Workflow loader - discovers and parses workflow YAML files
  */
-import type { WorkflowDefinition, WorkflowLoadError, DagNode, WorkflowNodeHooks } from './schemas';
+import type { WorkflowDefinition, WorkflowLoadError, DagNode } from './schemas';
 import { isLoopNode, isApprovalNode, isCancelNode, isScriptNode } from './schemas';
 import { createLogger } from '@rith/paths';
-import { isRegisteredProvider, getRegisteredProviders } from '@rith/providers';
 import {
   dagNodeSchema,
   BASH_NODE_AI_FIELDS,
@@ -12,7 +11,6 @@ import {
   LOOP_NODE_AI_FIELDS,
 } from './schemas/dag-node';
 import { modelReasoningEffortSchema, webSearchModeSchema } from './schemas/workflow';
-import { workflowNodeHooksSchema } from './schemas/hooks';
 import { z } from '@hono/zod-openapi';
 
 /** Lazy-initialized logger (deferred so test mocks can intercept createLogger) */
@@ -288,36 +286,6 @@ export function parseWorkflow(content: string, filename: string): ParseResult {
       typeof raw.provider === 'string' && raw.provider.length > 0 ? raw.provider : undefined;
     const model = typeof raw.model === 'string' ? raw.model : undefined;
 
-    // Validate provider identity at load time, both at the workflow level and
-    // per node. Model strings are NOT validated — they pass through to the SDK
-    // at run time, which is the source of truth for what model names exist
-    // (vendor SDKs ship new models faster than Rith Engine can update).
-    if (provider && !isRegisteredProvider(provider)) {
-      return {
-        workflow: null,
-        error: {
-          filename,
-          error: `Unknown provider '${provider}'. Registered: ${getRegisteredProviders()
-            .map(p => p.id)
-            .join(', ')}`,
-          errorType: 'validation_error',
-        },
-      };
-    }
-    for (const node of dagNodes) {
-      if (node.provider !== undefined && !isRegisteredProvider(node.provider)) {
-        return {
-          workflow: null,
-          error: {
-            filename,
-            error: `Node '${node.id}': unknown provider '${node.provider}'. Registered: ${getRegisteredProviders()
-              .map(p => p.id)
-              .join(', ')}`,
-            errorType: 'validation_error',
-          },
-        };
-      }
-    }
 
     // Validate modelReasoningEffort — warn and ignore invalid values (preserve original behavior)
     const modelReasoningEffortResult = modelReasoningEffortSchema.safeParse(
@@ -467,38 +435,3 @@ export function parseWorkflow(content: string, filename: string): ParseResult {
   }
 }
 
-// ---------------------------------------------------------------------------
-// parseNodeHooks is preserved as an export for backward compatibility
-// (used by hooks.test.ts). The implementation now uses workflowNodeHooksSchema.
-// ---------------------------------------------------------------------------
-
-/**
- * Parse and validate per-node hooks from raw YAML input.
- * Uses workflowNodeHooksSchema internally.
- * Returns undefined for absent, empty, or invalid hooks.
- */
-export function parseNodeHooks(
-  raw: unknown,
-  context: { id: string; errors: string[] }
-): WorkflowNodeHooks | undefined {
-  if (raw === undefined) return undefined;
-
-  const result = workflowNodeHooksSchema.safeParse(raw);
-  if (!result.success) {
-    for (const issue of result.error.issues) {
-      const pathStr = issue.path.length > 0 ? `'${issue.path.join('.')}' ` : '';
-      context.errors.push(`'${context.id}': hooks ${pathStr}${issue.message}`);
-    }
-    return undefined;
-  }
-
-  // Filter out events with empty matcher arrays and return undefined for empty result
-  // (preserves original behavior: hooks is only set when there are actual matchers)
-  const filtered = Object.fromEntries(
-    Object.entries(result.data).filter(
-      ([, matchers]) => Array.isArray(matchers) && matchers.length > 0
-    )
-  ) as WorkflowNodeHooks;
-
-  return Object.keys(filtered).length > 0 ? filtered : undefined;
-}

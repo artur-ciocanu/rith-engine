@@ -246,34 +246,8 @@ export class MessagePersistence {
       }
     }
 
-    try {
-      const { addMessage } = await import('@rith/core/db/messages');
-      for (const seg of ready) {
-        if (!seg.content && seg.toolCalls.length === 0) continue;
-        const toolCalls = seg.toolCalls.map(tc => ({
-          name: tc.name,
-          input: tc.input,
-          duration: tc.duration,
-          ...(tc.output !== undefined ? { output: tc.output } : {}),
-        }));
-        const metadata = {
-          ...(toolCalls.length > 0 ? { toolCalls } : {}),
-          ...(seg.workflowDispatch ? { workflowDispatch: seg.workflowDispatch } : {}),
-          ...(seg.workflowResult ? { workflowResult: seg.workflowResult } : {}),
-        };
-        await addMessage(dbId, 'assistant', seg.content, metadata);
-      }
-    } catch (e: unknown) {
-      getLog().error({ conversationId, err: e }, 'message_persistence_failed');
-      void this.emitEvent(
-        conversationId,
-        JSON.stringify({
-          type: 'warning',
-          message: 'Assistant response could not be saved to history',
-          timestamp: Date.now(),
-        })
-      );
-    }
+    // TODO: message persistence removed with orchestrator — messages DB deleted
+    getLog().debug({ conversationId, segmentCount: ready.length }, 'message_persistence_skipped');
   }
 
   /**

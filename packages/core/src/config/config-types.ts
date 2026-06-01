@@ -1,9 +1,7 @@
 /**
- * Configuration types for Rith Engine YAML config files
+ * Configuration types for Rith Engine YAML config files.
  *
- * Two levels:
- * - Global: ~/.rith/config.yaml (user preferences)
- * - Repository: .rith/config.yaml (project settings)
+ * Pi is the sole provider — multi-provider abstractions have been removed.
  */
 
 /**
@@ -14,63 +12,35 @@
 // Provider config defaults — canonical definitions live in @rith/providers/types.
 // Imported and re-exported here so existing consumers don't break.
 import type {
-  ClaudeProviderDefaults,
-  CodexProviderDefaults,
-  CopilotProviderDefaults,
   PiProviderDefaults,
   ProviderDefaultsMap,
 } from '@rith/providers/types';
 
 export type {
-  ClaudeProviderDefaults,
-  CodexProviderDefaults,
-  CopilotProviderDefaults,
   PiProviderDefaults,
   ProviderDefaultsMap,
 };
 
 /**
- * Intersection type: generic `ProviderDefaultsMap` (any string key) with
- * typed built-in entries.
- *
- * The built-in entries exist ONLY to give call sites like
- * `config.assistants.claude.model` IDE autocomplete without `as` casts.
- * They do NOT provide parser safety (each provider's `parseXxxConfig`
- * already takes `Record<string, unknown>` and defends itself).
- *
- * Community providers should NOT be added here — they live behind the
- * generic `[string]` index. Adding a new community provider must not
- * require a core-package type change; that's the whole point of Phase 2.
+ * Optional assistant defaults in user-facing config files.
+ * Only `pi` has a typed shape; the generic index signature
+ * (`ProviderDefaultsMap`) allows forward-compat without code changes.
  */
 export type AssistantDefaultsConfig = ProviderDefaultsMap & {
-  claude?: ClaudeProviderDefaults;
-  codex?: CodexProviderDefaults;
+  pi?: PiProviderDefaults;
 };
 
 /**
- * Required variant — built-ins are always present after `loadConfig`.
- *
- * `getDefaults()` seeds every registered provider (built-in + community)
- * with `{}`, so community providers appear in the map too — just typed as
- * `ProviderDefaults` via the generic index rather than a specific shape.
- * `registerBuiltinProviders()` is called before `loadConfig()` at every
- * process entrypoint, so claude/codex are guaranteed present.
+ * Required variant — after `loadConfig` the pi entry is always present.
  */
 export type AssistantDefaults = ProviderDefaultsMap & {
-  claude: ClaudeProviderDefaults;
-  codex: CodexProviderDefaults;
+  pi: PiProviderDefaults;
 };
 
 export interface GlobalConfig {
   /**
-   * Bot display name (shown in messages)
-   * @default 'Rith Engine'
-   */
-  botName?: string;
-
-  /**
    * Default AI assistant when no codebase-specific preference
-   * @default 'claude'
+   * @default 'pi'
    */
   defaultAssistant?: string;
 
@@ -78,15 +48,6 @@ export interface GlobalConfig {
    * Assistant-specific defaults (model, reasoning effort, etc.)
    */
   assistants?: AssistantDefaultsConfig;
-
-  /**
-   * Platform streaming preferences (can be overridden per conversation)
-   */
-  streaming?: {
-    telegram?: 'stream' | 'batch';
-    discord?: 'stream' | 'batch';
-    slack?: 'stream' | 'batch';
-  };
 
   /**
    * Directory preferences (usually not needed - defaults work well)
@@ -104,17 +65,6 @@ export interface GlobalConfig {
      */
     worktrees?: string;
   };
-
-  /**
-   * Concurrency limits
-   */
-  concurrency?: {
-    /**
-     * Maximum concurrent AI conversations
-     * @default 10
-     */
-    maxConversations?: number;
-  };
 }
 
 /**
@@ -123,88 +73,47 @@ export interface GlobalConfig {
  */
 export interface RepoConfig {
   /**
-   * AI assistant preference for this repository
-   * Overrides global default
-   */
-  assistant?: string;
-
-  /**
-   * Assistant-specific defaults for this repository
-   */
-  assistants?: AssistantDefaultsConfig;
-
-  /**
-   * Commands configuration
+   * Custom commands configuration
    */
   commands?: {
     /**
-     * Custom command folder path (relative to repo root)
-     * @default '.rith/commands'
+     * Additional command folder to search (relative to repo root).
+     * Searched after .rith/commands/ but before .claude/commands/
      */
     folder?: string;
 
     /**
-     * Auto-load commands on clone
+     * Auto-load commands on startup
      * @default true
      */
     autoLoad?: boolean;
   };
 
   /**
-   * Worktree settings for this repository
+   * Worktree configuration
    */
   worktree?: {
     /**
-     * Base branch for worktrees (e.g., 'main', 'develop')
-     * @default auto-detected from repo
+     * Base branch for worktree creation
+     * @default 'main'
      */
     baseBranch?: string;
 
     /**
-     * Git-ignored files/directories to copy from main repo to new worktrees.
-     * Tracked files are already in worktrees — only use this for git-ignored files.
-     * @example [".env", ".rith", "data/fixtures/"]
-     */
-    copyFiles?: string[];
-
-    /**
-     * Initialize git submodules in new worktrees.
-     * Runs `git submodule update --init --recursive` after worktree creation
-     * when the repo contains a `.gitmodules` file. Repos without submodules
-     * pay zero cost (the check short-circuits).
-     *
-     * Set to `false` to skip submodule init (e.g., when submodules are not
-     * needed by any workflow or when fetch cost is prohibitive).
+     * Automatically clean up stale worktrees
      * @default true
      */
-    initSubmodules?: boolean;
+    autoCleanup?: boolean;
 
     /**
-     * Per-project worktree directory (relative to repo root). When set,
-     * worktrees are created at `<repoRoot>/<path>/<branch>` instead of under
-     * `~/.rith/worktrees/` or the workspaces layout.
-     *
-     * Opt-in — co-locates worktrees with the repo so they appear in the IDE
-     * file tree. The user is responsible for adding the directory to their
-     * `.gitignore` (no automatic file mutation).
-     *
-     * Path resolution precedence (highest to lowest):
-     *   1. this `worktree.path` (repo-local)
-     *   2. global `paths.worktrees` (absolute override in `~/.rith/config.yaml`)
-     *   3. auto-detected project-scoped (`~/.rith/workspaces/owner/repo/...`)
-     *   4. default global (`~/.rith/worktrees/`)
-     *
-     * Must be a safe relative path: no leading `/`, no `..` segments. Absolute
-     * or escaping values fail loudly at worktree creation (Fail Fast — no silent
-     * fallback).
-     *
-     * @example '.worktrees'
+     * Files/directories to copy from canonical repo to worktrees
+     * @default ['.rith']
      */
-    path?: string;
+    copyFiles?: string[];
   };
 
   /**
-   * Documentation directory settings
+   * Documentation configuration
    */
   docs?: {
     /**
@@ -215,38 +124,43 @@ export interface RepoConfig {
   };
 
   /**
-   * Per-project environment variables injected into Claude SDK subprocess env.
-   * Values here override process.env for workflow node execution.
-   * Sensitive — do not commit actual secrets to version-controlled repos.
+   * Per-project environment variables.
+   * These are injected into workflow commands.
    */
   env?: Record<string, string>;
 
   /**
-   * Default commands/workflows configuration
+   * Default behavior toggles
    */
   defaults?: {
     /**
-     * Copy bundled default commands and workflows on clone
-     * Set to false to skip copying defaults
+     * Copy default configs when initializing
      * @default true
-     * @deprecated Use loadDefaultCommands/loadDefaultWorkflows instead
      */
     copyDefaults?: boolean;
 
     /**
-     * Load app's bundled default commands at runtime
-     * Set to false to only use repo-specific commands
+     * Load default commands
      * @default true
      */
     loadDefaultCommands?: boolean;
 
     /**
-     * Load app's bundled default workflows at runtime
-     * Set to false to only use repo-specific workflows
+     * Load default workflows
      * @default true
      */
     loadDefaultWorkflows?: boolean;
   };
+
+  /**
+   * Override AI assistant for this repository
+   */
+  assistant?: string;
+
+  /**
+   * Per-repo assistant defaults
+   */
+  assistants?: AssistantDefaultsConfig;
 }
 
 /**
@@ -254,20 +168,11 @@ export interface RepoConfig {
  * Environment variables take precedence
  */
 export interface MergedConfig {
-  botName: string;
   assistant: string;
   assistants: AssistantDefaults;
-  streaming: {
-    telegram: 'stream' | 'batch';
-    discord: 'stream' | 'batch';
-    slack: 'stream' | 'batch';
-  };
   paths: {
     workspaces: string;
     worktrees: string;
-  };
-  concurrency: {
-    maxConversations: number;
   };
   commands: {
     /**
@@ -300,27 +205,4 @@ export interface MergedConfig {
    * Undefined when no env vars are configured.
    */
   envVars?: Record<string, string>;
-}
-
-/**
- * Safe subset of MergedConfig suitable for sending to web clients.
- * Excludes filesystem paths and any other server-internal fields.
- */
-export interface SafeConfig {
-  botName: string;
-  assistant: string;
-  assistants: ProviderDefaultsMap;
-  streaming: {
-    telegram: 'stream' | 'batch';
-    discord: 'stream' | 'batch';
-    slack: 'stream' | 'batch';
-  };
-  concurrency: {
-    maxConversations: number;
-  };
-  defaults: {
-    copyDefaults: boolean;
-    loadDefaultCommands: boolean;
-    loadDefaultWorkflows: boolean;
-  };
 }

@@ -47,11 +47,6 @@ if (
   process.env.CLAUDE_USE_GLOBAL_AUTH = 'true';
 }
 
-import { registerBuiltinProviders, registerCommunityProviders } from '@rith/providers';
-
-// Bootstrap provider registry before any provider lookups
-registerBuiltinProviders();
-registerCommunityProviders();
 
 import { OpenAPIHono } from '@hono/zod-openapi';
 import { validationErrorHook } from './routes/openapi-defaults';
@@ -70,17 +65,12 @@ import { SSETransport } from './adapters/web/transport';
 import { WorkflowEventBridge } from './adapters/web/workflow-bridge';
 import { registerApiRoutes } from './routes/api';
 import {
-  handleMessage,
   pool,
   ConversationLockManager,
-  classifyAndFormatError,
-  startCleanupScheduler,
-  stopCleanupScheduler,
   loadConfig,
   logConfig,
   getPort,
 } from '@rith/core';
-import type { IPlatformAdapter } from '@rith/core';
 import {
   createLogger,
   logRithPaths,
@@ -94,26 +84,8 @@ function getLog(): ReturnType<typeof createLogger> {
   if (!cachedLog) cachedLog = createLogger('server');
   return cachedLog;
 }
-
-/**
- * Creates an error handler for message processing failures.
- * Logs the error and attempts to send a user-friendly message to the platform.
- */
-function createMessageErrorHandler(
-  platform: string,
-  adapter: IPlatformAdapter,
-  conversationId: string
-): (error: unknown) => Promise<void> {
-  return async (error: unknown): Promise<void> => {
-    getLog().error({ err: error, platform, conversationId }, 'message_processing_failed');
-    try {
-      const userMessage = classifyAndFormatError(error as Error);
-      await adapter.sendMessage(conversationId, userMessage);
-    } catch (sendError) {
-      getLog().error({ err: sendError, platform, conversationId }, 'error_message_send_failed');
-    }
-  };
-}
+// TODO: removed with orchestrator
+// function createMessageErrorHandler was here — depends on handleMessage
 
 /**
  * Handles unhandled promise rejections from the process.
@@ -211,8 +183,8 @@ export async function startServer(opts: ServerOptions = {}): Promise<void> {
   const config = await loadConfig();
   logConfig(config);
 
-  // Start cleanup scheduler
-  startCleanupScheduler();
+  // TODO: removed with orchestrator
+  // startCleanupScheduler();
 
   // Note: orphaned-run cleanup intentionally NOT called at server startup.
   // Running it here killed parallel workflow runs from other processes
@@ -288,7 +260,7 @@ export async function startServer(opts: ServerOptions = {}): Promise<void> {
     // Initialize GitHub adapter (conditional)
     if (process.env.GITHUB_TOKEN && process.env.WEBHOOK_SECRET) {
       const botMention =
-        process.env.GITHUB_BOT_MENTION || process.env.BOT_DISPLAY_NAME || config.botName;
+        process.env.GITHUB_BOT_MENTION || process.env.BOT_DISPLAY_NAME || 'Rith Engine';
       github = new GitHubAdapter(
         process.env.GITHUB_TOKEN,
         process.env.WEBHOOK_SECRET,
@@ -304,7 +276,7 @@ export async function startServer(opts: ServerOptions = {}): Promise<void> {
     // Initialize Gitea adapter (conditional)
     if (process.env.GITEA_URL && process.env.GITEA_TOKEN && process.env.GITEA_WEBHOOK_SECRET) {
       const giteaBotMention =
-        process.env.GITEA_BOT_MENTION || process.env.BOT_DISPLAY_NAME || config.botName;
+        process.env.GITEA_BOT_MENTION || process.env.BOT_DISPLAY_NAME || 'Rith Engine';
       gitea = new GiteaAdapter(
         process.env.GITEA_URL,
         process.env.GITEA_TOKEN,
@@ -321,7 +293,7 @@ export async function startServer(opts: ServerOptions = {}): Promise<void> {
     // Initialize GitLab adapter (conditional)
     if (process.env.GITLAB_TOKEN && process.env.GITLAB_WEBHOOK_SECRET) {
       const gitlabBotMention =
-        process.env.GITLAB_BOT_MENTION || process.env.BOT_DISPLAY_NAME || config.botName;
+        process.env.GITLAB_BOT_MENTION || process.env.BOT_DISPLAY_NAME || 'Rith Engine';
       gitlab = new GitLabAdapter(
         process.env.GITLAB_TOKEN,
         process.env.GITLAB_WEBHOOK_SECRET,
@@ -366,30 +338,8 @@ export async function startServer(opts: ServerOptions = {}): Promise<void> {
         conversationId = await discordAdapter.ensureThread(conversationId, message);
 
         // Check for thread context (now we're guaranteed to be in a thread if applicable)
-        let threadContext: string | undefined;
-        let parentConversationId: string | undefined;
-
-        if (discordAdapter.isThread(message)) {
-          // Fetch thread history for context (exclude current message)
-          const history = await discordAdapter.fetchThreadHistory(message);
-          if (history.length > 1) {
-            threadContext = history.slice(0, -1).join('\n');
-          }
-
-          // Get parent channel ID for context inheritance
-          parentConversationId = discordAdapter.getParentChannelId(message) ?? undefined;
-        }
-
-        // Fire-and-forget: handler returns immediately, processing happens async
-        lockManager
-          .acquireLock(conversationId, async () => {
-            await handleMessage(discordAdapter, conversationId, content, {
-              threadContext,
-              parentConversationId,
-              isolationHints: { workflowType: 'thread', workflowId: conversationId },
-            });
-          })
-          .catch(createMessageErrorHandler('Discord', discordAdapter, conversationId));
+        // TODO: removed with orchestrator — thread context was consumed by handleMessage
+        void content; void conversationId;
       });
 
       // Don't let a Discord login failure (bad token, missing privileged
@@ -437,31 +387,8 @@ export async function startServer(opts: ServerOptions = {}): Promise<void> {
         const content = slackAdapter.stripBotMention(event.text);
         if (!content) return; // Message was only a mention with no content
 
-        // Check for thread context
-        let threadContext: string | undefined;
-        let parentConversationId: string | undefined;
-
-        if (slackAdapter.isThread(event)) {
-          // Fetch thread history for context (exclude current message)
-          const history = await slackAdapter.fetchThreadHistory(event);
-          if (history.length > 1) {
-            threadContext = history.slice(0, -1).join('\n');
-          }
-
-          // Get parent conversation ID for context inheritance
-          parentConversationId = slackAdapter.getParentConversationId(event) ?? undefined;
-        }
-
-        // Fire-and-forget: handler returns immediately, processing happens async
-        lockManager
-          .acquireLock(conversationId, async () => {
-            await handleMessage(slackAdapter, conversationId, content, {
-              threadContext,
-              parentConversationId,
-              isolationHints: { workflowType: 'thread', workflowId: conversationId },
-            });
-          })
-          .catch(createMessageErrorHandler('Slack', slackAdapter, conversationId));
+        // TODO: removed with orchestrator — thread context was consumed by handleMessage
+        void content; void conversationId;
       });
 
       // Attach the workflow bridge BEFORE app.start(): Bolt's Socket Mode
@@ -634,14 +561,8 @@ export async function startServer(opts: ServerOptions = {}): Promise<void> {
 
     // Register message handler (auth is handled internally by adapter)
     telegramAdapter.onMessage(async ({ conversationId, message }) => {
-      // Fire-and-forget: handler returns immediately, processing happens async
-      lockManager
-        .acquireLock(conversationId, async () => {
-          await handleMessage(telegramAdapter, conversationId, message, {
-            isolationHints: { workflowType: 'thread', workflowId: conversationId },
-          });
-        })
-        .catch(createMessageErrorHandler('Telegram', telegramAdapter, conversationId));
+      // TODO: removed with orchestrator
+      void conversationId; void message;
     });
 
     try {
@@ -659,7 +580,8 @@ export async function startServer(opts: ServerOptions = {}): Promise<void> {
   // Graceful shutdown
   const shutdown = (): void => {
     getLog().info('server_shutting_down');
-    stopCleanupScheduler();
+    // TODO: removed with orchestrator
+    // stopCleanupScheduler();
     persistence.stopPeriodicFlush();
 
     // Flush all buffered messages before stopping adapters
