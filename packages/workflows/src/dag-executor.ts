@@ -19,14 +19,8 @@ import type {
 import type {
   SendQueryOptions,
   NodeConfig,
-  ProviderCapabilities,
   TokenUsage,
 } from '@rith/providers/types';
-import {
-  getProviderCapabilities,
-  getRegisteredProviders,
-  isRegisteredProvider,
-} from '@rith/providers';
 import type {
   DagNode,
   ApprovalNode,
@@ -342,108 +336,31 @@ export function substituteNodeOutputRefs(
 // loadMcpConfig moved to @rith/providers/src/mcp/config.ts
 
 /**
- * Resolve per-node provider and model.
- * Node-level overrides take precedence over workflow defaults.
- *
- * Provider-agnostic: builds universal base options + raw nodeConfig.
- * The provider internally translates nodeConfig to SDK-specific options.
- * Capability warnings inform users when features are unsupported.
+ * Resolve per-node model and build SendQueryOptions.
+ * Pi is the sole provider — no provider resolution needed.
  */
-async function resolveNodeProviderAndModel(
+async function resolveNodeModelAndOptions(
   node: DagNode,
-  workflowProvider: string,
   workflowModel: string | undefined,
   config: WorkflowConfig,
-  platform: IWorkflowPlatform,
-  conversationId: string,
-  workflowRunId: string,
-  _cwd: string,
   workflowLevelOptions: WorkflowLevelOptions
 ): Promise<{
-  provider: string;
   model: string | undefined;
   options: SendQueryOptions | undefined;
 }> {
-  // Provider is explicit: node.provider ?? workflow.provider. Model never
-  // influences provider selection. Model strings pass through to the SDK.
-  const provider: string = node.provider ?? workflowProvider;
-  if (!isRegisteredProvider(provider)) {
-    throw new Error(
-      `Node '${node.id}': unknown provider '${provider}'. ` +
-        `Registered: ${getRegisteredProviders()
-          .map(p => p.id)
-          .join(', ')}`
-    );
-  }
-
+  const provider = 'pi';
   const providerAssistantConfig = config.assistants[provider];
   const model: string | undefined =
-    node.model ??
-    (provider === workflowProvider
-      ? workflowModel
-      : (providerAssistantConfig?.model as string | undefined));
-
-  // Get provider capabilities for capability warnings (static lookup, no instantiation)
-  const caps = getProviderCapabilities(provider);
-
-  // Capability warnings — inform users when features are unsupported
-  const capChecks: [string, keyof ProviderCapabilities, boolean][] = [
-    [
-      'allowed_tools/denied_tools',
-      'toolRestrictions',
-      node.allowed_tools !== undefined || node.denied_tools !== undefined,
-    ],
-    ['hooks', 'hooks', node.hooks !== undefined],
-    ['mcp', 'mcp', node.mcp !== undefined],
-    ['skills', 'skills', node.skills !== undefined && node.skills.length > 0],
-    ['agents', 'agents', node.agents !== undefined],
-    ['effort', 'effortControl', (node.effort ?? workflowLevelOptions.effort) !== undefined],
-    ['thinking', 'thinkingControl', (node.thinking ?? workflowLevelOptions.thinking) !== undefined],
-    ['maxBudgetUsd', 'costControl', node.maxBudgetUsd !== undefined],
-    [
-      'fallbackModel',
-      'fallbackModel',
-      (node.fallbackModel ?? workflowLevelOptions.fallbackModel) !== undefined,
-    ],
-    ['sandbox', 'sandbox', (node.sandbox ?? workflowLevelOptions.sandbox) !== undefined],
-    ['env', 'envInjection', (config.envVars && Object.keys(config.envVars).length > 0) === true],
-  ];
-
-  const unsupported: string[] = [];
-  for (const [field, cap, isSet] of capChecks) {
-    if (isSet && !caps[cap]) {
-      unsupported.push(field);
-    }
-  }
-
-  if (unsupported.length > 0) {
-    getLog().warn({ nodeId: node.id, provider, unsupported }, 'dag.unsupported_capabilities');
-    const delivered = await safeSendMessage(
-      platform,
-      conversationId,
-      `Warning: Node '${node.id}' uses ${unsupported.join(', ')} but ${provider} doesn't support ${unsupported.length === 1 ? 'it' : 'them'} — ${unsupported.length === 1 ? 'this will be' : 'these will be'} ignored.`,
-      { workflowId: workflowRunId, nodeName: node.id }
-    );
-    if (!delivered) {
-      getLog().error({ nodeId: node.id, workflowRunId }, 'dag.capability_warning_delivery_failed');
-    }
-  }
+    node.model ?? workflowModel ?? (providerAssistantConfig?.model as string | undefined);
 
   // Surface agents + skills ID collision — user-defined 'dag-node-skills'
-  // silently overrides Rith Engine's skills wrapper. User wins (by design) but
-  // the operator should know they've neutered the wrapper.
+  // silently overrides Rith Engine's skills wrapper.
   if (
     node.agents?.['dag-node-skills'] !== undefined &&
     node.skills !== undefined &&
     node.skills.length > 0
   ) {
     getLog().warn({ nodeId: node.id }, 'dag.agents_skills_id_collision');
-    await safeSendMessage(
-      platform,
-      conversationId,
-      `Warning: Node '${node.id}' defines an agent with reserved ID 'dag-node-skills' AND uses 'skills:'. Your inline agent overrides Rith Engine's automatic skills wrapper — the 'skills:' field will NOT take effect. Rename the agent or remove 'skills:' to fix.`,
-      { workflowId: workflowRunId, nodeName: node.id }
-    );
   }
 
   // Build universal base options
@@ -464,7 +381,6 @@ async function resolveNodeProviderAndModel(
   const nodeConfig: NodeConfig = {
     nodeId: node.id,
     mcp: node.mcp,
-    hooks: node.hooks,
     skills: node.skills,
     agents: node.agents,
     allowed_tools: node.allowed_tools,
@@ -488,7 +404,7 @@ async function resolveNodeProviderAndModel(
     assistantConfig,
   };
 
-  return { provider, model, options };
+  return { model, options };
 }
 
 /** Evaluate trigger rule for a node given its upstream states */
@@ -587,7 +503,6 @@ async function executeNodeInternal(
   cwd: string,
   workflowRun: WorkflowRun,
   node: CommandNode | PromptNode,
-  provider: string,
   nodeOptions: SendQueryOptions | undefined,
   artifactsDir: string,
   logDir: string,
@@ -603,7 +518,7 @@ async function executeNodeInternal(
 
   const configuredMcpNames = await loadConfiguredMcpServerNames(node.mcp, cwd);
 
-  getLog().info({ nodeId: node.id, provider }, 'dag_node_started');
+  getLog().info({ nodeId: node.id, provider: 'pi' }, 'dag_node_started');
   await logNodeStart(logDir, workflowRun.id, node.id, node.command ?? '<inline>');
 
   deps.store
@@ -611,7 +526,7 @@ async function executeNodeInternal(
       workflow_run_id: workflowRun.id,
       event_type: 'node_started',
       step_name: node.id,
-      data: { command: node.command ?? null, provider },
+      data: { command: node.command ?? null, provider: 'pi' },
     })
     .catch((err: Error) => {
       getLog().error(
@@ -692,7 +607,7 @@ async function executeNodeInternal(
   // Substitute upstream node output references
   const finalPrompt = substituteNodeOutputRefs(substitutedPrompt, nodeOutputs);
 
-  const aiClient = deps.getAgentProvider(provider);
+  const aiClient = deps.getAgentProvider();
   const streamingMode = platform.getStreamingMode();
 
   let nodeOutputText = ''; // Always accumulate regardless of streaming mode
@@ -1730,11 +1645,10 @@ async function executeScriptNode(
 }
 
 /**
- * Build SendQueryOptions from resolved provider, model, and config.
- * Uses the same nodeConfig + assistantConfig pattern as resolveNodeProviderAndModel.
+ * Build SendQueryOptions from resolved model and config.
+ * Uses the same nodeConfig + assistantConfig pattern as resolveNodeModelAndOptions.
  */
 function buildLoopNodeOptions(
-  provider: string,
   model: string | undefined,
   config: WorkflowConfig,
   workflowLevelOptions?: WorkflowLevelOptions
@@ -1744,7 +1658,7 @@ function buildLoopNodeOptions(
   if (config.envVars && Object.keys(config.envVars).length > 0) {
     options.env = config.envVars;
   }
-  options.assistantConfig = config.assistants[provider] ?? {};
+  options.assistantConfig = config.assistants['pi'] ?? {};
   // Pass workflow-level options as nodeConfig so providers can apply them
   if (workflowLevelOptions) {
     options.nodeConfig = {
@@ -1773,7 +1687,6 @@ async function executeLoopNode(
   cwd: string,
   workflowRun: WorkflowRun,
   node: LoopNode,
-  workflowProvider: string,
   workflowModel: string | undefined,
   artifactsDir: string,
   logDir: string,
@@ -1787,19 +1700,8 @@ async function executeLoopNode(
   const loop = node.loop;
   const msgContext = { workflowId: workflowRun.id, nodeName: node.id };
 
-  // Resolve AI client — fail fast with descriptive error
-  let aiClient: ReturnType<typeof deps.getAgentProvider>;
-  try {
-    aiClient = deps.getAgentProvider(workflowProvider);
-  } catch (error) {
-    const err = error as Error;
-    const errorMsg = `Invalid provider '${workflowProvider}' for loop node '${node.id}'. Check workflow YAML or .rith/config.yaml. Original: ${err.message}`;
-    getLog().error(
-      { err, nodeId: node.id, provider: workflowProvider },
-      'loop_node.provider_failed'
-    );
-    return { state: 'failed', output: '', error: errorMsg };
-  }
+  // Resolve AI client
+  const aiClient = deps.getAgentProvider();
 
   // Detect interactive loop resume — check if workflowRun.metadata has loop gate state for this node
   const rawApproval = workflowRun.metadata?.approval;
@@ -1817,7 +1719,6 @@ async function executeLoopNode(
   let loopFinalStopReason: string | undefined;
   let loopTotalNumTurns: number | undefined;
   const resolvedOptions = buildLoopNodeOptions(
-    workflowProvider,
     workflowModel,
     config,
     workflowLevelOptions
@@ -2385,7 +2286,6 @@ async function executeApprovalNode(
   deps: WorkflowDeps,
   platform: IWorkflowPlatform,
   conversationId: string,
-  workflowProvider: string,
   workflowModel: string | undefined,
   cwd: string,
   artifactsDir: string,
@@ -2477,15 +2377,10 @@ async function executeApprovalNode(
       ...(node.idle_timeout ? { idle_timeout: node.idle_timeout } : {}),
     };
 
-    const { provider, options: nodeOptions } = await resolveNodeProviderAndModel(
+    const { options: nodeOptions } = await resolveNodeModelAndOptions(
       syntheticNode,
-      workflowProvider,
       workflowModel,
       config,
-      platform,
-      conversationId,
-      workflowRun.id,
-      cwd,
       workflowLevelOptions
     );
 
@@ -2496,7 +2391,6 @@ async function executeApprovalNode(
       cwd,
       workflowRun,
       syntheticNode,
-      provider,
       nodeOptions,
       artifactsDir,
       logDir,
@@ -2570,7 +2464,6 @@ export async function executeDagWorkflow(
   cwd: string,
   workflow: { name: string; nodes: readonly DagNode[] } & WorkflowLevelOptions,
   workflowRun: WorkflowRun,
-  workflowProvider: string,
   workflowModel: string | undefined,
   artifactsDir: string,
   logDir: string,
@@ -2845,25 +2738,10 @@ export async function executeDagWorkflow(
 
           // 3b. Loop node dispatch — manages its own AI sessions and iteration
           if (isLoopNode(node)) {
-            // Resolve per-node provider/model overrides (same logic as other node types).
-            // Provider is explicit; model passes through to the SDK. Throw on an
-            // unknown provider so the outer catch below emits the standard
-            // node_failed event + user-facing message — the same path
-            // resolveNodeProviderAndModel uses for non-loop nodes.
-            const loopProvider: string = node.provider ?? workflowProvider;
-            if (!isRegisteredProvider(loopProvider)) {
-              throw new Error(
-                `Node '${node.id}': unknown provider '${loopProvider}'. Registered: ${getRegisteredProviders()
-                  .map(p => p.id)
-                  .join(', ')}`
-              );
-            }
-            const loopAssistantConfig = config.assistants[loopProvider];
+            // Resolve per-node model overrides for loop node.
+            const loopAssistantConfig = config.assistants['pi'];
             const loopModel: string | undefined =
-              node.model ??
-              (loopProvider === workflowProvider
-                ? workflowModel
-                : (loopAssistantConfig?.model as string | undefined));
+              node.model ?? workflowModel ?? (loopAssistantConfig?.model as string | undefined);
 
             const output = await executeLoopNode(
               deps,
@@ -2872,7 +2750,6 @@ export async function executeDagWorkflow(
               cwd,
               workflowRun,
               node,
-              loopProvider,
               loopModel,
               artifactsDir,
               logDir,
@@ -2894,7 +2771,6 @@ export async function executeDagWorkflow(
               deps,
               platform,
               conversationId,
-              workflowProvider,
               workflowModel,
               cwd,
               artifactsDir,
@@ -2962,16 +2838,11 @@ export async function executeDagWorkflow(
             return { nodeId: node.id, output };
           }
 
-          // 4. Resolve per-node provider/model/options
-          const { provider, options: nodeOptions } = await resolveNodeProviderAndModel(
+          // 4. Resolve per-node model/options
+          const { options: nodeOptions } = await resolveNodeModelAndOptions(
             node,
-            workflowProvider,
             workflowModel,
             config,
-            platform,
-            conversationId,
-            workflowRun.id,
-            cwd,
             workflowLevelOptions
           );
 
@@ -2997,7 +2868,6 @@ export async function executeDagWorkflow(
               cwd,
               workflowRun,
               node,
-              provider,
               nodeOptions,
               artifactsDir,
               logDir,

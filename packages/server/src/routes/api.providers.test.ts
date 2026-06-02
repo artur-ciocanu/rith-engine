@@ -1,6 +1,5 @@
 import { describe, test, expect, mock, beforeEach } from 'bun:test';
 import { OpenAPIHono } from '@hono/zod-openapi';
-import { registerBuiltinProviders, clearRegistry } from '@rith/providers';
 import type { ConversationLockManager } from '@rith/core';
 import type { WebAdapter } from '../adapters/web';
 import {
@@ -132,9 +131,7 @@ mock.module('@rith/core/utils/commands', () => ({
   findMarkdownFilesRecursive: mock(async () => []),
 }));
 
-// Bootstrap registry after mocks
-clearRegistry();
-registerBuiltinProviders();
+// No registry bootstrap needed — providers route returns static Pi info
 
 import { registerApiRoutes } from './api';
 
@@ -189,8 +186,7 @@ describe('GET /api/providers', () => {
       providers: { id: string; builtIn: boolean }[];
     };
     const ids = body.providers.map(p => p.id);
-    expect(ids).toContain('claude');
-    expect(ids).toContain('codex');
+    expect(ids).toContain('pi');
     expect(body.providers.every(p => p.builtIn)).toBe(true);
   });
 
@@ -210,15 +206,12 @@ describe('GET /api/providers', () => {
     }
   });
 
-  test('capabilities have expected boolean fields', async () => {
+  test('returns pi provider with expected shape', async () => {
     const response = await app.request('/api/providers');
     const body = (await response.json()) as {
-      providers: { capabilities: Record<string, boolean> }[];
+      providers: { id: string; capabilities: Record<string, unknown> }[];
     };
-    const caps = body.providers[0].capabilities;
-    expect(typeof caps.sessionResume).toBe('boolean');
-    expect(typeof caps.mcp).toBe('boolean');
-    expect(typeof caps.hooks).toBe('boolean');
-    expect(typeof caps.structuredOutput).toBe('boolean');
+    expect(body.providers).toHaveLength(1);
+    expect(body.providers[0].id).toBe('pi');
   });
 });

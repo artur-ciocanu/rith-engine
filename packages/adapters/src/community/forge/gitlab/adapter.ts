@@ -9,11 +9,8 @@ import { join } from 'path';
 import type { IPlatformAdapter, MessageMetadata } from '@rith/core';
 import type { IsolationHints } from '@rith/isolation';
 import {
-  ConversationNotFoundError,
-  handleMessage,
   classifyAndFormatError,
   toError,
-  onConversationClosed,
   ConversationLockManager,
 } from '@rith/core';
 import {
@@ -30,7 +27,6 @@ import {
   isWorktreePath,
   execFileAsync,
 } from '@rith/git';
-import * as db from '@rith/core/db/conversations';
 import * as codebaseDb from '@rith/core/db/codebases';
 import { resolveDefaultAssistant } from '@rith/core/config/resolve-assistant';
 import { parseAllowedUsers, isGitLabUserAuthorized, verifyWebhookToken } from './auth';
@@ -609,13 +605,8 @@ Use 'glab mr view ${String(mr.iid)}' for full details and 'glab mr diff ${String
     const conversationId = this.buildConversationId(projectPath, iid, isMR);
     getLog().info({ conversationId, merged }, 'gitlab.isolation_cleanup_started');
 
-    try {
-      await onConversationClosed('gitlab', conversationId, { merged });
-      getLog().info({ conversationId }, 'gitlab.isolation_cleanup_completed');
-    } catch (error) {
-      const err = error as Error;
-      getLog().error({ err, conversationId }, 'gitlab.isolation_cleanup_failed');
-    }
+      // TODO: removed with orchestrator
+      getLog().info({ conversationId }, 'gitlab.isolation_cleanup_skipped');
   }
 
   // ---------------------------------------------------------------------------
@@ -691,32 +682,13 @@ Use 'glab mr view ${String(mr.iid)}' for full details and 'glab mr diff ${String
     try {
       // 7. Conversation + codebase setup
       const conversationId = this.buildConversationId(projectPath, iid, isMR);
-      const existingConv = await db.getOrCreateConversation('gitlab', conversationId);
-      const isNewConversation = !existingConv.codebase_id;
+    // TODO: conversation DB removed with orchestrator — skip conversation/codebase linking
 
       const {
         codebase,
         repoPath,
         isNew: isNewCodebase,
       } = await this.getOrCreateCodebaseForRepo(projectPath);
-
-      if (isNewConversation) {
-        try {
-          await db.updateConversation(existingConv.id, {
-            codebase_id: codebase.id,
-            cwd: repoPath,
-          });
-        } catch (updateError) {
-          if (updateError instanceof ConversationNotFoundError) {
-            getLog().error(
-              { conversationId: existingConv.id, codebaseId: codebase.id },
-              'gitlab.conversation_codebase_link_failed'
-            );
-            throw new Error('Failed to set up GitLab conversation - please try again');
-          }
-          throw updateError;
-        }
-      }
 
       // 8. Get default branch
       const defaultBranch = event.project.default_branch;
@@ -783,26 +755,9 @@ Use 'glab mr view ${String(mr.iid)}' for full details and 'glab mr diff ${String
         'gitlab.thread_context_loaded'
       );
 
+      void contextToAppend; // consumed by orchestrator (removed)
       await this.lockManager.acquireLock(conversationId, async () => {
-        try {
-          await handleMessage(this, conversationId, finalMessage, {
-            issueContext: contextToAppend,
-            threadContext,
-            isolationHints,
-          });
-        } catch (error) {
-          const err = toError(error);
-          getLog().error({ err, conversationId }, 'gitlab.message_handling_error');
-          try {
-            const userMessage = classifyAndFormatError(err);
-            await this.sendMessage(conversationId, userMessage);
-          } catch (sendError) {
-            getLog().error(
-              { err: toError(sendError), conversationId },
-              'gitlab.error_message_send_failed'
-            );
-          }
-        }
+        throw new Error('Orchestrator not available');
       });
     } catch (error) {
       const err = toError(error);

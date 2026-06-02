@@ -1,4 +1,4 @@
-// Types (contract layer — re-exported for convenience)
+// Types (contract layer)
 export type {
   IAgentProvider,
   AgentRequestOptions,
@@ -7,68 +7,17 @@ export type {
   ProviderDefaults,
   ProviderDefaultsMap,
   ProviderCapabilities,
-  ProviderRegistration,
-  ProviderInfo,
   MessageChunk,
   TokenUsage,
+  SystemPromptInput,
+  PiProviderDefaults,
 } from './types';
 
-// Provider config types (canonical definitions in ./types, re-exported via config modules)
-// Import from ./types directly or from the config modules — both work.
+// Pi provider
+export { PiProvider } from './pi/provider';
+export { parsePiConfig } from './pi/config';
+export { PI_CAPABILITIES } from './pi/capabilities';
 
-// Registry
-export {
-  registerProvider,
-  getAgentProvider,
-  getRegistration,
-  getProviderCapabilities,
-  getRegisteredProviders,
-  getProviderInfoList,
-  isRegisteredProvider,
-  registerBuiltinProviders,
-  registerCommunityProviders,
-  clearRegistry,
-} from './registry';
-
-// Error
-export { UnknownProviderError } from './errors';
-
-// Provider classes
-export { ClaudeProvider } from './claude/provider';
-export { CodexProvider } from './codex/provider';
-
-// Config parsers
-export { parseClaudeConfig, type ClaudeProviderDefaults } from './claude/config';
-export { parseCodexConfig, type CodexProviderDefaults } from './codex/config';
-
-// Utilities (needed by consumers)
-export { resetCodexSingleton } from './codex/provider';
+// Shared utilities
+export { resolveSkillDirectories } from './shared/skills';
 export { loadMcpConfig, type LoadedMcpConfig } from './mcp/config';
-export { resolveCodexBinaryPath, fileExists as codexFileExists } from './codex/binary-resolver';
-export { resolveClaudeBinaryPath, fileExists as claudeFileExists } from './claude/binary-resolver';
-
-// Community providers
-export {
-  OpencodeProvider,
-  parseOpencodeConfig,
-  registerOpencodeProvider,
-  type OpencodeProviderDefaults,
-} from './community/opencode';
-export {
-  PiProvider,
-  parsePiConfig,
-  registerPiProvider,
-  type PiProviderDefaults,
-} from './community/pi';
-
-export {
-  CopilotProvider,
-  parseCopilotConfig,
-  registerCopilotProvider,
-  resetCopilotSingleton,
-  type CopilotProviderDefaults,
-} from './community/copilot';
-export {
-  resolveCopilotBinaryPath,
-  fileExists as copilotFileExists,
-} from './community/copilot/binary-resolver';

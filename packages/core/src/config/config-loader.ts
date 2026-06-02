@@ -1,11 +1,13 @@
 /**
- * Configuration loader for Rith Engine YAML config files
+ * Configuration loader for Rith Engine YAML config files.
  *
- * Loading order (later overrides earlier):
- * 1. Defaults
- * 2. Global config (~/.rith/config.yaml)
- * 3. Repository config (.rith/config.yaml)
- * 4. Environment variables
+ * Pi is the sole provider — registry-based provider resolution has been removed.
+ *
+ * Loads, merges, and caches:
+ *   1. Built-in defaults
+ *   2. Global user config (~/.rith/config.yaml)
+ *   3. Per-repo config (.rith/config.yaml)
+ *   4. Environment variable overrides
  */
 
 import { readFile as fsReadFile, writeFile, mkdir } from 'fs/promises';
@@ -28,34 +30,16 @@ import type {
   GlobalConfig,
   RepoConfig,
   MergedConfig,
-  SafeConfig,
   AssistantDefaults,
   AssistantDefaultsConfig,
 } from './config-types';
-import { createLogger } from '@rith/paths';
-import {
-  isRegisteredProvider,
-  getRegisteredProviders,
-  registerBuiltinProviders,
-  registerCommunityProviders,
-} from '@rith/providers';
 
-/**
- * Pure read of registered provider IDs. Registration is guaranteed by
- * `loadConfig()`'s bootstrap call before any consumer can observe the
- * registry, so this helper must NOT trigger side-effecting registration
- * itself — that hid the ordering coupling and surprised readers.
- */
-function getRegisteredProviderNames(): string[] {
-  return getRegisteredProviders().map(p => p.id);
-}
+import { createLogger } from '@rith/paths';
 
 function mergeAssistantDefaults(
   base: AssistantDefaults,
   overrides?: AssistantDefaultsConfig
 ): AssistantDefaults {
-  // Deep-copy every provider slot present in base. No per-provider listing —
-  // adding a new community provider must not require editing this function.
   const merged: AssistantDefaults = { ...base };
   for (const [providerId, providerDefaults] of Object.entries(base)) {
     if (providerDefaults && typeof providerDefaults === 'object') {
@@ -74,50 +58,6 @@ function mergeAssistantDefaults(
   }
 
   return merged;
-}
-
-/**
- * Per-provider allowlist of fields safe to expose to web clients.
- *
- * **Allowlist (not denylist) by design.** Any field not listed here is
- * dropped on its way out. New sensitive fields on a provider default
- * config (binary paths, credentials, absolute filesystem paths, etc.)
- * are hidden by default — you have to opt in to expose them.
- *
- * Unknown provider IDs (community providers not listed below) fall back
- * to the generic empty allowlist: the web UI sees the provider exists,
- * but none of its defaults. Providers whose defaults are safe to surface
- * register their fields here.
- */
-const SAFE_ASSISTANT_FIELDS: Record<string, readonly string[]> = {
-  claude: ['model'],
-  codex: ['model', 'modelReasoningEffort', 'webSearchMode'],
-  // community providers — list each field we're confident is safe to
-  // show in the web UI. Unknown providers fall through with no fields.
-  opencode: ['model', 'agent'],
-  pi: ['model'],
-  copilot: ['model'],
-};
-
-function toSafeAssistantDefaults(assistants: AssistantDefaults): SafeConfig['assistants'] {
-  const safeAssistants: SafeConfig['assistants'] = {};
-
-  for (const [providerId, providerDefaults] of Object.entries(assistants)) {
-    if (!providerDefaults || typeof providerDefaults !== 'object') continue;
-
-    const allowed = SAFE_ASSISTANT_FIELDS[providerId] ?? [];
-    const safeDefaults: Record<string, unknown> = {};
-    for (const field of allowed) {
-      const value = (providerDefaults as Record<string, unknown>)[field];
-      if (value !== undefined) {
-        safeDefaults[field] = value;
-      }
-    }
-
-    safeAssistants[providerId] = safeDefaults;
-  }
-
-  return safeAssistants;
 }
 
 /** Lazy-initialized logger (deferred so test mocks can intercept createLogger) */
@@ -143,32 +83,13 @@ let cachedGlobalConfig: GlobalConfig | null = null;
 const DEFAULT_CONFIG_CONTENT = `# Rith Engine Global Configuration
 # See: https://github.com/artur-ciocanu/rith-engine/blob/main/docs/configuration.md
 
-# Bot display name (shown in messages)
-# botName: Rith Engine
-
-# Default AI assistant (must match a registered provider, e.g. claude, codex)
-# defaultAssistant: claude
+# Default AI assistant
+# defaultAssistant: pi
 
 # Assistant defaults
 # assistants:
-#   claude:
-#     model: sonnet
-#   codex:
-#     model: gpt-5.3-codex
-#     modelReasoningEffort: medium
-#     webSearchMode: disabled
-#     additionalDirectories:
-#       - /absolute/path/to/other/repo
-
-# Streaming mode per platform (stream or batch)
-# streaming:
-#   telegram: stream
-#   discord: batch
-#   slack: batch
-
-# Concurrency settings
-# concurrency:
-#   maxConversations: 10
+#   pi:
+#     model: default
 `;
 
 /**
@@ -259,35 +180,14 @@ export async function loadRepoConfig(repoPath: string): Promise<RepoConfig> {
  * Get default configuration
  */
 function getDefaults(): MergedConfig {
-  // Seed one empty entry per registered provider — built-in OR community.
-  // No per-provider listing here: adding a new provider must not require
-  // editing this function. `registerBuiltinProviders()` + any community
-  // registrations run at process bootstrap (see `packages/providers/src/
-  // registry.ts#registerCommunityProviders`), so by the time this runs the
-  // registry is populated.
-  const providers = getRegisteredProviders();
-  const registeredAssistants: AssistantDefaults = { claude: {}, codex: {} };
-  for (const provider of providers) {
-    if (!(provider.id in registeredAssistants)) {
-      registeredAssistants[provider.id] = {};
-    }
-  }
+  const registeredAssistants: AssistantDefaults = { pi: {} };
 
   return {
-    botName: 'Rith Engine',
-    assistant: providers.find(p => p.builtIn)?.id ?? 'claude',
+    assistant: 'pi',
     assistants: registeredAssistants,
-    streaming: {
-      telegram: 'stream',
-      discord: 'batch',
-      slack: 'batch',
-    },
     paths: {
       workspaces: getRithWorkspacesPath(),
       worktrees: getRithWorktreesPath(),
-    },
-    concurrency: {
-      maxConversations: 10,
     },
     commands: {
       folder: undefined,
@@ -305,53 +205,14 @@ function getDefaults(): MergedConfig {
  * Apply environment variable overrides
  */
 function applyEnvOverrides(config: MergedConfig): MergedConfig {
-  // Bot name override
-  const envBotName = process.env.BOT_DISPLAY_NAME;
-  if (envBotName) {
-    config.botName = envBotName;
-  }
-
-  // Assistant override — validate against registry, error on unknown provider
+  // Assistant override
   const envAssistant = process.env.DEFAULT_AI_ASSISTANT;
   if (envAssistant && envAssistant.length > 0) {
-    if (isRegisteredProvider(envAssistant)) {
-      config.assistant = envAssistant;
-    } else {
-      throw new Error(
-        `DEFAULT_AI_ASSISTANT='${envAssistant}' is not a registered provider. ` +
-          `Available providers: ${getRegisteredProviderNames().join(', ')}`
-      );
-    }
-  }
-
-  // Streaming overrides
-  const streamingModes = ['stream', 'batch'] as const;
-  const telegramMode = process.env.TELEGRAM_STREAMING_MODE;
-  if (telegramMode && streamingModes.includes(telegramMode as 'stream' | 'batch')) {
-    config.streaming.telegram = telegramMode as 'stream' | 'batch';
-  }
-
-  const discordMode = process.env.DISCORD_STREAMING_MODE;
-  if (discordMode && streamingModes.includes(discordMode as 'stream' | 'batch')) {
-    config.streaming.discord = discordMode as 'stream' | 'batch';
-  }
-
-  const slackMode = process.env.SLACK_STREAMING_MODE;
-  if (slackMode && streamingModes.includes(slackMode as 'stream' | 'batch')) {
-    config.streaming.slack = slackMode as 'stream' | 'batch';
+    config.assistant = envAssistant;
   }
 
   // Path overrides (these come from rith-paths.ts which already checks env vars)
   // No need to re-apply here since getDefaults() uses those functions
-
-  // Concurrency override
-  const maxConcurrent = process.env.MAX_CONCURRENT_CONVERSATIONS;
-  if (maxConcurrent) {
-    const parsed = parseInt(maxConcurrent, 10);
-    if (!isNaN(parsed) && parsed > 0) {
-      config.concurrency.maxConversations = parsed;
-    }
-  }
 
   return config;
 }
@@ -365,41 +226,17 @@ function mergeGlobalConfig(defaults: MergedConfig, global: GlobalConfig): Merged
     assistants: mergeAssistantDefaults(defaults.assistants),
   };
 
-  // Bot name preference
-  if (global.botName) {
-    result.botName = global.botName;
-  }
-
-  // Assistant preference — validate against registry
+  // Assistant preference
   if (global.defaultAssistant) {
-    if (isRegisteredProvider(global.defaultAssistant)) {
-      result.assistant = global.defaultAssistant;
-    } else {
-      throw new Error(
-        `defaultAssistant: '${global.defaultAssistant}' in global config (~/.rith/config.yaml) ` +
-          `is not a registered provider. Available: ${getRegisteredProviderNames().join(', ')}`
-      );
-    }
+    result.assistant = global.defaultAssistant;
   }
 
   result.assistants = mergeAssistantDefaults(result.assistants, global.assistants);
-
-  // Streaming preferences
-  if (global.streaming) {
-    if (global.streaming.telegram) result.streaming.telegram = global.streaming.telegram;
-    if (global.streaming.discord) result.streaming.discord = global.streaming.discord;
-    if (global.streaming.slack) result.streaming.slack = global.streaming.slack;
-  }
 
   // Path preferences
   if (global.paths) {
     if (global.paths.workspaces) result.paths.workspaces = global.paths.workspaces;
     if (global.paths.worktrees) result.paths.worktrees = global.paths.worktrees;
-  }
-
-  // Concurrency preferences
-  if (global.concurrency?.maxConversations) {
-    result.concurrency.maxConversations = global.concurrency.maxConversations;
   }
 
   return result;
@@ -414,16 +251,9 @@ function mergeRepoConfig(merged: MergedConfig, repo: RepoConfig): MergedConfig {
     assistants: mergeAssistantDefaults(merged.assistants),
   };
 
-  // Assistant override (repo-level takes precedence) — validate against registry
+  // Assistant override (repo-level takes precedence)
   if (repo.assistant) {
-    if (isRegisteredProvider(repo.assistant)) {
-      result.assistant = repo.assistant;
-    } else {
-      throw new Error(
-        `assistant: '${repo.assistant}' in repo config (.rith/config.yaml) ` +
-          `is not a registered provider. Available: ${getRegisteredProviderNames().join(', ')}`
-      );
-    }
+    result.assistant = repo.assistant;
   }
 
   result.assistants = mergeAssistantDefaults(result.assistants, repo.assistants);
@@ -478,9 +308,6 @@ function mergeRepoConfig(merged: MergedConfig, repo: RepoConfig): MergedConfig {
  * @returns Merged configuration with all overrides applied
  */
 export async function loadConfig(repoPath?: string): Promise<MergedConfig> {
-  registerBuiltinProviders();
-  registerCommunityProviders();
-
   // 1. Start with defaults
   let config = getDefaults();
 
@@ -514,7 +341,6 @@ export function logConfig(config: MergedConfig): void {
   getLog().info(
     {
       assistant: config.assistant,
-      streaming: config.streaming,
     },
     'config_loaded'
   );
@@ -535,7 +361,6 @@ export async function updateGlobalConfig(updates: Partial<GlobalConfig>): Promis
     // Deep-merge: only overwrite defined keys
     const merged: GlobalConfig = { ...current };
 
-    if (updates.botName !== undefined) merged.botName = updates.botName;
     if (updates.defaultAssistant !== undefined) merged.defaultAssistant = updates.defaultAssistant;
 
     if (updates.assistants) {
@@ -543,14 +368,6 @@ export async function updateGlobalConfig(updates: Partial<GlobalConfig>): Promis
         mergeAssistantDefaults(getDefaults().assistants, current.assistants),
         updates.assistants
       );
-    }
-
-    if (updates.streaming) {
-      merged.streaming = { ...current.streaming, ...updates.streaming };
-    }
-
-    if (updates.concurrency) {
-      merged.concurrency = { ...current.concurrency, ...updates.concurrency };
     }
 
     // Serialize to YAML and write
@@ -573,27 +390,4 @@ export async function updateGlobalConfig(updates: Partial<GlobalConfig>): Promis
 
     throw error;
   }
-}
-
-/**
- * Project a MergedConfig to a SafeConfig suitable for sending to web clients.
- * Strips filesystem paths and any other server-internal fields.
- */
-export function toSafeConfig(config: MergedConfig): SafeConfig {
-  return {
-    botName: config.botName,
-    assistant: config.assistant,
-    assistants: toSafeAssistantDefaults(config.assistants),
-    streaming: {
-      telegram: config.streaming.telegram,
-      discord: config.streaming.discord,
-      slack: config.streaming.slack,
-    },
-    concurrency: { maxConversations: config.concurrency.maxConversations },
-    defaults: {
-      copyDefaults: config.defaults.copyDefaults,
-      loadDefaultCommands: config.defaults.loadDefaultCommands,
-      loadDefaultWorkflows: config.defaults.loadDefaultWorkflows,
-    },
-  };
 }

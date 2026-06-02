@@ -54,10 +54,6 @@ mock.module('./event-emitter', () => ({
   getWorkflowEventEmitter: mock(() => mockEmitter),
 }));
 
-// --- Bootstrap provider registry (after path mocks) ---
-import { registerBuiltinProviders, clearRegistry } from '@rith/providers';
-clearRegistry();
-registerBuiltinProviders();
 
 // --- Import after mocks ---
 import { executeWorkflow, hydrateResumableRun } from './executor';

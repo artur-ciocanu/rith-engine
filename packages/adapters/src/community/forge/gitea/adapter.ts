@@ -10,11 +10,6 @@ import { join } from 'path';
 import type { IPlatformAdapter, MessageMetadata } from '@rith/core';
 import type { IsolationHints } from '@rith/isolation';
 import {
-  ConversationNotFoundError,
-  handleMessage,
-  classifyAndFormatError,
-  toError,
-  onConversationClosed,
   ConversationLockManager,
 } from '@rith/core';
 import {
@@ -31,7 +26,6 @@ import {
   toBranchName,
   isWorktreePath,
 } from '@rith/git';
-import * as db from '@rith/core/db/conversations';
 import * as codebaseDb from '@rith/core/db/codebases';
 import { resolveDefaultAssistant } from '@rith/core/config/resolve-assistant';
 import { parseAllowedUsers, isGiteaUserAuthorized } from './auth';
@@ -664,14 +658,8 @@ export class GiteaAdapter implements IPlatformAdapter {
     const conversationId = this.buildConversationId(owner, repo, number, isPR);
     getLog().info({ conversationId, merged }, 'isolation_cleanup_started');
 
-    try {
-      await onConversationClosed('gitea', conversationId, { merged });
-      getLog().info({ conversationId }, 'isolation_cleanup_complete');
-    } catch (error) {
-      const err = error as Error;
-      // Log full context for debugging - cleanup failures shouldn't break user flow
-      getLog().error({ err, conversationId }, 'isolation_cleanup_failed');
-    }
+      // TODO: removed with orchestrator
+      getLog().info({ conversationId }, 'isolation_cleanup_skipped');
   }
 
   /**
@@ -795,9 +783,7 @@ Use 'tea pr view ${String(pr.number)}' for full details if needed.`;
     // 6. Build conversationId
     const conversationId = this.buildConversationId(owner, repo, number, isPR);
 
-    // 7. Check if new conversation
-    const existingConv = await db.getOrCreateConversation('gitea', conversationId);
-    const isNewConversation = !existingConv.codebase_id;
+    // TODO: conversation DB removed with orchestrator
 
     // 8. Get/create codebase (checks for existing first!)
     const {
@@ -805,26 +791,6 @@ Use 'tea pr view ${String(pr.number)}' for full details if needed.`;
       repoPath,
       isNew: isNewCodebase,
     } = await this.getOrCreateCodebaseForRepo(owner, repo);
-
-    // 8b. Link conversation to codebase
-    if (isNewConversation) {
-      try {
-        await db.updateConversation(existingConv.id, {
-          codebase_id: codebase.id,
-          cwd: repoPath,
-        });
-      } catch (updateError) {
-        if (updateError instanceof ConversationNotFoundError) {
-          getLog().error(
-            { conversationId: existingConv.id, codebaseId: codebase.id },
-            'conversation_codebase_link_failed'
-          );
-          // Re-throw as this is a critical setup step
-          throw new Error('Failed to set up Gitea conversation - please try again');
-        }
-        throw updateError;
-      }
-    }
 
     // 9. Get default branch from repository info
     const defaultBranch = event.repository.default_branch;
@@ -903,23 +869,9 @@ Use 'tea pr view ${String(pr.number)}' for full details if needed.`;
     );
 
     // 15. Route to orchestrator with isolation hints (with lock for concurrency control)
+    void finalMessage; void contextToAppend; // consumed by orchestrator (removed)
     await this.lockManager.acquireLock(conversationId, async () => {
-      try {
-        await handleMessage(this, conversationId, finalMessage, {
-          issueContext: contextToAppend,
-          threadContext,
-          isolationHints,
-        });
-      } catch (error) {
-        const err = toError(error);
-        getLog().error({ err, conversationId }, 'message_handling_error');
-        try {
-          const userMessage = classifyAndFormatError(err);
-          await this.sendMessage(conversationId, userMessage);
-        } catch (sendError) {
-          getLog().error({ err: toError(sendError), conversationId }, 'error_message_send_failed');
-        }
-      }
+      throw new Error('Orchestrator not available');
     });
   }
 }

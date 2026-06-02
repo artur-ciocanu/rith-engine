@@ -5,7 +5,6 @@ import {
   registerRepository,
   loadConfig,
   loadRepoConfig,
-  generateAndSetTitle,
   createWorkflowStore,
 } from '@rith/core';
 import { WORKFLOW_EVENT_TYPES, type WorkflowEventType } from '@rith/workflows/store';
@@ -17,7 +16,7 @@ import { discoverWorkflowsWithConfig } from '@rith/workflows/workflow-discovery'
 import { resolveWorkflowName } from '@rith/workflows/router';
 import { executeWorkflow, hydrateResumableRun } from '@rith/workflows/executor';
 import { getWorkflowEventEmitter, type WorkflowEmitterEvent } from '@rith/workflows/event-emitter';
-import type { WorkflowDefinition, WorkflowLoadResult } from '@rith/workflows/schemas/workflow';
+import type { WorkflowLoadResult } from '@rith/workflows/schemas/workflow';
 import type { WorkflowRun } from '@rith/workflows/schemas/workflow-run';
 import {
   approveWorkflow,
@@ -26,10 +25,8 @@ import {
   abandonWorkflow,
   getWorkflowStatus,
 } from '@rith/core/operations/workflow-operations';
-import * as conversationDb from '@rith/core/db/conversations';
 import * as codebaseDb from '@rith/core/db/codebases';
 import * as isolationDb from '@rith/core/db/isolation-environments';
-import * as messageDb from '@rith/core/db/messages';
 import * as workflowDb from '@rith/core/db/workflows';
 import * as workflowEventsDb from '@rith/core/db/workflow-events';
 import type { WorkflowEventRow } from '@rith/core/db/workflow-events';
@@ -130,25 +127,6 @@ function buildRegistrationFailureError(action: string, error: Error): Error {
   return new Error(
     `Cannot ${action}: repository registration failed.\nError: ${error.message}\n${hint}`
   );
-}
-
-/**
- * Resolve the provider used for CLI conversation titles from the workflow itself.
- * This keeps auxiliary title generation aligned with workflow execution instead
- * of falling back to a stale conversation default.
- */
-function resolveTitleAssistantType(
-  workflow: WorkflowDefinition,
-  defaultAssistant: string | undefined,
-  conversationAssistant: string | undefined
-): string {
-  // Per CLAUDE.md, provider is resolved via an explicit chain:
-  // node.provider ?? workflow.provider ?? config.assistant. Model never
-  // influences provider selection — vendor SDKs add new model names faster
-  // than we can keep a mapping in sync.
-  const fallbackAssistant = defaultAssistant ?? conversationAssistant ?? 'claude';
-  if (workflow.provider) return workflow.provider;
-  return fallbackAssistant;
 }
 
 /** Render a workflow event to stderr as a progress line. Called only when --quiet is not set. */
@@ -376,16 +354,9 @@ export async function workflowRunCommand(
   // Generate conversation ID
   const conversationId = options.conversationId ?? generateConversationId();
 
-  // Get or create conversation in database
-  let conversation;
-  try {
-    conversation = await conversationDb.getOrCreateConversation('cli', conversationId);
-  } catch (error) {
-    const err = error as Error;
-    throw new Error(
-      `Failed to access database: ${err.message}\nHint: Check that DATABASE_URL is set and the database is running.`
-    );
-  }
+  // Use the conversation ID directly as the DB identifier.
+  // The conversations table was removed; workflow_runs stores everything needed.
+  const dbConversationId = conversationId;
 
   // Try to find a codebase for this directory
   let codebase = null;
@@ -633,71 +604,16 @@ export async function workflowRunCommand(
     );
   }
 
-  // Update conversation with cwd and isolation info
-  try {
-    await conversationDb.updateConversation(conversation.id, {
-      cwd: workingCwd,
-      codebase_id: codebase?.id ?? null,
-      isolation_env_id: isolationEnvId ?? null,
-    });
-  } catch (error) {
-    const err = error as Error;
-    throw new Error(`Failed to update conversation: ${err.message}`);
-  }
 
-  // Wire adapter for assistant message persistence
-  adapter.setConversationDbId(conversationId, conversation.id);
-
-  // Persist user message for Web UI history
-  try {
-    await messageDb.addMessage(conversation.id, 'user', userMessage);
-  } catch (error) {
-    getLog().warn(
-      { err: error as Error, conversationId: conversation.id },
-      'cli_user_message_persist_failed'
-    );
-  }
-
-  // Auto-generate title for CLI workflow conversations (fire-and-forget)
-  void (async (): Promise<void> => {
-    let workflowConfig: Awaited<ReturnType<typeof loadConfig>> | undefined;
-    try {
-      workflowConfig = await loadConfig(cwd);
-    } catch (error) {
-      getLog().warn({ err: error as Error, cwd }, 'workflow.title_config_load_failed');
-    }
-
-    try {
-      const titleAssistantType = resolveTitleAssistantType(
-        workflow,
-        workflowConfig?.assistant,
-        conversation.ai_assistant_type
-      );
-      const titleAssistantConfig = workflowConfig?.assistants?.[titleAssistantType] ?? {};
-      await generateAndSetTitle(
-        conversation.id,
-        userMessage,
-        titleAssistantType,
-        workingCwd,
-        workflowName,
-        titleAssistantConfig
-      );
-    } catch (error) {
-      getLog().warn(
-        { err: error as Error, conversationId: conversation.id },
-        'workflow.title_generation_failed'
-      );
-    }
-  })();
 
   // Register cleanup handlers for graceful termination
   let terminating = false;
   const cleanup = (signal: string): void => {
     if (terminating) return;
     terminating = true;
-    getLog().info({ conversationId: conversation.id, signal }, 'workflow.process_terminating');
+    getLog().info({ conversationId: dbConversationId, signal }, 'workflow.process_terminating');
     workflowDb
-      .getActiveWorkflowRun(conversation.id)
+      .getActiveWorkflowRun(dbConversationId)
       .then(activeRun => {
         if (activeRun) {
           return workflowDb.failWorkflowRun(activeRun.id, `Process terminated (${signal})`);
@@ -789,7 +705,7 @@ export async function workflowRunCommand(
       workingCwd,
       workflow,
       userMessage,
-      conversation.id,
+      dbConversationId,
       opts
     );
   } finally {
@@ -1089,24 +1005,8 @@ export async function workflowApproveCommand(runId: string, comment?: string): P
   console.log('');
   console.log('Resuming workflow...');
 
-  // Look up the original platform conversation ID to keep all messages in one thread
-  let platformConversationId: string | undefined;
-  try {
-    const originalConversation = await conversationDb.getConversationById(result.conversationId);
-    platformConversationId = originalConversation?.platform_conversation_id ?? undefined;
-    if (!originalConversation) {
-      getLog().info(
-        { runId, conversationId: result.conversationId },
-        'cli.workflow_approve_conversation_not_found'
-      );
-    }
-  } catch (error) {
-    const err = error as Error;
-    getLog().warn(
-      { err, runId, conversationId: result.conversationId },
-      'cli.workflow_approve_conversation_lookup_failed'
-    );
-  }
+  // In CLI mode, the conversation ID is the platform conversation ID directly.
+  const platformConversationId: string | undefined = result.conversationId;
 
   // Use the codebase's source path for workflow YAML discovery so the file is
   // found even when working_path is a worktree or workspace clone that does
@@ -1177,24 +1077,8 @@ export async function workflowRejectCommand(runId: string, reason?: string): Pro
   console.log(`Rejected workflow: ${result.workflowName}`);
   console.log('Resuming with on_reject prompt...');
 
-  // Look up the original platform conversation ID to keep all messages in one thread
-  let platformConversationId: string | undefined;
-  try {
-    const originalConversation = await conversationDb.getConversationById(result.conversationId);
-    platformConversationId = originalConversation?.platform_conversation_id ?? undefined;
-    if (!originalConversation) {
-      getLog().info(
-        { runId, conversationId: result.conversationId },
-        'cli.workflow_reject_conversation_not_found'
-      );
-    }
-  } catch (error) {
-    const err = error as Error;
-    getLog().warn(
-      { err, runId, conversationId: result.conversationId },
-      'cli.workflow_reject_conversation_lookup_failed'
-    );
-  }
+  // In CLI mode, the conversation ID is the platform conversation ID directly.
+  const platformConversationId: string | undefined = result.conversationId;
 
   // Use the codebase's source path for workflow YAML discovery so the file is
   // found even when working_path is a worktree or workspace clone that does

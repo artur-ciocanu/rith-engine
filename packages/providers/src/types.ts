@@ -1,83 +1,10 @@
-// CONTRACT LAYER — no SDK imports, no runtime deps.
+// CONTRACT LAYER — provider-agnostic types for the Pi-only workflow engine.
 // @rith/workflows and @rith/core import from this subpath (@rith/providers/types).
 // HARD RULE: This file must never import SDK packages or other @rith/* packages.
 
 // ─── Provider Config Defaults ──────────────────────────────────────────────
 // Canonical definitions — @rith/core/config/config-types.ts imports from here.
 // Single source of truth for provider-specific config shapes.
-
-export interface ClaudeProviderDefaults {
-  [key: string]: unknown;
-  model?: string;
-  /** Claude Code settingSources — controls which sources the SDK loads:
-   *  CLAUDE.md, skills, commands, agents, and hooks. Both project-level
-   *  (`<cwd>/.claude/`) and user-level (`~/.claude/`) are loaded by default.
-   *  Set explicitly to `['project']` to scope a workflow to project-only
-   *  resources (e.g. CI, shared environments).
-   *  @default ['project', 'user']
-   */
-  settingSources?: ('project' | 'user')[];
-  /** Absolute path to the Claude Code SDK's `cli.js`. Required in compiled
-   *  Rith Engine builds when `CLAUDE_BIN_PATH` is not set; optional in dev mode
-   *  (SDK resolves from node_modules). */
-  claudeBinaryPath?: string;
-}
-
-export interface CodexProviderDefaults {
-  [key: string]: unknown;
-  model?: string;
-  /** Structurally matches @rith/workflows ModelReasoningEffort */
-  modelReasoningEffort?: 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
-  /** Structurally matches @rith/workflows WebSearchMode */
-  webSearchMode?: 'disabled' | 'cached' | 'live';
-  additionalDirectories?: string[];
-  /** Path to the Codex CLI binary. Overrides auto-detection in compiled Rith Engine builds. */
-  codexBinaryPath?: string;
-}
-
-/**
- * Community provider defaults for GitHub Copilot (@github/copilot-sdk).
- */
-export interface CopilotProviderDefaults {
-  [key: string]: unknown;
-  /** Default model ref, e.g. 'gpt-5', 'gpt-5-mini', 'claude-sonnet-4.5'. */
-  model?: string;
-  /**
-   * Reasoning effort passed to the SDK as `reasoningEffort`. Field name
-   * mirrors `CodexProviderDefaults.modelReasoningEffort` so users get one
-   * consistent key across cross-provider configs.
-   */
-  modelReasoningEffort?: 'low' | 'medium' | 'high' | 'xhigh';
-  /**
-   * Absolute path to the Copilot CLI binary. Required in compiled Rith Engine
-   * builds when `COPILOT_BIN_PATH` env var is not set. Dev-mode builds let
-   * the SDK resolve from `$PATH`.
-   */
-  copilotCliPath?: string;
-  /**
-   * Override Copilot's config directory. When unset the SDK uses its own
-   * default (typically `~/.copilot`).
-   */
-  configDir?: string;
-  /**
-   * Opt in to Copilot's config discovery from the repo (MCP servers, skills,
-   * etc. declared in the repo's `.copilot/` directory). Disabled by default
-   * so arbitrary repos do not implicitly load MCP servers or skills.
-   * @default false
-   */
-  enableConfigDiscovery?: boolean;
-  /**
-   * Reuse the CLI's logged-in user credentials (from `copilot login`) when
-   * no explicit token is provided via env vars. Defaults to true.
-   * @default true
-   */
-  useLoggedInUser?: boolean;
-  /**
-   * Copilot CLI log level. When unset the SDK picks its own default.
-   */
-  logLevel?: 'none' | 'error' | 'warning' | 'info' | 'debug' | 'all';
-}
-
 /**
  * Community provider defaults for Pi (@mariozechner/pi-coding-agent).
  * v1 minimal shape; extend as capabilities are wired in.
@@ -131,7 +58,7 @@ export interface PiProviderDefaults {
    * Maximum number of concurrent Pi `session.prompt()` calls allowed.
    * When this limit is reached, additional calls queue and wait rather than
    * fail. Pi/Minimax does not throttle concurrent requests at the SDK layer
-   * (unlike the Claude SDK), so this prevents cascading 429/rate-limit failures
+   * (unlike some provider SDKs), so this prevents cascading 429/rate-limit failures
    * when many parallel workflow nodes invoke Pi simultaneously.
    *
    * Set to a positive integer matching your Pi API tier's concurrency limit.
@@ -141,19 +68,6 @@ export interface PiProviderDefaults {
   maxConcurrent?: number;
 }
 
-/**
- * Community provider defaults for OpenCode (opencode-ai).
- * Minimal shape — extend as capabilities are wired in.
- */
-export interface OpencodeProviderDefaults {
-  [key: string]: unknown;
-  /** Default model ref in '<provider>/<model>' format, e.g. 'anthropic/claude-3-5-sonnet' */
-  model?: string;
-  /** Base URL of an existing OpenCode server to connect to. */
-  baseUrl?: string;
-  /** Default agent name from opencode.json config to use. */
-  agent?: string;
-}
 
 /** Generic per-provider defaults bag used by config surfaces and UI. */
 export type ProviderDefaults = Record<string, unknown>;
@@ -206,7 +120,7 @@ export type MessageChunk =
       type: 'tool';
       toolName: string;
       toolInput?: Record<string, unknown>;
-      /** Stable per-call ID from the underlying SDK (e.g. Claude `tool_use_id`).
+      /** Stable per-call ID from the underlying SDK (e.g. `tool_use_id`).
        *  When present, the platform adapter uses it directly instead of generating
        *  one — guarantees `tool_call`/`tool_result` pair correctly even when
        *  multiple tools with the same name run concurrently. */
@@ -222,9 +136,9 @@ export type MessageChunk =
   | { type: 'workflow_dispatch'; workerConversationId: string; workflowName: string };
 
 /**
- * System prompt input accepted by all providers. Mirrors the Claude Agent SDK
+ * System prompt input accepted by all providers. Uses the
  * preset-with-append shape so callers can opt into cacheable prefix behavior.
- * Hand-written duplicate of the SDK type — see file-header rule forbidding SDK imports here.
+ * Hand-written type — see file-header rule forbidding SDK imports here.
  */
 export interface SystemPromptPreset {
   type: 'preset';
@@ -261,7 +175,6 @@ export interface NodeConfig {
   /** Node ID from the workflow DAG — used by providers for per-node isolation (e.g., session dirs). */
   nodeId?: string;
   mcp?: string;
-  hooks?: unknown;
   skills?: string[];
   /**
    * Inline sub-agent definitions (keyed by kebab-case agent ID).
@@ -322,9 +235,8 @@ export interface SendQueryOptions extends AgentRequestOptions {
 export interface ProviderCapabilities {
   sessionResume: boolean;
   mcp: boolean;
-  hooks: boolean;
   skills: boolean;
-  /** Whether the provider supports inline sub-agent definitions (Claude SDK's options.agents). */
+  /** Whether the provider supports inline sub-agent definitions. */
   agents: boolean;
   toolRestrictions: boolean;
   structuredOutput: boolean;
@@ -336,42 +248,10 @@ export interface ProviderCapabilities {
   sandbox: boolean;
 }
 
-/**
- * Registration entry for a provider in the provider registry.
- * Each entry carries metadata, a factory, and model-compatibility logic.
- * The registry is the source of truth for provider identity, capabilities, and display.
- */
-export interface ProviderRegistration {
-  /** Unique provider identifier — used in YAML, config, DB */
-  id: string;
-
-  /** Human-readable name for UI display */
-  displayName: string;
-
-  /** Instantiate a provider */
-  factory: () => IAgentProvider;
-
-  /** Static capability declaration — used for dag-executor warnings */
-  capabilities: ProviderCapabilities;
-
-  /** Whether this is a built-in (maintained by core team) or community provider */
-  builtIn: boolean;
-}
-
-/**
- * API-safe projection of ProviderRegistration (excludes non-serializable fields).
- * Used by GET /api/providers and consumed by the Web UI.
- */
-export interface ProviderInfo {
-  id: string;
-  displayName: string;
-  capabilities: ProviderCapabilities;
-  builtIn: boolean;
-}
 
 /**
  * Generic agent provider interface.
- * Allows supporting multiple agent providers (Claude, Codex, etc.)
+ * Generic agent provider interface for the Pi-only engine.
  */
 export interface IAgentProvider {
   /**

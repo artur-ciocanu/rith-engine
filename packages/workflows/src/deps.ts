@@ -8,7 +8,6 @@
  * No more mirror copies — single source of truth for IAgentProvider, MessageChunk, etc.
  */
 import type { IWorkflowStore } from './store';
-import type { ModelReasoningEffort, WebSearchMode } from './schemas';
 import type {
   IAgentProvider,
   MessageChunk,
@@ -70,7 +69,7 @@ export interface IWorkflowPlatform {
 // ---------------------------------------------------------------------------
 
 export interface WorkflowConfig {
-  /** Default assistant provider (validated against provider registry at runtime) */
+  /** Default assistant provider */
   assistant: string;
   baseBranch?: string;
   docsPath?: string;
@@ -80,20 +79,10 @@ export interface WorkflowConfig {
     loadDefaultWorkflows?: boolean;
     loadDefaultCommands?: boolean;
   };
-  // Intersection: generic map for community providers + typed built-in entries.
-  // Built-ins are typed so executor/dag-executor get type-safe config access for
-  // Claude settingSources, Codex reasoningEffort, etc. without casts.
-  // Community providers use the generic [string] index signature.
   assistants: ProviderDefaultsMap & {
-    claude: {
+    pi: {
       model?: string;
-      settingSources?: ('project' | 'user')[];
-    };
-    codex: {
-      model?: string;
-      modelReasoningEffort?: ModelReasoningEffort;
-      webSearchMode?: WebSearchMode;
-      additionalDirectories?: string[];
+      [key: string]: unknown;
     };
   };
 }
@@ -102,7 +91,7 @@ export interface WorkflowConfig {
 // Agent provider factory type
 // ---------------------------------------------------------------------------
 
-export type AgentProviderFactory = (provider: string) => IAgentProvider;
+export type AgentProviderFactory = () => IAgentProvider;
 
 // ---------------------------------------------------------------------------
 // WorkflowDeps — the single injection point

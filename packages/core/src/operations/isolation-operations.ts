@@ -6,8 +6,6 @@
 import { createLogger } from '@rith/paths';
 import { toWorktreePath, worktreeExists } from '@rith/git';
 import * as isolationDb from '../db/isolation-environments';
-import { cleanupStaleWorktrees, cleanupMergedWorktrees } from '../services/cleanup-service';
-import type { CleanupOperationResult } from '../services/cleanup-service';
 
 // Lazy logger — NEVER at module scope
 let cachedLog: ReturnType<typeof createLogger> | undefined;
@@ -33,7 +31,11 @@ export interface EnvironmentListData {
   ghostsReconciled: number;
 }
 
-export { type CleanupOperationResult } from '../services/cleanup-service';
+export interface CleanupOperationResult {
+  removed: string[];
+  skipped: { branchName: string; reason: string }[];
+  errors: string[];
+}
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -147,28 +149,28 @@ export async function listEnvironments(): Promise<EnvironmentListData> {
 
 /**
  * Cleanup stale worktrees for a codebase.
- * Wraps cleanupStaleWorktrees from cleanup-service.
+ * Reconciles ghost entries then returns empty result (cleanup-service removed).
  */
 export async function cleanupStaleEnvironments(
   codebaseId: string,
-  mainPath: string
+  _mainPath: string
 ): Promise<CleanupOperationResult> {
-  // First reconcile ghost entries
+  // Reconcile ghost entries (worktrees missing on disk)
   const allActive = await isolationDb.listAllActiveWithCodebase();
   const codebaseEnvs = allActive.filter(e => e.codebase_id === codebaseId);
   await reconcileGhosts(codebaseEnvs);
 
-  return cleanupStaleWorktrees(codebaseId, mainPath);
+  return { removed: [], skipped: [], errors: [] };
 }
 
 /**
  * Cleanup merged worktrees for a codebase.
- * Wraps cleanupMergedWorktrees from cleanup-service.
+ * Stub — cleanup-service was removed.
  */
 export async function cleanupMergedEnvironments(
-  codebaseId: string,
-  mainPath: string,
-  options: { includeClosed?: boolean } = {}
+  _codebaseId: string,
+  _mainPath: string,
+  _options: { includeClosed?: boolean } = {}
 ): Promise<CleanupOperationResult> {
-  return cleanupMergedWorktrees(codebaseId, mainPath, options);
+  return { removed: [], skipped: [], errors: [] };
 }

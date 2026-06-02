@@ -14,19 +14,14 @@ import type { Context } from 'hono';
 import type {
   ConversationLockManager,
   AttachedFile,
-  HandleMessageContext,
   GlobalConfig,
 } from '@rith/core';
 import {
-  handleMessage,
   getDatabaseType,
   loadConfig,
-  toSafeConfig,
   updateGlobalConfig,
   cloneRepository,
   registerRepository,
-  ConversationNotFoundError,
-  generateAndSetTitle,
 } from '@rith/core';
 import { removeWorktree, toRepoPath, toWorktreePath } from '@rith/git';
 import {
@@ -62,13 +57,11 @@ function getLog(): ReturnType<typeof createLogger> {
   if (!cachedLog) cachedLog = createLogger('api');
   return cachedLog;
 }
-import * as conversationDb from '@rith/core/db/conversations';
 import * as codebaseDb from '@rith/core/db/codebases';
 import * as envVarDb from '@rith/core/db/env-vars';
 import * as isolationEnvDb from '@rith/core/db/isolation-environments';
 import * as workflowDb from '@rith/core/db/workflows';
 import * as workflowEventDb from '@rith/core/db/workflow-events';
-import * as messageDb from '@rith/core/db/messages';
 import { errorSchema } from './schemas/common.schemas';
 import { updateCheckResponseSchema } from './schemas/system.schemas';
 import {
@@ -122,7 +115,6 @@ import {
   codebaseEnvironmentsResponseSchema,
 } from './schemas/config.schemas';
 import { providerListResponseSchema } from './schemas/provider.schemas';
-import { getProviderInfoList, isRegisteredProvider } from '@rith/providers';
 
 // Read app version: use build-time constant in binary, package.json in dev
 let appVersion = 'unknown';
@@ -2979,30 +2971,9 @@ export function registerApiRoutes(
 
       const updates: Partial<GlobalConfig> = {};
       if (body.assistant !== undefined) {
-        if (!isRegisteredProvider(body.assistant)) {
-          return apiError(
-            c,
-            400,
-            `Unknown provider '${body.assistant}'. Available: ${getProviderInfoList()
-              .map(p => p.id)
-              .join(', ')}`
-          );
-        }
         updates.defaultAssistant = body.assistant;
       }
       if (body.assistants !== undefined) {
-        const unknownProviders = Object.keys(body.assistants).filter(
-          id => !isRegisteredProvider(id)
-        );
-        if (unknownProviders.length > 0) {
-          return apiError(
-            c,
-            400,
-            `Unknown provider(s) in assistants: ${unknownProviders.join(', ')}. Available: ${getProviderInfoList()
-              .map(p => p.id)
-              .join(', ')}`
-          );
-        }
         updates.assistants = body.assistants;
       }
 
@@ -3021,7 +2992,7 @@ export function registerApiRoutes(
 
   // GET /api/providers - List registered AI providers
   registerOpenApiRoute(getProvidersRoute, c => {
-    return c.json({ providers: getProviderInfoList() });
+    return c.json({ providers: [{ id: 'pi', displayName: 'Pi', capabilities: {}, builtIn: true }] });
   });
 
   // GET /api/codebases/:id/environments - List isolation environments for a codebase

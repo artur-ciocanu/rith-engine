@@ -20,12 +20,7 @@ mock.module('../db/isolation-environments', () => ({
   updateStatus: mockUpdateStatus,
 }));
 
-const mockCleanupStale = mock(() => Promise.resolve({ removed: 0, errors: [] }));
-const mockCleanupMerged = mock(() => Promise.resolve({ removed: 0, errors: [] }));
-mock.module('../services/cleanup-service', () => ({
-  cleanupStaleWorktrees: mockCleanupStale,
-  cleanupMergedWorktrees: mockCleanupMerged,
-}));
+// cleanup-service was removed — stale/merged cleanup are now stubs
 
 const mockLogger = {
   fatal: mock(() => undefined),
@@ -156,11 +151,9 @@ describe('cleanupStaleEnvironments', () => {
   beforeEach(() => {
     mockListAllActiveWithCodebase.mockClear();
     mockWorktreeExists.mockClear();
-    mockCleanupStale.mockClear();
   });
 
-  test('reconciles ghosts then delegates to cleanupStaleWorktrees', async () => {
-    // listAllActiveWithCodebase returns envs with codebase_id matching 'cb-1'
+  test('reconciles ghosts and returns empty result', async () => {
     mockListAllActiveWithCodebase.mockResolvedValueOnce([
       {
         ...makeActiveEnv({ codebase_id: 'cb-1' }),
@@ -170,43 +163,21 @@ describe('cleanupStaleEnvironments', () => {
         workflow_id: 'wf-1',
       },
     ]);
-    mockWorktreeExists.mockResolvedValueOnce(true); // not a ghost
-    mockCleanupStale.mockResolvedValueOnce({ removed: 1, errors: [] });
+    mockWorktreeExists.mockResolvedValueOnce(true);
 
     const result = await cleanupStaleEnvironments('cb-1', '/main');
 
-    expect(mockCleanupStale).toHaveBeenCalledWith('cb-1', '/main');
-    expect(result.removed).toBe(1);
+    expect(result.removed).toEqual([]);
+    expect(result.errors).toEqual([]);
   });
 });
 
 describe('cleanupMergedEnvironments', () => {
-  beforeEach(() => {
-    mockCleanupMerged.mockClear();
-  });
-
-  test('delegates to cleanupMergedWorktrees', async () => {
-    mockCleanupMerged.mockResolvedValueOnce({ removed: 2, errors: [] });
-
+  test('returns empty stub result', async () => {
     const result = await cleanupMergedEnvironments('cb-1', '/main');
 
-    expect(mockCleanupMerged).toHaveBeenCalledWith('cb-1', '/main', {});
-    expect(result.removed).toBe(2);
-  });
-
-  test('passes through errors from cleanupMergedWorktrees', async () => {
-    mockCleanupMerged.mockResolvedValueOnce({ removed: 0, errors: ['branch-a: git error'] });
-
-    const result = await cleanupMergedEnvironments('cb-1', '/main');
-
-    expect(result.errors).toEqual(['branch-a: git error']);
-  });
-
-  test('forwards includeClosed option to cleanupMergedWorktrees', async () => {
-    mockCleanupMerged.mockResolvedValueOnce({ removed: 1, errors: [] });
-
-    await cleanupMergedEnvironments('cb-1', '/main', { includeClosed: true });
-
-    expect(mockCleanupMerged).toHaveBeenCalledWith('cb-1', '/main', { includeClosed: true });
+    expect(result.removed).toEqual([]);
+    expect(result.skipped).toEqual([]);
+    expect(result.errors).toEqual([]);
   });
 });

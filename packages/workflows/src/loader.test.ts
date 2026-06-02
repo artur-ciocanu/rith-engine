@@ -28,11 +28,6 @@ mock.module('@rith/paths', () => ({
   createLogger: mock(() => mockLogger),
 }));
 
-// Bootstrap provider registry (needed by isRegisteredProvider checks at load time)
-import { registerBuiltinProviders, clearRegistry } from '@rith/providers';
-clearRegistry();
-registerBuiltinProviders();
-
 import { discoverWorkflows, discoverWorkflowsWithConfig } from './workflow-discovery';
 import { isBashNode, isCancelNode, isLoopNode } from './schemas';
 import * as bundledDefaults from './defaults/bundled-defaults';
@@ -246,7 +241,6 @@ describe('Workflow Loader', () => {
 
       const validYaml = `name: test-workflow
 description: A test workflow
-provider: claude
 nodes:
   - id: plan
     command: plan
@@ -262,7 +256,6 @@ nodes:
       expect(workflows).toHaveLength(1);
       expect(workflows[0].name).toBe('test-workflow');
       expect(workflows[0].description).toBe('A test workflow');
-      expect(workflows[0].provider).toBe('claude');
       expect(workflows[0].nodes).toHaveLength(2);
       expect(workflows[0].nodes[0].id).toBe('plan');
       expect(workflows[0].nodes[1].id).toBe('implement');
@@ -323,80 +316,12 @@ steps:
       expect(result.errors[0].error).toContain('has been removed');
     });
 
-    it('should leave provider undefined when not specified (executor handles fallback)', async () => {
-      const workflowDir = join(testDir, '.rith', 'workflows');
-      await mkdir(workflowDir, { recursive: true });
-
-      const yamlNoProvider = `name: default-provider
-description: No provider specified
-nodes:
-  - id: test
-    command: test
-`;
-      await writeFile(join(workflowDir, 'test.yaml'), yamlNoProvider);
-
-      const result = await discoverWorkflows(testDir, { loadDefaults: false });
-      const workflows = result.workflows.map(ws => ws.workflow);
-
-      expect(workflows).toHaveLength(1);
-      expect(workflows[0].provider).toBeUndefined();
-    });
-
-    it('should reject unknown provider at load time', async () => {
-      const workflowDir = join(testDir, '.rith', 'workflows');
-      await mkdir(workflowDir, { recursive: true });
-
-      const yamlInvalidProvider = `name: invalid-provider
-description: Invalid provider specified
-provider: claud
-nodes:
-  - id: test
-    command: test
-`;
-      await writeFile(join(workflowDir, 'test.yaml'), yamlInvalidProvider);
-
-      const result = await discoverWorkflows(testDir, { loadDefaults: false });
-
-      expect(result.workflows).toHaveLength(0);
-      expect(result.errors).toHaveLength(1);
-      expect(result.errors[0].errorType).toBe('validation_error');
-      expect(result.errors[0].error).toContain("Unknown provider 'claud'");
-    });
-
-    it('should accept any model string with a known provider (SDK validates at run time)', async () => {
-      // Whatever the user wrote in `model:` passes through to the SDK; the
-      // SDK is the source of truth for what model strings exist. Errors
-      // surface at run time, not load time.
-      const workflowDir = join(testDir, '.rith', 'workflows');
-      await mkdir(workflowDir, { recursive: true });
-
-      const yaml = `name: any-model
-description: Any model string with a known provider
-provider: claude
-model: claude-opus-4-7[1m]
-nodes:
-  - id: test
-    command: test
-`;
-      await writeFile(join(workflowDir, 'any-model.yaml'), yaml);
-
-      const result = await discoverWorkflows(testDir, { loadDefaults: false });
-      const workflows = result.workflows.map(ws => ws.workflow);
-
-      expect(result.errors).toHaveLength(0);
-      expect(workflows).toHaveLength(1);
-      expect(workflows[0].provider).toBe('claude');
-      expect(workflows[0].model).toBe('claude-opus-4-7[1m]');
-    });
-
     it('should parse codex options fields', async () => {
       const workflowDir = join(testDir, '.rith', 'workflows');
       await mkdir(workflowDir, { recursive: true });
 
       const yaml = `name: codex-options
 description: Codex options are parsed
-provider: codex
-model: gpt-5.2-codex
 modelReasoningEffort: medium
 webSearchMode: live
 additionalDirectories:
@@ -613,8 +538,6 @@ nodes:
 
       const fullWorkflow = `name: full-workflow
 description: A workflow with all fields
-provider: codex
-model: gpt-4
 nodes:
   - id: step-one
     command: step-one
@@ -628,8 +551,6 @@ nodes:
       const workflows = result.workflows.map(ws => ws.workflow);
 
       expect(workflows).toHaveLength(1);
-      expect(workflows[0].provider).toBe('codex');
-      expect(workflows[0].model).toBe('gpt-4');
     });
 
     it('should handle empty workflow directory', async () => {
@@ -1599,8 +1520,6 @@ description: Bash with AI fields
 nodes:
   - id: stats
     bash: "wc -l *.ts"
-    provider: claude
-    model: haiku
 `
       );
 
@@ -1614,85 +1533,8 @@ nodes:
       // AI fields should NOT appear on the parsed bash node
       const node = wf.nodes[0];
       expect(isBashNode(node)).toBe(true);
-      expect(node.provider).toBeUndefined();
-      expect(node.model).toBeUndefined();
     });
 
-    it('should NOT warn about model/provider on loop nodes (they are supported)', async () => {
-      const workflowDir = join(testDir, '.rith', 'workflows');
-      await mkdir(workflowDir, { recursive: true });
-
-      await writeFile(
-        join(workflowDir, 'loop-model.yaml'),
-        `
-name: loop-model
-description: Loop with model override
-nodes:
-  - id: iterate
-    loop:
-      prompt: "Do something"
-      until: "COMPLETE"
-      max_iterations: 3
-    provider: claude
-    model: claude-opus-4-6
-`
-      );
-
-      (mockLogger.warn as Mock<() => undefined>).mockClear();
-      const result = await discoverWorkflows(testDir, { loadDefaults: false });
-      expect(result.errors).toHaveLength(0);
-      expect(result.workflows).toHaveLength(1);
-
-      const node = result.workflows[0].workflow.nodes[0];
-      expect(isLoopNode(node)).toBe(true);
-
-      // model and provider should NOT trigger a warning
-      const warnCalls = (mockLogger.warn as Mock<() => undefined>).mock.calls;
-      const aiFieldWarnings = warnCalls.filter(
-        call => typeof call[1] === 'string' && call[1].includes('ai_fields_ignored')
-      );
-      expect(aiFieldWarnings).toHaveLength(0);
-    });
-
-    it('should warn about unsupported AI fields on loop nodes (not model/provider)', async () => {
-      const workflowDir = join(testDir, '.rith', 'workflows');
-      await mkdir(workflowDir, { recursive: true });
-
-      await writeFile(
-        join(workflowDir, 'loop-unsupported.yaml'),
-        `
-name: loop-unsupported
-description: Loop with unsupported AI fields
-nodes:
-  - id: iterate
-    loop:
-      prompt: "Do something"
-      until: "COMPLETE"
-      max_iterations: 3
-    model: claude-opus-4-6
-    output_format:
-      type: object
-      properties:
-        status:
-          type: string
-`
-      );
-
-      (mockLogger.warn as Mock<() => undefined>).mockClear();
-      const result = await discoverWorkflows(testDir, { loadDefaults: false });
-      expect(result.errors).toHaveLength(0);
-
-      // Should warn about output_format but NOT about model
-      const warnCalls = (mockLogger.warn as Mock<() => undefined>).mock.calls;
-      const aiFieldWarnings = warnCalls.filter(
-        call => typeof call[1] === 'string' && call[1].includes('ai_fields_ignored')
-      );
-      expect(aiFieldWarnings).toHaveLength(1);
-      const warnedFields = (aiFieldWarnings[0][0] as { fields: string[] }).fields;
-      expect(warnedFields).toContain('output_format');
-      expect(warnedFields).not.toContain('model');
-      expect(warnedFields).not.toContain('provider');
-    });
   });
 
   describe('DAG output ref validation', () => {
@@ -2530,28 +2372,6 @@ nodes:
       expect(result.errors[0].error).toContain('mutually exclusive');
     });
 
-    it('should warn about AI-specific fields on cancel nodes', async () => {
-      const workflowDir = join(testDir, '.rith', 'workflows');
-      await mkdir(workflowDir, { recursive: true });
-
-      await writeFile(
-        join(workflowDir, 'cancel-ai-fields.yaml'),
-        `
-name: cancel-ai-fields
-description: Cancel with AI fields
-nodes:
-  - id: stop
-    cancel: "reason"
-    model: opus
-    provider: claude
-`
-      );
-
-      const result = await discoverWorkflows(testDir, { loadDefaults: false });
-      expect(result.errors).toHaveLength(0);
-      // AI fields should produce a warning log
-      expect(mockLogger.warn).toHaveBeenCalled();
-    });
   });
 
   describe('discoverWorkflows with null cwd (no project context)', () => {

@@ -23,21 +23,6 @@ import { existsSync } from 'fs';
 // CLAUDECODE=1 warning is emitted inside stripCwdEnv() (boot import above)
 // BEFORE the marker is deleted from process.env. No duplicate warning here.
 
-// Smart defaults for Claude auth
-// If no explicit tokens, default to global auth from `claude /login`
-if (!process.env.CLAUDE_API_KEY && !process.env.CLAUDE_CODE_OAUTH_TOKEN) {
-  if (process.env.CLAUDE_USE_GLOBAL_AUTH === undefined) {
-    process.env.CLAUDE_USE_GLOBAL_AUTH = 'true';
-  }
-}
-
-// DATABASE_URL is no longer required - SQLite will be used as default
-
-// Bootstrap provider registry before any provider lookups
-import { registerBuiltinProviders, registerCommunityProviders } from '@rith/providers';
-registerBuiltinProviders();
-registerCommunityProviders();
-
 // Import commands after dotenv is loaded
 import { versionCommand } from './commands/version';
 import {
@@ -61,22 +46,12 @@ import {
   isolationCleanupMergedCommand,
   isolationCompleteCommand,
 } from './commands/isolation';
-import { continueCommand } from './commands/continue';
-import { chatCommand } from './commands/chat';
-import { setupCommand } from './commands/setup';
-import { skillInstallCommand } from './commands/skill';
 import { validateWorkflowsCommand, validateCommandsCommand } from './commands/validate';
-import { serveCommand } from './commands/serve';
-import { doctorCommand } from './commands/doctor';
 import { closeDatabase } from '@rith/core';
 import {
   setLogLevel,
   createLogger,
-  checkForUpdate,
-  BUNDLED_IS_BINARY,
-  BUNDLED_VERSION,
   shutdownTelemetry,
-  isVerboseBoot,
 } from '@rith/paths';
 import * as git from '@rith/git';
 
@@ -98,8 +73,6 @@ Usage:
   rith <command> [subcommand] [options] [arguments]
 
 Commands:
-  chat <message>             Send a message to the orchestrator
-  setup                      Interactive setup wizard for credentials and config
   workflow list              List available workflows in current directory
   workflow run <name> [msg]  Run a workflow with optional message
   workflow status            Show status of running workflows
@@ -108,11 +81,7 @@ Commands:
   isolation list             List all active worktrees/environments
   isolation cleanup [days]   Remove stale environments (default: 7 days)
   isolation cleanup --merged Remove environments with branches merged into main
-  continue <branch> [msg]    Continue work on an existing worktree with prior context
   complete <branch> [...]    Complete branch lifecycle (remove worktree + branches)
-  serve                      Start the web UI server (downloads web UI on first run)
-  skill install [path]       Install the bundled Rith Engine skill into .claude/skills/rith
-  doctor                     Verify your Rith Engine setup (Claude binary, gh auth, DB, adapters)
   validate workflows [name]  Validate workflow definitions and their references
   validate commands [name]   Validate command files
   version, --version, -V     Show version info (also -v when used alone)
@@ -124,26 +93,17 @@ Options:
   --from, --from-branch <name> Create new branch from specific start point
   --no-worktree              Run on branch directly without worktree isolation
   --resume                   Resume the most recent failed run of the workflow (mutually exclusive with --branch)
-  --spawn                    Open setup wizard in a new terminal window (for setup command)
   --quiet, -q                Reduce log verbosity to warnings and errors only
   --verbose, -v              Show debug-level output
   --json                     Output machine-readable JSON (for workflow list)
-  --workflow <name>          Workflow to run for 'continue' (default: rith-assist)
-  --no-context               Skip context injection for 'continue'
-  --port <port>              Override server port for 'serve' (default: 3090)
-  --download-only            Download web UI without starting the server
   --force                    Overwrite existing file (for workflow install)
 
 Examples:
-  rith chat "What does the orchestrator do?"
   rith workflow list
   rith workflow run investigate-issue "Fix the login bug"
   rith workflow run plan --cwd /path/to/repo "Add dark mode"
   rith workflow run implement --branch feature-auth "Implement auth"
   rith workflow run quick-fix --no-worktree "Fix typo"
-  rith continue fix/issue-42 --workflow rith-smart-pr-review "Review the changes"
-  rith skill install
-  rith skill install /path/to/project
   rith workflow search "pr review"
   rith workflow install rith-piv-loop
 `);
@@ -162,19 +122,6 @@ async function closeDb(): Promise<void> {
   }
 }
 
-async function printUpdateNotice(quiet: boolean | undefined): Promise<void> {
-  if (quiet || !BUNDLED_IS_BINARY) return;
-  try {
-    const result = await checkForUpdate(BUNDLED_VERSION);
-    if (result?.updateAvailable) {
-      process.stderr.write(
-        `Update available: v${result.currentVersion} → v${result.latestVersion} — ${result.releaseUrl}\n`
-      );
-    }
-  } catch (err) {
-    getLog().debug({ err }, 'update_check.notice_failed');
-  }
-}
 
 /**
  * Main CLI entry point
@@ -227,7 +174,6 @@ async function main(): Promise<number> {
         'from-branch': { type: 'string' },
         'no-worktree': { type: 'boolean' },
         resume: { type: 'boolean' },
-        spawn: { type: 'boolean' },
         quiet: { type: 'boolean', short: 'q' },
         verbose: { type: 'boolean', short: 'v' },
         json: { type: 'boolean' },
@@ -236,11 +182,6 @@ async function main(): Promise<number> {
         data: { type: 'string' },
         comment: { type: 'string' },
         reason: { type: 'string' },
-        workflow: { type: 'string' },
-        'no-context': { type: 'boolean' },
-        port: { type: 'string' },
-        'download-only': { type: 'boolean' },
-        scope: { type: 'string' },
         force: { type: 'boolean' },
       },
       allowPositionals: true,
@@ -261,7 +202,6 @@ async function main(): Promise<number> {
     (values.from as string | undefined) ?? (values['from-branch'] as string | undefined);
   const noWorktree = values['no-worktree'] as boolean | undefined;
   const resumeFlag = values.resume as boolean | undefined;
-  const spawnFlag = values.spawn as boolean | undefined;
   const jsonFlag = values.json as boolean | undefined;
   // Handle help flag
   if (values.help) {
@@ -273,24 +213,11 @@ async function main(): Promise<number> {
   const command = positionals[0];
   const subcommand = positionals[1];
 
-  // Commands that don't require git repo validation
-  const noGitCommands = [
-    'version',
-    'help',
-    'setup',
-    'chat',
-    'continue',
-    'serve',
-    'skill',
-    'doctor',
-  ];
+  const noGitCommands = ['version', 'help'];
   const requiresGitRepo = !noGitCommands.includes(command ?? '');
 
   try {
-    // setup/doctor default to warn to avoid Pino info JSON interleaving with ○/✓ output; lazy loggers pick up this level at first creation
-    const isInteractiveCommand = command === 'setup' || command === 'doctor';
-    const suppressByDefault = isInteractiveCommand && !values.verbose && !isVerboseBoot();
-    if (values.quiet || suppressByDefault) {
+    if (values.quiet) {
       setLogLevel('warn');
     } else if (values.verbose) {
       setLogLevel('debug');
@@ -342,40 +269,6 @@ async function main(): Promise<number> {
         printUsage();
         break;
 
-      case 'chat': {
-        const chatMessage = positionals.slice(1).join(' ');
-        if (!chatMessage) {
-          console.error('Usage: rith chat <message>');
-          return 1;
-        }
-        await chatCommand(chatMessage);
-        break;
-      }
-
-      case 'setup': {
-        const rawScope = values.scope as string | undefined;
-        if (rawScope !== undefined && rawScope !== 'home' && rawScope !== 'project') {
-          console.error(`Error: Invalid --scope: "${rawScope}". Must be "home" or "project".`);
-          return 1;
-        }
-        const scope: 'home' | 'project' = rawScope ?? 'home';
-        const forceFlag = (values.force as boolean | undefined) ?? false;
-        // For --scope project, resolve to the git repo root so running from a
-        // subdirectory writes to <repo-root>/.rith/.env (what loadRithEnv
-        // reads at boot) — not <subdir>/.rith/.env.
-        let repoPath = cwd;
-        if (scope === 'project') {
-          const repoRoot = await git.findRepoRoot(cwd);
-          if (!repoRoot) {
-            console.error('Error: --scope project requires running from inside a git repository.');
-            console.error('Run from the repo root, pass --cwd <repo>, or use --scope home.');
-            return 1;
-          }
-          repoPath = repoRoot;
-        }
-        await setupCommand({ spawn: spawnFlag, repoPath, scope, force: forceFlag });
-        break;
-      }
 
       case 'workflow':
         switch (subcommand) {
@@ -616,52 +509,6 @@ async function main(): Promise<number> {
         break;
       }
 
-      case 'continue': {
-        const continueBranch = positionals[1];
-        if (!continueBranch) {
-          console.error('Usage: rith continue <branch> [--workflow <name>] "instruction"');
-          return 1;
-        }
-        const continueMessage = positionals.slice(2).join(' ') || '';
-        const continueWorkflow = values.workflow as string | undefined;
-        const noContextFlag = values['no-context'] as boolean | undefined;
-        await continueCommand(continueBranch, continueMessage, {
-          workflow: continueWorkflow,
-          noContext: noContextFlag,
-        });
-        break;
-      }
-
-      case 'serve': {
-        const servePort = values.port !== undefined ? Number(values.port) : undefined;
-        const downloadOnly = Boolean(values['download-only']);
-        return await serveCommand({ port: servePort, downloadOnly });
-      }
-
-      case 'doctor': {
-        return await doctorCommand();
-      }
-
-      case 'skill': {
-        switch (subcommand) {
-          case 'install': {
-            // Optional positional path; otherwise install into the resolved cwd.
-            const targetArg = positionals[2];
-            const targetPath = targetArg ? resolve(targetArg) : cwd;
-            return await skillInstallCommand(targetPath);
-          }
-
-          default:
-            if (subcommand === undefined) {
-              console.error('Missing skill subcommand');
-            } else {
-              console.error(`Unknown skill subcommand: ${subcommand}`);
-            }
-            console.error('Available: install');
-            return 1;
-        }
-      }
-
       default:
         if (command === undefined) {
           console.error('Missing command');
@@ -671,7 +518,6 @@ async function main(): Promise<number> {
         printUsage();
         return 1;
     }
-    await printUpdateNotice(values.quiet as boolean | undefined);
     return 0;
   } catch (error) {
     const err = error as Error;
