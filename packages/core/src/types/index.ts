@@ -1,12 +1,9 @@
 /**
- * Core type definitions for the Remote Coding Agent platform
+ * Core type definitions for the Rith Engine workflow platform.
  */
-import type { WorkflowDefinition } from '@rith/workflows/schemas/workflow';
 
 // MessageChunk + TokenUsage are used by IPlatformAdapter below.
 import type { MessageChunk, TokenUsage } from '@rith/providers/types';
-
-
 
 export interface AttachedFile {
   /** Absolute path on disk where the file was saved by the server */
@@ -22,23 +19,11 @@ export interface Codebase {
   name: string;
   repository_url: string | null;
   default_cwd: string;
-  ai_assistant_type: string;
   commands: Record<string, { path: string; description: string }>;
   created_at: Date;
   updated_at: Date;
 }
 
-
-export interface CommandResult {
-  success: boolean;
-  message: string;
-  modified?: boolean; // Indicates if conversation state was modified
-  workflow?: {
-    // If set, orchestrator should execute this workflow
-    definition: WorkflowDefinition;
-    args: string;
-  };
-}
 
 /**
  * Generic platform adapter interface

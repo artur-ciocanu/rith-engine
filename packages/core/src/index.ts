@@ -15,7 +15,6 @@
 export {
   type AttachedFile,
   type Codebase,
-  type CommandResult,
   type IPlatformAdapter,
   type MessageMetadata,
 } from './types';

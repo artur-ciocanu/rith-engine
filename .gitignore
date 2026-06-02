@@ -120,3 +120,5 @@ packages/server/.env
 skills-lock.json
 test-results/
 .archon/ralph/
+graphify-out/
+ARCHITECTURE_REVIEW.md
