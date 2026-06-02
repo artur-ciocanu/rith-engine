@@ -48,11 +48,7 @@ import {
 } from './commands/isolation';
 import { validateWorkflowsCommand, validateCommandsCommand } from './commands/validate';
 import { closeDatabase } from '@rith/core';
-import {
-  setLogLevel,
-  createLogger,
-  shutdownTelemetry,
-} from '@rith/paths';
+import { setLogLevel, createLogger, shutdownTelemetry } from '@rith/paths';
 import * as git from '@rith/git';
 
 /** Lazy-initialized logger (deferred so test mocks can intercept createLogger) */
@@ -95,8 +91,12 @@ Options:
   --resume                   Resume the most recent failed run of the workflow (mutually exclusive with --branch)
   --quiet, -q                Reduce log verbosity to warnings and errors only
   --verbose, -v              Show debug-level output
-  --json                     Output machine-readable JSON (for workflow list)
+  --json                     Output machine-readable JSON result to stdout
   --force                    Overwrite existing file (for workflow install)
+  --issue-context <json|@file> Issue/PR context (JSON string or @filepath) for $ISSUE_CONTEXT variable
+  --workflow-type <type>     Workflow type: pr, issue, or task (sets isolation hints)
+  --pr-sha <sha>             PR head commit SHA (metadata for PR-aware workflows)
+  --pr-branch <branch>       PR source branch (metadata, distinct from --branch)
 
 Examples:
   rith workflow list
@@ -104,6 +104,8 @@ Examples:
   rith workflow run plan --cwd /path/to/repo "Add dark mode"
   rith workflow run implement --branch feature-auth "Implement auth"
   rith workflow run quick-fix --no-worktree "Fix typo"
+  rith workflow run review --workflow-type pr --pr-branch feat/x --issue-context @ctx.json "Review PR"
+  rith workflow run review --json "Check this" | jq .success
   rith workflow search "pr review"
   rith workflow install rith-piv-loop
 `);
@@ -121,7 +123,6 @@ async function closeDb(): Promise<void> {
     getLog().warn({ err }, 'db_close_failed');
   }
 }
-
 
 /**
  * Main CLI entry point
@@ -183,6 +184,10 @@ async function main(): Promise<number> {
         comment: { type: 'string' },
         reason: { type: 'string' },
         force: { type: 'boolean' },
+        'issue-context': { type: 'string' },
+        'workflow-type': { type: 'string' },
+        'pr-sha': { type: 'string' },
+        'pr-branch': { type: 'string' },
       },
       allowPositionals: true,
       strict: false, // Allow unknown flags to pass through
@@ -203,6 +208,10 @@ async function main(): Promise<number> {
   const noWorktree = values['no-worktree'] as boolean | undefined;
   const resumeFlag = values.resume as boolean | undefined;
   const jsonFlag = values.json as boolean | undefined;
+  const issueContext = values['issue-context'] as string | undefined;
+  const workflowType = values['workflow-type'] as string | undefined;
+  const prSha = values['pr-sha'] as string | undefined;
+  const prBranch = values['pr-branch'] as string | undefined;
   // Handle help flag
   if (values.help) {
     printUsage();
@@ -269,7 +278,6 @@ async function main(): Promise<number> {
         printUsage();
         break;
 
-
       case 'workflow':
         switch (subcommand) {
           case 'list':
@@ -307,6 +315,28 @@ async function main(): Promise<number> {
               );
               return 1;
             }
+            // Resolve --issue-context: inline JSON or @filepath
+            let resolvedIssueContext: string | undefined;
+            if (issueContext !== undefined) {
+              if (issueContext.startsWith('@')) {
+                const { readFile } = await import('fs/promises');
+                resolvedIssueContext = await readFile(issueContext.slice(1), 'utf-8');
+              } else {
+                resolvedIssueContext = issueContext;
+              }
+            }
+            // Validate --workflow-type
+            if (
+              workflowType !== undefined &&
+              workflowType !== 'pr' &&
+              workflowType !== 'issue' &&
+              workflowType !== 'task'
+            ) {
+              console.error(
+                `Error: --workflow-type must be 'pr', 'issue', or 'task' (got '${workflowType}')`
+              );
+              return 1;
+            }
             const options = {
               branchName,
               fromBranch,
@@ -314,6 +344,11 @@ async function main(): Promise<number> {
               resume: resumeFlag,
               quiet: values.quiet as boolean | undefined,
               verbose: values.verbose as boolean | undefined,
+              issueContext: resolvedIssueContext,
+              workflowType: workflowType,
+              prSha,
+              prBranch,
+              json: jsonFlag,
             };
             await workflowRunCommand(effectiveCwd, workflowName, userMessage, options);
             break;

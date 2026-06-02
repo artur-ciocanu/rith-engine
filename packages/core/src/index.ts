@@ -12,12 +12,7 @@
 // =============================================================================
 // Types
 // =============================================================================
-export {
-  type AttachedFile,
-  type Codebase,
-  type IPlatformAdapter,
-  type MessageMetadata,
-} from './types';
+export { type AttachedFile, type Codebase } from './types';
 
 // =============================================================================
 // Database
@@ -61,11 +56,7 @@ export { cloneRepository, registerRepository, type RegisterResult } from './hand
 // =============================================================================
 // Config
 // =============================================================================
-export {
-  type GlobalConfig,
-  type RepoConfig,
-  type MergedConfig,
-} from './config/config-types';
+export { type GlobalConfig, type RepoConfig, type MergedConfig } from './config/config-types';
 
 export {
   readConfigFile,

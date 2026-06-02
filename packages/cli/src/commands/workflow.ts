@@ -1,12 +1,7 @@
 /**
  * Workflow command - list and run workflows
  */
-import {
-  registerRepository,
-  loadConfig,
-  loadRepoConfig,
-  createWorkflowStore,
-} from '@rith/core';
+import { registerRepository, loadConfig, loadRepoConfig, createWorkflowStore } from '@rith/core';
 import { WORKFLOW_EVENT_TYPES, type WorkflowEventType } from '@rith/workflows/store';
 import { configureIsolation, getIsolationProvider } from '@rith/isolation';
 import { createLogger, getRithHome } from '@rith/paths';
@@ -67,6 +62,23 @@ export interface WorkflowRunOptions {
   verbose?: boolean;
   /** Platform conversation ID (e.g. `cli-{ts}-{rand}`), NOT a DB UUID. */
   conversationId?: string;
+  /**
+   * Issue/PR context as JSON string or markdown. Passed as `issueContext` to
+   * ExecuteWorkflowOptions and substituted into $CONTEXT / $ISSUE_CONTEXT /
+   * $EXTERNAL_CONTEXT variables in workflow prompts.
+   */
+  issueContext?: string;
+  /**
+   * Workflow type hint for isolation: 'pr', 'issue', or 'task'.
+   * When 'pr', sets isolationContext.isPrReview = true.
+   */
+  workflowType?: 'pr' | 'issue' | 'task';
+  /** PR head SHA — metadata for PR-aware workflow nodes. */
+  prSha?: string;
+  /** PR source branch — metadata (distinct from --branch which creates a worktree). */
+  prBranch?: string;
+  /** Emit a single JSON result object to stdout; suppress all other stdout output. */
+  json?: boolean;
 }
 
 /**
@@ -349,7 +361,7 @@ export async function workflowRunCommand(
   console.log('');
 
   // Create CLI adapter
-  const adapter = new CLIAdapter();
+  const adapter = new CLIAdapter({ suppressStdout: options.json });
 
   // Generate conversation ID
   const conversationId = options.conversationId ?? generateConversationId();
@@ -604,8 +616,6 @@ export async function workflowRunCommand(
     );
   }
 
-
-
   // Register cleanup handlers for graceful termination
   let terminating = false;
   const cleanup = (signal: string): void => {
@@ -695,9 +705,22 @@ export async function workflowRunCommand(
   // Execute workflow with workingCwd (may be worktree path)
   let result: Awaited<ReturnType<typeof executeWorkflow>>;
   try {
-    const opts = prepared
-      ? { codebaseId: codebase?.id, ...prepared }
-      : { codebaseId: codebase?.id };
+    // Build isolation context from CLI flags
+    const isolationContext =
+      options.workflowType || options.prSha || options.prBranch
+        ? {
+            branchName: options.branchName,
+            isPrReview: options.workflowType === 'pr',
+            prSha: options.prSha,
+            prBranch: options.prBranch,
+          }
+        : undefined;
+    const baseOpts = {
+      codebaseId: codebase?.id,
+      issueContext: options.issueContext,
+      isolationContext,
+    };
+    const opts = prepared ? { ...baseOpts, ...prepared } : baseOpts;
     result = await executeWorkflow(
       deps,
       adapter,
@@ -713,7 +736,20 @@ export async function workflowRunCommand(
   }
 
   // Check result and exit appropriately
-  if (result.success && 'paused' in result && result.paused) {
+  if (options.json) {
+    // --json mode: emit structured result to stdout, nothing else
+    const jsonResult = {
+      success: result.success,
+      workflowRunId: result.workflowRunId,
+      ...('summary' in result && result.summary ? { summary: result.summary } : {}),
+      ...(!result.success ? { error: result.error } : {}),
+      ...('paused' in result && result.paused ? { paused: true } : {}),
+    };
+    console.log(JSON.stringify(jsonResult));
+    if (!result.success) {
+      throw new Error(result.error);
+    }
+  } else if (result.success && 'paused' in result && result.paused) {
     console.log('\nWorkflow paused — waiting for approval.');
   } else if (result.success) {
     // Surface workflow result to Web UI as a result card (mirrors orchestrator.ts result message).

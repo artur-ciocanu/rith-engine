@@ -8,7 +8,7 @@ sidebar:
   order: 0
 ---
 
-Everything you need to go from zero to a working Rith Engine setup — whether you prefer the Web UI or the CLI.
+Everything you need to go from zero to running AI coding workflows with the Rith Engine CLI.
 
 ---
 
@@ -41,7 +41,7 @@ Before you start, make sure you have:
 
 ## Step 1: Clone and Install
 
-First, pick where to put the Rith Engine server code:
+First, clone the Rith Engine repository:
 
 **Option A: Home directory** (personal use, single user)
 
@@ -109,127 +109,27 @@ Follow the browser flow to log in. This stores credentials globally — no API k
 
 ---
 
-## Step 3: Create Your .env File
+## Step 3: Configure Environment (Optional)
 
-> **Required for Web UI / server mode. Optional for CLI-only usage** — the CLI uses your existing Claude authentication by default.
+The CLI uses your existing Claude authentication by default. For GitHub integration, set your token:
 
 ```bash
-cp .env.example .env
-```
-
-Open `.env` in your editor and set these two values:
-
-```ini
-# Paste your GitHub token in both (they serve different parts of the system)
+# Set in ~/.rith/.env or your repo's .rith/.env
 GH_TOKEN=ghp_your_token_here
 GITHUB_TOKEN=ghp_your_token_here
-
-# Use your existing Claude Code login
 CLAUDE_USE_GLOBAL_AUTH=true
 ```
 
 That's it. Everything else has sensible defaults:
 
 - **Database:** SQLite at `~/.rith/rith.db` (auto-created, zero setup)
-- **Port:** 3090 for the API server, 5173 for the Web UI dev server
 - **AI assistant:** Claude (default)
 
-> **Why two GitHub token variables?** `GH_TOKEN` is used by the GitHub CLI (`gh`), and `GITHUB_TOKEN` is used by Rith Engine's GitHub adapter. Set them to the same value.
+> **Why two GitHub token variables?** `GH_TOKEN` is used by the GitHub CLI (`gh`), and `GITHUB_TOKEN` is used by Rith Engine's GitHub integration. Set them to the same value.
 
 ---
 
-## Choose Your Path
-
-### Path A: Web UI (Server)
-
-**Step 4: Start the Server**
-
-```bash
-bun run dev
-```
-
-This starts two things simultaneously:
-
-- **Backend API server** on `http://localhost:3090`
-- **Web UI** on `http://localhost:5173`
-
-You should see output like:
-
-```
-[server] Hono server listening on port 3090
-[web] VITE ready in Xms
-[web] Local: http://localhost:5173/
-```
-
-> **Homelab / remote server?** The backend API already binds to `0.0.0.0` by default, so it's reachable from other machines. However, the Vite dev server (Web UI) only listens on `localhost`. To expose the Web UI on your network:
->
-> ```bash
-> bun run dev:web -- --host 0.0.0.0
-> ```
->
-> Then start the backend separately with `bun run dev:server`. The Web UI will be reachable at `http://<server-ip>:5173`. Make sure your firewall allows ports `5173` and `3090`.
-
-**Step 5: Verify It Works**
-
-Open **http://localhost:5173** in your browser. You should see the Rith Engine Web UI.
-
-**Quick verification checklist:**
-
-1. **Health check** — In a new terminal:
-
-   ```bash
-   curl http://localhost:3090/health
-   # Expected: {"status":"ok"}
-   ```
-
-2. **Database check:**
-
-   ```bash
-   curl http://localhost:3090/health/db
-   # Expected: {"status":"ok","database":"connected"}
-   ```
-
-3. **Send a test message** — In the Web UI, create a new conversation and type:
-   ```
-   /status
-   ```
-   You should see a status response showing the platform type and session info.
-
-If all three work, you're up and running.
-
-**Step 6: Clone a Repository and Start Coding**
-
-In the Web UI chat, clone a repo to work with:
-
-```
-/clone https://github.com/user/your-repo
-```
-
-Then just talk to the AI:
-
-```
-What's the structure of this repo?
-```
-
-The AI will analyze the codebase and respond. You can also use workflows:
-
-```
-/workflow list
-```
-
-This shows all available workflows. Try one:
-
-```
-Help me understand the authentication module
-```
-
-The AI router automatically picks the right workflow based on your message.
-
----
-
-### Path B: CLI (No Server)
-
-**Step 4: Install the CLI globally**
+## Step 4: Install the CLI globally
 
 ```bash
 cd packages/cli && bun link && cd ../..
@@ -253,7 +153,7 @@ Verify it works:
 rith version
 ```
 
-**Step 5: Run workflows from your repository**
+## Step 5: Run workflows from your repository
 
 ```bash
 cd /path/to/your/repository
@@ -302,9 +202,6 @@ rith workflow run <name> --cwd /path/to/repo "<message>"
 
 | Command | What It Does |
 |---------|-------------|
-| `rith chat <message>` | Send a message to the orchestrator |
-| `rith setup` | Interactive setup wizard for credentials and config |
-| `rith doctor` | Verify your setup (Claude binary, gh auth, DB, adapters) |
 | `rith workflow list` | List available workflows |
 | `rith workflow run <name> [msg]` | Run a workflow |
 | `rith workflow status` | Show running workflows |
@@ -321,6 +218,7 @@ rith workflow run <name> --cwd /path/to/repo "<message>"
 | `rith complete <branch>` | Complete branch lifecycle |
 | `rith validate workflows [name]` | Validate workflow definitions |
 | `rith validate commands [name]` | Validate command files |
+| `rith setup` | Interactive setup wizard for credentials and config |
 | `rith version` | Show version info |
 
 ### Worktree Management
@@ -389,7 +287,7 @@ worktree:
     - plans/
 ```
 
-Without any `.rith/` config, the platform uses sensible defaults (bundled commands and workflows).
+Without any `.rith/` config, Rith Engine uses sensible defaults (bundled commands and workflows).
 
 ### Custom Commands
 
@@ -431,12 +329,7 @@ Workflows chain multiple commands as DAG nodes, support parallel execution, cond
 
 > **Where are commands and workflows loaded from?**
 >
-> Commands and workflows are loaded at runtime from the current working directory — not from a fixed global location.
->
-> - **CLI:** Reads from wherever you run the `rith` command. If you run from your local repo, it picks up uncommitted changes immediately.
-> - **Server (Telegram/Slack/GitHub):** Reads from the workspace clone at `~/.rith/workspaces/owner/repo/`. This clone only syncs from the remote before worktree creation, so you need to **commit and push** changes for the server to see them.
->
-> In short: the CLI sees your local files, the server sees what's been pushed.
+> Commands and workflows are loaded at runtime from the current working directory — not from a fixed global location. The CLI reads from wherever you run the `rith` command, so it picks up uncommitted changes immediately.
 
 ---
 
@@ -475,12 +368,6 @@ Then in Claude Code, say things like "use rith to fix issue #42" and it will inv
 
 ---
 
-## Running the Full Platform (Server + Chat Adapters)
-
-The CLI is standalone, but if you also want to interact via Telegram, Slack, Discord, or GitHub webhooks, see the [README Server Setup](https://github.com/artur-ciocanu/rith-engine#quickstart) or run the setup wizard by opening Claude Code in the Rith Engine repo and saying "set up rith".
-
----
-
 ## Troubleshooting
 
 ### "Cannot create worktree: repository registration failed" (stale workspace symlink)
@@ -507,25 +394,13 @@ Install Bun: `curl -fsSL https://bun.sh/install | bash`, then restart your termi
 
 Install Claude Code CLI: see [docs.claude.com/claude-code/installation](https://docs.claude.com/en/docs/claude-code/installation).
 
-### Port 3090 already in use
-
-Something else is using the port. Either stop it or override:
-
-```bash
-PORT=4000 bun run dev
-```
-
-### Web UI shows "disconnected"
-
-Make sure the backend is running (`bun run dev` starts both). Check the terminal for errors. Try refreshing the browser.
-
 ### Clone command fails with 401/403
 
 Your GitHub token is missing or invalid. Verify:
 
 ```bash
 # Test your token
-curl -H "Authorization: token $(grep GH_TOKEN .env | cut -d= -f2)" https://api.github.com/user
+curl -H "Authorization: token $GITHUB_TOKEN" https://api.github.com/user
 ```
 
 If it returns your GitHub profile, the token works. If not, regenerate it.
@@ -557,30 +432,15 @@ bun install
 
 | Action              | Command                             |
 | ------------------- | ----------------------------------- |
-| Start everything    | `bun run dev`                       |
-| Start backend only  | `bun run dev:server`                |
-| Start frontend only | `bun run dev:web`                   |
+| Run a workflow      | `rith workflow run <name> "<msg>"`  |
+| List workflows      | `rith workflow list`                |
 | Run tests           | `bun run test`                      |
 | Type check          | `bun run type-check`                |
 | Full validation     | `bun run validate`                  |
-| Web UI              | http://localhost:5173               |
-| API server          | http://localhost:3090               |
-| Health check        | `curl http://localhost:3090/health` |
 
 ---
 
 ## What's Next?
-
-### Add a chat platform (optional)
-
-Want to message Rith Engine from your phone? Pick one:
-
-| Platform            | Difficulty      | Guide                                                                 |
-| ------------------- | --------------- | --------------------------------------------------------------------- |
-| **Telegram**        | Easy (5 min)    | [Adapter Setup](/adapters/telegram/) |
-| **Discord**         | Easy (5 min)    | [Adapter Setup](/adapters/community/discord/)  |
-| **Slack**           | Medium (15 min) | [Adapter Setup](/adapters/slack/)                                 |
-| **GitHub Webhooks** | Medium (15 min) | [Adapter Setup](/adapters/github/)   |
 
 ### Create custom commands and workflows
 
@@ -594,10 +454,6 @@ your-repo/
 ```
 
 See [Authoring Workflows](/guides/authoring-workflows/) and [Authoring Commands](/guides/authoring-commands/).
-
-### Deploy to a server
-
-For always-on access from any device, see the [Docker Deployment Guide](/deployment/docker/).
 
 ---
 

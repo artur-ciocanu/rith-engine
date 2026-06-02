@@ -49,7 +49,7 @@ export interface WorkflowMessageMetadata {
 }
 
 // ---------------------------------------------------------------------------
-// Narrow platform interface (subset of IPlatformAdapter)
+// Platform interface for workflow execution
 // ---------------------------------------------------------------------------
 
 export interface IWorkflowPlatform {
