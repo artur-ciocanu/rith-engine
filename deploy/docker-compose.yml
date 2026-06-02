@@ -1,7 +1,10 @@
 # =============================================================================
 # Rith Engine - Docker Compose for End Users (pre-built image)
 # =============================================================================
-#
+# NOTE: This compose file was designed for the server/web-UI era. Rith is now
+# a CLI-only workflow engine. The port mappings and healthcheck need reworking
+# for CLI-only usage. Volumes and database config remain useful as-is.
+# =============================================================================
 # Usage:
 #   1. Copy this file and .env.example to your server
 #   2. Rename .env.example to .env and configure

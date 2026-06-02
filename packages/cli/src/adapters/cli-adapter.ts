@@ -1,32 +1,36 @@
 /**
  * CLI adapter for stdout output
- * Implements IPlatformAdapter to allow workflow execution via command line
+ * Implements IWorkflowPlatform for workflow execution via command line
  */
-import type { IPlatformAdapter, MessageMetadata } from '@rith/core';
+import type { IWorkflowPlatform, WorkflowMessageMetadata } from '@rith/workflows/deps';
 
 /** Configuration options for CLIAdapter */
 export interface CLIAdapterOptions {
   /** Streaming mode - 'stream' for real-time output, 'batch' for accumulated output */
   streamingMode?: 'stream' | 'batch';
+  /** When true, sendMessage writes to stderr instead of stdout (for --json mode). */
+  suppressStdout?: boolean;
 }
 
-export class CLIAdapter implements IPlatformAdapter {
+export class CLIAdapter implements IWorkflowPlatform {
   private readonly streamingMode: 'stream' | 'batch';
+  private readonly suppressStdout: boolean;
 
   constructor(options?: CLIAdapterOptions) {
     this.streamingMode = options?.streamingMode ?? 'batch';
+    this.suppressStdout = options?.suppressStdout ?? false;
   }
 
   async sendMessage(
     _conversationId: string,
     message: string,
-    _metadata?: MessageMetadata
+    _metadata?: WorkflowMessageMetadata
   ): Promise<void> {
-    console.log(message);
-  }
-
-  async ensureThread(originalConversationId: string, _messageContext?: unknown): Promise<string> {
-    return originalConversationId;
+    if (this.suppressStdout) {
+      console.error(message);
+    } else {
+      console.log(message);
+    }
   }
 
   getStreamingMode(): 'stream' | 'batch' {
@@ -36,7 +40,4 @@ export class CLIAdapter implements IPlatformAdapter {
   getPlatformType(): string {
     return 'cli';
   }
-
-  async start(): Promise<void> {}
-  stop(): void {}
 }

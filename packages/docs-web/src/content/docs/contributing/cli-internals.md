@@ -25,7 +25,7 @@ packages/cli/
 │   │   ├── validate.ts     # validate command implementation
 │   │   └── version.ts      # version command
 │   └── adapters/
-│       └── cli-adapter.ts  # IPlatformAdapter for stdout
+│       └── cli-adapter.ts  # IWorkflowPlatform for stdout
 └── package.json            # Defines "rith" binary
 ```
 
@@ -264,7 +264,7 @@ packages/cli/
 ┌─────────────────────────────────────────────────────────────────┐
 │ @rith/core isolationDb.findStaleEnvironments(days)            │
 │ - WHERE last_activity_at < now - days                           │
-│ - Excludes telegram platform                                    │
+│ - Excludes active platform sessions                             │
 └─────────────────────────────────┬───────────────────────────────┘
                                   │
                                   ▼
@@ -326,7 +326,7 @@ only git signals are used and the result degrades gracefully to `NONE`.
 
 ## CLI Adapter
 
-Implements `IPlatformAdapter` for terminal output.
+Implements `IWorkflowPlatform` for terminal output.
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
