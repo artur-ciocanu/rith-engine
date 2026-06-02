@@ -1,6 +1,6 @@
 ---
 title: New Developer Guide
-description: Codebase orientation for new Rith Engine developers — architecture overview, workflows, platforms, and first steps.
+description: Codebase orientation for new Rith Engine developers — architecture overview, workflows, CLI, and first steps.
 category: contributing
 audience: [developer]
 status: current
@@ -8,7 +8,7 @@ sidebar:
   order: 1
 ---
 
-> **TL;DR**: Rith Engine lets you control AI coding assistants (Claude Code, Codex) from your phone via Telegram, Slack, Discord, or GitHub. Think of it as a remote control for AI pair programming.
+> **TL;DR**: Rith Engine is a CLI workflow engine that runs AI coding assistants (Claude Code, Codex) in isolated git worktrees. CI systems or developers invoke `rith workflow run` to execute multi-step AI workflows defined as YAML DAGs.
 
 ---
 
@@ -16,175 +16,142 @@ sidebar:
 
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
-│                        WITHOUT RITH ENGINE                               │
-│                                                                     │
-│   You're on the train, phone in hand...                            │
-│                                                                     │
-│   ┌──────────┐     ❌ Can't SSH      ┌──────────────────┐          │
-│   │  Phone   │ ──────────────────────│  Dev Machine     │          │
-│   │          │     ❌ No terminal    │  (Claude Code)   │          │
-│   └──────────┘     ❌ No IDE         └──────────────────┘          │
-│                                                                     │
-│   "I wish I could just message Claude to fix that bug..."          │
+│                        WITHOUT RITH ENGINE                         │
+│                                                                    │
+│   You want AI to fix an issue, review a PR, or implement a        │
+│   feature — but there's no structured way to chain multiple        │
+│   AI steps, isolate work, or integrate with CI.                   │
+│                                                                    │
+│   ┌──────────┐     ❌ No isolation    ┌──────────────────┐        │
+│   │  CI / Dev│ ──────────────────────│  AI Assistant     │        │
+│   │          │     ❌ No multi-step  │  (Claude Code)   │        │
+│   └──────────┘     ❌ No DAG flows   └──────────────────┘        │
+│                                                                    │
 └─────────────────────────────────────────────────────────────────────┘
 
 ┌─────────────────────────────────────────────────────────────────────┐
-│                         WITH RITH ENGINE                                 │
-│                                                                     │
-│   ┌──────────┐                       ┌──────────────────┐          │
-│   │  Phone   │ ─────Telegram────────▶│  Rith Engine Server   │          │
-│   │          │     "fix issue #42"   │                  │          │
-│   └──────────┘                       │  ┌────────────┐  │          │
-│        │                             │  │Claude Code │  │          │
-│        │                             │  │   SDK      │  │          │
-│        │                             │  └─────┬──────┘  │          │
-│        │                             │        │         │          │
-│        │                             │  ┌─────▼──────┐  │          │
-│        │◀────"PR created #127"───────│  │ Git Repo   │  │          │
-│        │                             │  │ (worktree) │  │          │
-│                                      │  └────────────┘  │          │
-│                                      └──────────────────┘          │
-│                                                                     │
-│   You just fixed a bug from your phone.                            │
+│                         WITH RITH ENGINE                           │
+│                                                                    │
+│   ┌──────────┐                       ┌──────────────────┐         │
+│   │  CI Job  │ ─rith workflow run───▶│  Rith Engine CLI │         │
+│   │  or Dev  │                       │                  │         │
+│   └──────────┘                       │  ┌────────────┐  │         │
+│        │                             │  │Claude Code │  │         │
+│        │                             │  │   SDK      │  │         │
+│        │                             │  └─────┬──────┘  │         │
+│        │                             │        │         │         │
+│        │                             │  ┌─────▼──────┐  │         │
+│        │◀────exit 0 + PR created─────│  │ Git Repo   │  │         │
+│        │                             │  │ (worktree) │  │         │
+│                                      │  └────────────┘  │         │
+│                                      └──────────────────┘         │
+│                                                                    │
+│   Structured, isolated, automatable AI coding workflows.          │
 └─────────────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## Core Concept: Message → AI → Code → Response
+## Core Concept: CLI → Workflow → AI → Code
 
 ```
 ┌──────────────────────────────────────────────────────────────────────────┐
 │                                                                          │
-│   USER                    RITH ENGINE                         CODEBASE        │
+│   TRIGGER                  RITH ENGINE                         CODEBASE  │
 │                                                                          │
-│   ┌─────────┐            ┌─────────────────┐            ┌──────────┐    │
-│   │Telegram │            │                 │            │          │    │
-│   │  Slack  │───Message─▶│   Orchestrator  │───Claude──▶│ Git Repo │    │
-│   │ Discord │            │                 │   Code     │          │    │
-│   │ GitHub  │◀──Response─│   (routes to    │◀──────────│ (files)  │    │
-│   └─────────┘            │    AI client)   │            └──────────┘    │
-│                          └─────────────────┘                             │
+│   ┌─────────┐            ┌─────────────────┐            ┌──────────┐   │
+│   │ CI Job  │            │                 │            │          │   │
+│   │ or Dev  │──workflow──▶│  Workflow       │───Claude──▶│ Git Repo │   │
+│   │ Terminal│   run      │  Executor       │   Code     │          │   │
+│   │         │◀──exit ────│  (DAG runner)   │◀──────────│ (files)  │   │
+│   └─────────┘   code     └─────────────────┘            └──────────┘   │
 │                                                                          │
-│   That's it. You message, AI works on code, you get results.            │
+│   You run a workflow, AI works on code, you get results + exit code.    │
 │                                                                          │
 └──────────────────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## The Four Ways to Use Rith Engine
+## How to Use Rith Engine
 
-### 1. Command Line (Local Execution)
+### Command Line
 
-Run workflows directly from your terminal without needing the server:
+Run workflows from your terminal or CI pipeline:
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
 │ TERMINAL                                                        │
 ├─────────────────────────────────────────────────────────────────┤
 │                                                                 │
-│ $ bun run cli workflow list                                     │
+│ $ rith workflow list                                            │
 │                                                                 │
-│ Available workflows in .rith/workflows/:                     │
-│   - rith-assist                General help and questions     │
-│   - rith-fix-github-issue      Investigate and fix issues     │
-│   - rith-comprehensive-pr-review  Full PR review with agents  │
+│ Available workflows in .rith/workflows/:                        │
+│   - rith-assist                General help and questions       │
+│   - rith-fix-github-issue      Investigate and fix issues       │
+│   - rith-comprehensive-pr-review  Full PR review with agents    │
 │                                                                 │
-│ $ bun run cli workflow run rith-assist "What does the         │
-│   orchestrator do?"                                             │
+│ $ rith workflow run rith-assist "How does the auth module work?"│
 │                                                                 │
 │ 🔧 READ                                                         │
-│ Reading: packages/core/src/orchestrator/orchestrator.ts                │
+│ Reading: packages/core/src/services/auth.ts                     │
 │                                                                 │
-│ The orchestrator is the main entry point that routes incoming  │
-│ messages. It checks if it's a slash command, loads conversation│
-│ context from the database, and routes to the appropriate AI     │
-│ client for processing...                                        │
-│                                                                 │
-└─────────────────────────────────────────────────────────────────┘
-```
-
-**Good for:** Running workflows locally, testing, automation scripts, CI/CD
-
-### 2. Direct Chat (Simple Questions)
-
-Just talk to the AI like you would in Claude Code terminal:
-
-```
-┌─────────────────────────────────────────────────────────────────┐
-│ TELEGRAM CHAT                                                   │
-├─────────────────────────────────────────────────────────────────┤
-│                                                                 │
-│ You: What does the handleMessage function do?                   │
-│                                                                 │
-│ Rith Engine: Looking at packages/core/src/orchestrator/orchestrator.ts...          │
-│                                                                 │
-│         The handleMessage function is the main entry point      │
-│         that routes incoming messages. It:                      │
-│         1. Checks if it's a slash command                       │
-│         2. Loads conversation context from database             │
-│         3. Routes to AI client for processing                   │
-│         4. Streams responses back to platform                   │
-│                                                                 │
-│         See: packages/core/src/orchestrator/orchestrator.ts            │
+│ The auth module handles token validation and session             │
+│ management. It validates JWT tokens from the GitHub OAuth        │
+│ flow and manages session state in the database...               │
 │                                                                 │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
-### 3. Slash Commands (Specific Operations)
+**Good for:** Local development, CI/CD automation, testing workflows, scripting
 
-Deterministic commands that don't involve AI:
+### CI Integration
+
+Rith Engine is designed to be triggered from CI systems:
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│ SLASH COMMANDS                                                  │
+│ CI PIPELINE (GitHub Actions / GitLab CI / Jenkins)              │
 ├─────────────────────────────────────────────────────────────────┤
 │                                                                 │
-│ /clone https://github.com/user/repo    Clone a repository      │
-│ /status                                 Show current state      │
-│ /repos                                  List available repos    │
-│ /setcwd /path/to/dir                   Change working dir      │
-│ /reset                                  Clear AI session        │
-│ /help                                   Show all commands       │
+│   on:                                                           │
+│     issues:                                                     │
+│       types: [labeled]                                          │
+│                                                                 │
+│   steps:                                                        │
+│     - run: |                                                    │
+│         rith workflow run rith-fix-github-issue \                │
+│           --branch fix/issue-${{ github.event.issue.number }} \ │
+│           --issue-context '${{ toJson(github.event.issue) }}'   │
+│           "Fix issue #${{ github.event.issue.number }}"         │
+│                                                                 │
+│   # Exit code 0 = success, 1 = failure                          │
+│   # --json flag for machine-readable output                     │
 │                                                                 │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
-### 4. Workflows (Multi-Step Automation)
+### Workflows (Multi-Step Automation)
 
-This is where Rith Engine shines - automated multi-step AI workflows:
+This is where Rith Engine shines — automated multi-step AI workflows:
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│ GITHUB ISSUE #42                                                │
+│ WORKFLOW EXECUTION                                              │
 ├─────────────────────────────────────────────────────────────────┤
 │                                                                 │
-│ Title: Login button doesn't work on mobile                      │
+│ $ rith workflow run rith-fix-github-issue \                      │
+│     --branch fix/issue-42 \                                     │
+│     --issue-context @issue.json \                               │
+│     "Fix issue #42"                                             │
 │                                                                 │
-│ ─────────────────────────────────────────────────────────────── │
+│   🔍 [investigate] Reading issue, exploring code...             │
+│   ✅ [investigate] Root cause: touch event handler missing       │
 │                                                                 │
-│ @user commented:                                                │
-│   @rith fix this issue                                        │
+│   🔧 [implement] Making changes, running tests...               │
+│   ✅ [implement] Fix applied, tests passing                     │
 │                                                                 │
-│ ─────────────────────────────────────────────────────────────── │
-│                                                                 │
-│ @rith commented:                                              │
-│   🔍 Investigation Complete                                     │
-│                                                                 │
-│   Root Cause: Touch event handler missing on mobile             │
-│   File: packages/server/src/components/LoginButton.tsx:45                       │
-│   Fix: Add onTouchEnd handler alongside onClick                 │
-│                                                                 │
-│   Creating PR...                                                │
-│                                                                 │
-│ ─────────────────────────────────────────────────────────────── │
-│                                                                 │
-│ @rith commented:                                              │
-│   ✅ Fix implemented: PR #127                                   │
-│   - Added touch event handling                                  │
-│   - Added mobile viewport tests                                 │
-│   - All tests passing                                           │
+│   📤 PR #127 created on branch fix/issue-42                     │
 │                                                                 │
 └─────────────────────────────────────────────────────────────────┘
 ```
@@ -198,7 +165,7 @@ A workflow is a YAML file that chains AI prompts together:
 ```
 ┌─────────────────────────────────────────────────────────────────────────┐
 │                                                                         │
-│   .rith/workflows/fix-github-issue.yaml                              │
+│   .rith/workflows/fix-github-issue.yaml                                │
 │                                                                         │
 │   ┌─────────────────────────────────────────────────────────────────┐  │
 │   │ name: fix-github-issue                                          │  │
@@ -237,42 +204,9 @@ A workflow is a YAML file that chains AI prompts together:
 
 ---
 
-## The Router: How Rith Engine Picks Workflows
-
-When you send a message, an AI "router" decides what to do:
-
-```
-┌─────────────────────────────────────────────────────────────────────────┐
-│                                                                         │
-│   USER MESSAGE                           ROUTER DECISION                │
-│                                                                         │
-│   "fix this issue"          ───────▶     rith-fix-github-issue       │
-│   "review this PR"          ───────▶     rith-comprehensive-pr-review│
-│   "what does X do?"         ───────▶     rith-assist (catch-all)     │
-│   "resolve the conflicts"   ───────▶     rith-resolve-conflicts      │
-│                                                                         │
-├─────────────────────────────────────────────────────────────────────────┤
-│                                                                         │
-│   HOW IT WORKS:                                                         │
-│                                                                         │
-│   ┌──────────┐     ┌─────────────────────────────────────┐             │
-│   │ Message  │────▶│ Router AI reads workflow descriptions│             │
-│   │          │     │ and picks the best match             │             │
-│   └──────────┘     └──────────────────┬──────────────────┘             │
-│                                       │                                 │
-│                                       ▼                                 │
-│                    ┌─────────────────────────────────────┐             │
-│                    │ /invoke-workflow fix-github-issue   │             │
-│                    └─────────────────────────────────────┘             │
-│                                                                         │
-└─────────────────────────────────────────────────────────────────────────┘
-```
-
----
-
 ## Available Workflows
 
-The table below lists the key bundled workflows. All bundled workflows are prefixed with `rith-`. Run `bun run cli workflow list` to see the full current list.
+The table below lists the key bundled workflows. All bundled workflows are prefixed with `rith-`. Run `rith workflow list` to see the full current list.
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────┐
@@ -318,7 +252,7 @@ The `rith-comprehensive-pr-review` workflow runs 5 AI agents simultaneously:
 ```
 ┌─────────────────────────────────────────────────────────────────────────┐
 │                                                                         │
-│   USER: "review this PR"                                               │
+│   $ rith workflow run rith-comprehensive-pr-review --branch pr/127     │
 │                                                                         │
 │   ┌─────────────────────────────────────────────────────────────────┐  │
 │   │ Step 1: pr-review-scope        Determine what changed           │  │
@@ -375,7 +309,7 @@ For larger features, Ralph executes user stories one-by-one until complete. The 
 ```
 ┌─────────────────────────────────────────────────────────────────────────┐
 │                                                                         │
-│   PRD FILE: .rith/ralph/my-feature/prd.json                          │
+│   PRD FILE: .rith/ralph/my-feature/prd.json                            │
 │                                                                         │
 │   {                                                                     │
 │     "stories": [                                                        │
@@ -422,62 +356,44 @@ For larger features, Ralph executes user stories one-by-one until complete. The 
 
 ---
 
-## Platform Integration
+## Architecture
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────┐
 │                                                                         │
-│   CLI                               HOW IT WORKS                        │
-│   ─────────────────────────────────────────────────────────────────    │
-│   ┌──────────────────┐              - Direct command execution         │
-│   │  Terminal        │              - Real-time streaming to stdout    │
-│   │                  │              - No server needed                 │
-│   │  bun run cli     │              - Good for local workflows         │
-│   │  workflow run    │              - Perfect for CI/CD                │
-│   └──────────────────┘                                                  │
+│   CI SYSTEM / DEVELOPER                                                 │
 │                                                                         │
-├─────────────────────────────────────────────────────────────────────────┤
-│                                                                         │
-│   TELEGRAM                          HOW IT WORKS                        │
-│   ─────────────────────────────────────────────────────────────────    │
-│   ┌──────────────────┐              - Bot polls for messages           │
-│   │  @rith_bot     │              - Real-time streaming (default)    │
-│   │                  │              - DM the bot directly              │
-│   │  "fix issue #42" │              - Good for mobile use              │
-│   └──────────────────┘                                                  │
-│                                                                         │
-├─────────────────────────────────────────────────────────────────────────┤
-│                                                                         │
-│   SLACK                             HOW IT WORKS                        │
-│   ─────────────────────────────────────────────────────────────────    │
-│   ┌──────────────────┐              - Socket Mode (no webhooks)        │
-│   │  #dev-channel    │              - @mention in threads              │
-│   │                  │              - DM the bot                       │
-│   │  @rith review  │              - Good for team visibility         │
-│   │  this PR         │                                                  │
-│   └──────────────────┘                                                  │
-│                                                                         │
-├─────────────────────────────────────────────────────────────────────────┤
-│                                                                         │
-│   DISCORD                           HOW IT WORKS                        │
-│   ─────────────────────────────────────────────────────────────────    │
-│   ┌──────────────────┐              - WebSocket connection             │
-│   │  #coding-help    │              - @mention to activate             │
-│   │                  │              - Thread support                   │
-│   │  @Rith Engine what    │              - Good for communities             │
-│   │  does this do?   │                                                  │
-│   └──────────────────┘                                                  │
-│                                                                         │
-├─────────────────────────────────────────────────────────────────────────┤
-│                                                                         │
-│   GITHUB                            HOW IT WORKS                        │
-│   ─────────────────────────────────────────────────────────────────    │
-│   ┌──────────────────┐              - Webhook on issues/PRs            │
-│   │  Issue #42       │              - @rith in comments              │
-│   │                  │              - Batch mode (single comment)      │
-│   │  @rith fix     │              - Auto-creates PRs                 │
-│   │  this issue      │              - Good for automation              │
-│   └──────────────────┘                                                  │
+│   ┌──────────────────┐                                                  │
+│   │ GitHub Actions   │                                                  │
+│   │ GitLab CI        │──── rith workflow run ────┐                      │
+│   │ Jenkins          │                           │                      │
+│   │ Terminal         │                           │                      │
+│   └──────────────────┘                           │                      │
+│                                                  ▼                      │
+│   ┌─────────────────────────────────────────────────────────────────┐  │
+│   │ packages/cli          CLI entry point, argument parsing         │  │
+│   │                       Creates worktree, resolves workflow       │  │
+│   └──────────────────────────────┬──────────────────────────────────┘  │
+│                                  │                                      │
+│                                  ▼                                      │
+│   ┌─────────────────────────────────────────────────────────────────┐  │
+│   │ packages/workflows    Workflow executor (DAG runner)            │  │
+│   │                       Resolves nodes, manages dependencies     │  │
+│   └──────────────────────────────┬──────────────────────────────────┘  │
+│                                  │                                      │
+│                                  ▼                                      │
+│   ┌─────────────────────────────────────────────────────────────────┐  │
+│   │ packages/providers    AI assistant interface                    │  │
+│   │                       Claude Code SDK, Codex SDK, Pi           │  │
+│   └──────────────────────────────┬──────────────────────────────────┘  │
+│                                  │                                      │
+│                                  ▼                                      │
+│   ┌─────────────────────────────────────────────────────────────────┐  │
+│   │ packages/isolation    Git worktree creation and management     │  │
+│   │ packages/git          Branch operations, merge detection       │  │
+│   │ packages/paths        Path resolution for workspaces           │  │
+│   │ packages/core         Database, config, shared services        │  │
+│   └─────────────────────────────────────────────────────────────────┘  │
 │                                                                         │
 └─────────────────────────────────────────────────────────────────────────┘
 ```
@@ -486,28 +402,28 @@ For larger features, Ralph executes user stories one-by-one until complete. The 
 
 ## Isolation: Git Worktrees
 
-Each conversation gets its own isolated copy of the repo:
+Each workflow run gets its own isolated copy of the repo:
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────┐
 │                                                                         │
-│   ~/.rith/workspaces/owner/repo/worktrees/                           │
+│   ~/.rith/workspaces/owner/repo/worktrees/                             │
 │   │                                                                     │
-│   ├── issue-42/              ◀── Conversation about issue #42         │
+│   ├── fix/issue-42/           ◀── Fixing issue #42                     │
 │   │   └── (full repo)            Working on fix for mobile bug         │
 │   │                                                                     │
-│   ├── pr-127/                ◀── Conversation about PR #127           │
-│   │   └── (full repo)            Reviewing code changes                │
+│   ├── feat/dark-mode/         ◀── Feature development                  │
+│   │   └── (full repo)            Adding dark mode feature              │
 │   │                                                                     │
-│   └── task-dark-mode/        ◀── Manual feature work                  │
-│       └── (full repo)            Adding dark mode feature              │
+│   └── pr/127/                 ◀── PR review worktree                   │
+│       └── (full repo)            Running review workflow                │
 │                                                                         │
 │   WHY WORKTREES?                                                        │
-│   ─────────────────────────────────────────────────────────────────    │
-│   - Multiple conversations can work simultaneously                     │
+│   ─────────────────────────────────────────────────────────────────     │
+│   - Multiple workflows can run simultaneously                          │
 │   - No branch conflicts between parallel work                          │
 │   - Each gets isolated file changes                                    │
-│   - Cleaned up when issue/PR closes                                    │
+│   - Cleaned up with `rith isolation cleanup`                           │
 │                                                                         │
 └─────────────────────────────────────────────────────────────────────────┘
 ```
@@ -524,19 +440,17 @@ Each conversation gets its own isolated copy of the repo:
 │   ┌─────────────────────────────────────────────────────────────────┐  │
 │   │ 1. DEFAULTS (hardcoded)                                         │  │
 │   │    assistant: claude                                            │  │
-│   │    streaming.telegram: stream                                   │  │
 │   └─────────────────────────────────────────────────────────────────┘  │
 │                              │                                          │
 │                              ▼                                          │
 │   ┌─────────────────────────────────────────────────────────────────┐  │
-│   │ 2. GLOBAL CONFIG (~/.rith/config.yaml)                        │  │
-│   │    botName: MyBot                                               │  │
+│   │ 2. GLOBAL CONFIG (~/.rith/config.yaml)                         │  │
 │   │    defaultAssistant: claude                                     │  │
 │   └─────────────────────────────────────────────────────────────────┘  │
 │                              │                                          │
 │                              ▼                                          │
 │   ┌─────────────────────────────────────────────────────────────────┐  │
-│   │ 3. REPO CONFIG (.rith/config.yaml)                            │  │
+│   │ 3. REPO CONFIG (.rith/config.yaml)                             │  │
 │   │    assistant: codex          # This repo prefers Codex          │  │
 │   │    commands:                                                    │  │
 │   │      folder: .claude/commands/custom                            │  │
@@ -545,7 +459,6 @@ Each conversation gets its own isolated copy of the repo:
 │                              ▼                                          │
 │   ┌─────────────────────────────────────────────────────────────────┐  │
 │   │ 4. ENVIRONMENT VARIABLES (highest priority)                     │  │
-│   │    TELEGRAM_STREAMING_MODE=batch                                │  │
 │   │    DEFAULT_AI_ASSISTANT=claude                                  │  │
 │   └─────────────────────────────────────────────────────────────────┘  │
 │                                                                         │
@@ -559,22 +472,22 @@ Each conversation gets its own isolated copy of the repo:
 ```
 ┌─────────────────────────────────────────────────────────────────────────┐
 │                                                                         │
-│   YOUR REPO                         RITH ENGINE SERVER                       │
+│   YOUR REPO                         RITH ENGINE STATE                   │
 │                                                                         │
-│   my-app/                           ~/.rith/                          │
-│   ├── .rith/                      ├── config.yaml      (global cfg)  │
-│   │   ├── config.yaml               ├── workspaces/      (cloned repos)│
-│   │   ├── commands/                 │   └── user/repo/                 │
-│   │   │   ├── investigate-issue.md  │       ├── source/    (clone)      │
-│   │   │   ├── implement-issue.md   │       └── worktrees/ (isolation)  │
-│   │   │   └── assist.md            │           ├── issue-42/           │
-│   │   ├── workflows/               │           └── pr-127/             │
-│   │   │   ├── fix-github-issue.yaml                                    │
-│   │   │   └── assist.yaml                                              │
+│   my-app/                           ~/.rith/                            │
+│   ├── .rith/                        ├── config.yaml      (global cfg)  │
+│   │   ├── config.yaml               ├── rith.db          (SQLite)      │
+│   │   ├── commands/                 ├── workspaces/      (worktrees)   │
+│   │   │   ├── investigate-issue.md  │   └── user/repo/                 │
+│   │   │   ├── implement-issue.md   │       ├── source/    (clone)      │
+│   │   │   └── assist.md            │       └── worktrees/ (isolation)  │
+│   │   ├── workflows/               │           ├── fix/issue-42/       │
+│   │   │   ├── fix-github-issue.yaml│           └── feat/dark-mode/     │
+│   │   │   └── assist.yaml          │                                   │
 │   │   └── artifacts/                                                   │
 │   │       └── issues/                                                  │
 │   │           └── issue-42.md                                          │
-│   ├── packages/                                                             │
+│   ├── packages/                                                        │
 │   └── ...                                                              │
 │                                                                         │
 └─────────────────────────────────────────────────────────────────────────┘
@@ -582,29 +495,28 @@ Each conversation gets its own isolated copy of the repo:
 
 ---
 
-## Quick Reference: Common Interactions
+## Quick Reference: Common Commands
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────┐
 │                                                                         │
-│   WHAT YOU WANT                     WHAT TO SAY (Platform/CLI)          │
+│   WHAT YOU WANT                     COMMAND                             │
 │                                                                         │
-│   Run workflow locally              bun run cli workflow run <name>     │
-│   List CLI workflows                bun run cli workflow list           │
-│   Fix a GitHub issue                "@rith fix this issue"            │
-│   Review a PR                       "@rith review this PR"            │
-│   Ask a question                    "What does handleMessage do?"       │
-│   Resolve conflicts                 "@rith resolve the conflicts"     │
-│   See current state                 "/status"                           │
-│   Clone a repo                      "/clone https://github.com/u/r"     │
-│   Switch repos                      "/repos" then pick one              │
-│   List available workflows          "/workflow list"                    │
-│   Reload workflow definitions       "/workflow reload"                  │
-│   Approve paused workflow           "/workflow approve <id> [comment]"  │
-│   Reject paused workflow           "/workflow reject <id> [reason]"   │
-│   Cancel stuck workflow             "/workflow cancel"                  │
-│   Start fresh                       "/reset"                            │
-│   Get help                          "/help"                             │
+│   List available workflows          rith workflow list                  │
+│   Run a workflow                    rith workflow run <name> "<msg>"    │
+│   Run with branch isolation         rith workflow run <name> -b <br>   │
+│   Run without isolation             rith workflow run <name>            │
+│                                       --no-worktree "<msg>"            │
+│   Resume a failed run               rith workflow run <name> --resume  │
+│   JSON output (for CI)              rith workflow run <name> --json    │
+│   Check workflow status             rith workflow status               │
+│   Approve a paused workflow         rith workflow approve <id>         │
+│   Reject a paused workflow          rith workflow reject <id>          │
+│   List active worktrees             rith isolation list                │
+│   Clean up stale worktrees          rith isolation cleanup             │
+│   Clean up merged branches          rith isolation cleanup --merged    │
+│   Complete a branch                 rith complete <branch>             │
+│   Show version                      rith version                       │
 │                                                                         │
 └─────────────────────────────────────────────────────────────────────────┘
 ```
@@ -616,34 +528,33 @@ Each conversation gets its own isolated copy of the repo:
 ```
 ┌─────────────────────────────────────────────────────────────────────────┐
 │                                                                         │
-│   RITH ENGINE = Remote Control for AI Coding Assistants                     │
+│   RITH ENGINE = CLI Workflow Engine for AI Coding Assistants            │
 │                                                                         │
 │   ┌────────────────────────────────────────────────────────────────┐   │
 │   │                                                                │   │
-│   │   Phone/Slack/GitHub ──▶ Rith Engine Server ──▶ AI (Claude/Codex)  │   │
-│   │                              │                    │            │   │
-│   │                              ▼                    ▼            │   │
-│   │                         Workflows           Git Worktrees      │   │
-│   │                        (automation)         (isolation)        │   │
+│   │   CI / Terminal ──▶ rith workflow run ──▶ AI (Claude/Codex)    │   │
+│   │                           │                    │               │   │
+│   │                           ▼                    ▼               │   │
+│   │                      Workflows           Git Worktrees         │   │
+│   │                     (DAG executor)       (isolation)           │   │
 │   │                                                                │   │
 │   └────────────────────────────────────────────────────────────────┘   │
 │                                                                         │
 │   KEY CAPABILITIES:                                                    │
 │   ─────────────────                                                    │
-│   ✓ Message from anywhere (phone, tablet, desktop)                    │
-│   ✓ Automated multi-step workflows                                    │
+│   ✓ CLI-first: invoke from terminal or any CI system                   │
+│   ✓ Automated multi-step workflows (YAML DAGs)                        │
 │   ✓ Parallel AI agents for complex tasks                              │
-│   ✓ Isolated environments per conversation                            │
+│   ✓ Isolated environments via git worktrees                           │
 │   ✓ Custom prompts versioned in Git                                   │
-│   ✓ GitHub integration (issues/PRs/comments)                          │
+│   ✓ Exit code + optional JSON output for CI integration               │
 │                                                                         │
 │   WHEN TO USE:                                                         │
 │   ─────────────                                                        │
-│   ✓ You want to fix bugs from your phone                              │
-│   ✓ You want automated PR reviews                                     │
-│   ✓ You want GitHub issue automation                                  │
-│   ✓ You want parallel development without conflicts                   │
-│   ✓ You want custom AI workflows for your team                        │
+│   ✓ You want CI-driven issue fixing and PR reviews                    │
+│   ✓ You want automated multi-step AI coding workflows                 │
+│   ✓ You want parallel development without branch conflicts            │
+│   ✓ You want custom AI workflows for your project                     │
 │                                                                         │
 └─────────────────────────────────────────────────────────────────────────┘
 ```
@@ -656,5 +567,3 @@ Each conversation gets its own isolated copy of the repo:
 2. **Explore**: `.rith/workflows/` - See example workflows
 3. **Customize**: `.rith/commands/` - Create your own prompts
 4. **Configure**: `.rith/config.yaml` - Tweak settings
-
-Welcome to remote agentic coding!

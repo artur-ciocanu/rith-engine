@@ -89,7 +89,7 @@ export function stripCwdEnv(cwd: string = process.cwd()): void {
     process.stderr.write(
       '\u26a0  Detected CLAUDECODE=1 \u2014 running inside a Claude Code session.\n' +
         '   If workflows hang silently, this is a known class of issue.\n' +
-        '   Workaround: run `rith serve` from a regular shell.\n' +
+        '   Workaround: run `rith` from a regular shell outside Claude Code.\n' +
         '   Suppress: set RITH_SUPPRESS_NESTED_CLAUDE_WARNING=1\n' +
         '   Details: https://github.com/artur-ciocanu/rith-engine/issues/1067\n'
     );

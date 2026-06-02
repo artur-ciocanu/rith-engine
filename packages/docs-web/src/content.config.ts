@@ -27,7 +27,6 @@ export const collections = {
          *
          * - getting-started: Onboarding, installation, first steps
          * - guides: How-to guides for users (workflows, commands, node features)
-         * - adapters: Platform adapter setup (Slack, Telegram, GitHub, Discord, Web)
          * - deployment: Running in production (Docker, cloud, Windows)
          * - reference: Technical reference (architecture, CLI, commands, database, API)
          * - contributing: Developer guides (internals, DX, releasing, testing)
@@ -36,7 +35,6 @@ export const collections = {
           .enum([
             'getting-started',
             'guides',
-            'adapters',
             'deployment',
             'reference',
             'contributing',
@@ -58,7 +56,6 @@ export const collections = {
          */
         area: z
           .enum([
-            'adapters',
             'cli',
             'clients',
             'config',
@@ -66,10 +63,7 @@ export const collections = {
             'handlers',
             'infra',
             'isolation',
-            'orchestrator',
-            'server',
             'services',
-            'web',
             'workflows',
           ])
           .optional(),

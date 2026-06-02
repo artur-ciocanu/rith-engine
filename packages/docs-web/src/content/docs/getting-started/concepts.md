@@ -7,7 +7,7 @@ sidebar:
   order: 1
 ---
 
-Rith Engine orchestrates AI coding agents through four core concepts. Understanding these will make everything else click.
+Rith Engine runs AI coding agents through four core concepts. Understanding these will make everything else click.
 
 ## Workflows
 
