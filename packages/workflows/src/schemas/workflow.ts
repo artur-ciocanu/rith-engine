@@ -56,7 +56,6 @@ export type WorkflowWorktreePolicy = z.infer<typeof workflowWorktreePolicySchema
 export const workflowBaseSchema = z.object({
   name: z.string().min(1),
   description: z.string().min(1),
-  provider: z.string().trim().min(1).optional(),
   model: z.string().optional(),
   modelReasoningEffort: modelReasoningEffortSchema.optional(),
   webSearchMode: webSearchModeSchema.optional(),

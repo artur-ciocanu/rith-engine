@@ -256,16 +256,15 @@ export async function executeWorkflow(
 
   const docsDir = config.docsPath ?? 'docs/';
 
-  // Pi is the sole provider. Model strings pass through to the SDK as-is.
+  // Model resolution: node.model > workflow.model > config.provider.model
   const resolvedModel = workflow.model ?? config.provider?.model;
 
   getLog().info(
     {
       workflowName: workflow.name,
-      provider: 'pi',
       model: resolvedModel,
     },
-    'workflow_provider_resolved'
+    'workflow_model_resolved'
   );
 
   if (configuredCommandFolder) {

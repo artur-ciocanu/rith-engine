@@ -4,7 +4,6 @@
 
 name: e2e-opencode-smoke
 description: "Smoke test for the OpenCode community provider."
-provider: opencode
 agent: general
 
 nodes:

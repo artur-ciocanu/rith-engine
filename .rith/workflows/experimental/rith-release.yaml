@@ -22,7 +22,6 @@ description: |
     rith workflow run rith-release "patch --dry-run"   # dry-run patch
     rith workflow run rith-release "--dry-run"         # dry-run patch (implicit)
 
-provider: claude
 model: sonnet
 interactive: true                       # required: has approval gates
 

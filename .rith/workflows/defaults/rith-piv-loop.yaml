@@ -16,7 +16,6 @@ description: |
   The PIV loop comes AFTER a PRD exists. Each PIV loop focuses on ONE granular feature or bug fix.
   Input: A description of what to build, a path to an existing plan, or a GitHub issue number.
 
-provider: claude
 interactive: true
 
 nodes:

@@ -8,7 +8,6 @@ description: |
 nodes:
   - id: implement
     command: rith-implement
-    provider: claude
     model: opus[1m]
 
   - id: create-pr

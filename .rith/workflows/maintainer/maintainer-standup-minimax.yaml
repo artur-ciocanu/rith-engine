@@ -8,7 +8,6 @@ description: |
   Triggers: "morning standup minimax", "standup minimax", "daily brief minimax".
   NOT for: First-time setup — run the Claude variant first to validate state.
 
-provider: pi
 model: minimax/MiniMax-M2.7
 
 worktree:

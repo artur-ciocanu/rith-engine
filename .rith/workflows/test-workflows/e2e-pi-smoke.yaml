@@ -9,7 +9,6 @@
 #   `pi /login` OAuth credentials from ~/.pi/agent/auth.json.
 name: e2e-pi-smoke
 description: 'Smoke test for Pi community provider. Verifies prompt response via sendQuery.'
-provider: pi
 model: anthropic/claude-haiku-4-5
 
 nodes:

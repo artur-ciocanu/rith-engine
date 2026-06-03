@@ -12,7 +12,6 @@ description: |
 
   Based on Anthropic's harness design article for long-running application development.
   Separates planning, building, and evaluation into distinct roles with adversarial tension.
-provider: claude
 model: sonnet
 
 nodes:

@@ -4,7 +4,6 @@
 # Manual: start, wait for streaming to begin, press Ctrl-C. Not for CI.
 name: e2e-copilot-abort
 description: 'Manual test: start, then Ctrl-C. Verifies abort wiring.'
-provider: copilot
 model: gpt-5-mini
 
 nodes:

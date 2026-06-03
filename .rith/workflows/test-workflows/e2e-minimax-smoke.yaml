@@ -15,7 +15,6 @@ description: |
         structured JSON), asserts non-empty output and basic plausibility.
   NOT for: Production work — connectivity / capability sanity check only.
 
-provider: pi
 model: minimax/MiniMax-M2.7
 
 worktree:

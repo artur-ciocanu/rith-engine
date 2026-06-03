@@ -14,7 +14,6 @@ description: |
            PR (use rith-comprehensive-pr-review), repo-wide triage automation
            (use repo-triage).
 
-provider: claude
 model: sonnet
 
 worktree:

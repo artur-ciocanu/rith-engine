@@ -17,7 +17,6 @@ description: |
            unfiltered PRs — that path was removed; the maintainer is expected
            to have done that filtering when picking the PR.
 
-provider: pi
 model: minimax/MiniMax-M2.7
 
 worktree:
