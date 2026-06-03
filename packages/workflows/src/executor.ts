@@ -256,16 +256,13 @@ export async function executeWorkflow(
 
   const docsDir = config.docsPath ?? 'docs/';
 
-  // Resolve provider and model once (used by all nodes).
   // Pi is the sole provider. Model strings pass through to the SDK as-is.
-  const resolvedProvider = 'pi';
-  const assistantDefaults = config.assistants[resolvedProvider];
-  const resolvedModel = workflow.model ?? (assistantDefaults?.model as string | undefined);
+  const resolvedModel = workflow.model ?? config.pi?.model;
 
   getLog().info(
     {
       workflowName: workflow.name,
-      provider: resolvedProvider,
+      provider: 'pi',
       model: resolvedModel,
     },
     'workflow_provider_resolved'

@@ -68,7 +68,6 @@ mock.module('./event-emitter', () => ({
   getWorkflowEventEmitter: mock(() => mockEmitter),
 }));
 
-
 // ---------------------------------------------------------------------------
 // Import after mocks
 // ---------------------------------------------------------------------------
@@ -110,8 +109,7 @@ function makeDeps(store?: IWorkflowStore): WorkflowDeps {
     store: store ?? makeStore(),
     loadConfig: mock(
       async (): Promise<WorkflowConfig> => ({
-        assistant: 'claude' as const,
-        assistants: { claude: {}, codex: {} },
+        pi: {},
         baseBranch: '',
         commands: { folder: '' },
       })

@@ -68,13 +68,6 @@ export interface PiProviderDefaults {
   maxConcurrent?: number;
 }
 
-
-/** Generic per-provider defaults bag used by config surfaces and UI. */
-export type ProviderDefaults = Record<string, unknown>;
-
-/** Provider-keyed defaults map. Built-ins may refine individual entries. */
-export type ProviderDefaultsMap = Record<string, ProviderDefaults>;
-
 /**
  * Token usage statistics from AI provider responses.
  */
@@ -248,10 +241,8 @@ export interface ProviderCapabilities {
   sandbox: boolean;
 }
 
-
 /**
- * Generic agent provider interface.
- * Generic agent provider interface for the Pi-only engine.
+ * Pi Coding Agent provider interface.
  */
 export interface IAgentProvider {
   /**
@@ -267,15 +258,4 @@ export interface IAgentProvider {
     resumeSessionId?: string,
     options?: SendQueryOptions
   ): AsyncGenerator<MessageChunk>;
-
-  /**
-   * Get the provider type identifier (e.g. 'claude', 'codex').
-   */
-  getType(): string;
-
-  /**
-   * Get the provider's capability flags.
-   * Used by the dag-executor to warn when nodes specify unsupported features.
-   */
-  getCapabilities(): ProviderCapabilities;
 }

@@ -13,7 +13,7 @@
     "./mcp/config": "./src/mcp/config.ts"
   },
   "scripts": {
-    "test": "bun test src/pi/ && bun test src/shared/",
+    "test": "bun test src/pi/provider-lazy-load.test.ts && bun test src/pi/provider.test.ts src/pi/config.test.ts src/pi/model-ref.test.ts src/pi/options-translator.test.ts src/pi/session-resolver.test.ts src/pi/ui-context-stub.test.ts src/pi/event-bridge.test.ts && bun test src/shared/",
     "type-check": "bun x tsc --noEmit"
   },
   "dependencies": {

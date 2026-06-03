@@ -158,7 +158,6 @@ mock.module('@mariozechner/pi-coding-agent', () => ({
 
 // Import AFTER mocks are set — module resolution freezes the mocks.
 import { PiProvider } from './provider';
-import { PI_CAPABILITIES } from './capabilities';
 
 // ─── Helpers ────────────────────────────────────────────────────────────
 
@@ -229,14 +228,6 @@ describe('PiProvider', () => {
     runtimeOverrides = {};
     delete process.env.GEMINI_API_KEY;
     delete process.env.ANTHROPIC_API_KEY;
-  });
-
-  test('getType returns "pi"', () => {
-    expect(new PiProvider().getType()).toBe('pi');
-  });
-
-  test('getCapabilities matches PI_CAPABILITIES constant', () => {
-    expect(new PiProvider().getCapabilities()).toEqual(PI_CAPABILITIES);
   });
 
   test('sendQuery installs PI_PACKAGE_DIR shim before Pi SDK loads', async () => {
@@ -1103,20 +1094,6 @@ describe('PiProvider', () => {
       | Record<string, unknown>
       | undefined;
     expect(loaderArgs?.systemPrompt).toBeUndefined();
-  });
-
-  test('capabilities reflect v2 wiring', () => {
-    const caps = new PiProvider().getCapabilities();
-    expect(caps.thinkingControl).toBe(true);
-    expect(caps.effortControl).toBe(true);
-    expect(caps.toolRestrictions).toBe(true);
-    expect(caps.skills).toBe(true);
-    expect(caps.sessionResume).toBe(true);
-    expect(caps.envInjection).toBe(true);
-    // Best-effort structured output via prompt engineering (not SDK-enforced).
-    expect(caps.structuredOutput).toBe(true);
-    // Still false:
-    expect(caps.mcp).toBe(false);
   });
 
   test('extensions are enabled by default (noExtensions: false)', async () => {
