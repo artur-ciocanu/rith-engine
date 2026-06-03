@@ -171,17 +171,6 @@ export async function countActiveByCodebase(codebaseId: string): Promise<number>
 }
 
 /**
- * Find conversations using an isolation environment
- */
-export async function getConversationsUsingEnv(envId: string): Promise<string[]> {
-  const result = await pool.query<{ id: string }>(
-    'SELECT id FROM remote_agent_conversations WHERE isolation_env_id = $1',
-    [envId]
-  );
-  return result.rows.map(r => r.id);
-}
-
-/**
  * Find stale environments (no activity for specified days)
  * Excludes Telegram (persistent workspaces never auto-cleanup)
  */
@@ -189,7 +178,7 @@ export async function findStaleEnvironments(
   staleDays = 14
 ): Promise<readonly (IsolationEnvironmentRow & { codebase_default_cwd: string })[]> {
   const dialect = getDialect();
-  // Both conditions use the same staleDays value but need separate placeholders
+  // Use updated_at on the environment row for staleness detection
   const staleActivityThreshold = dialect.nowMinusDays(1);
   const staleCreationThreshold = dialect.nowMinusDays(2);
 
@@ -199,11 +188,7 @@ export async function findStaleEnvironments(
      JOIN remote_agent_codebases c ON e.codebase_id = c.id
      WHERE e.status = 'active'
        AND e.created_by_platform != 'telegram'
-       AND NOT EXISTS (
-         SELECT 1 FROM remote_agent_conversations conv
-         WHERE conv.isolation_env_id = e.id
-           AND conv.last_activity_at > ${staleActivityThreshold}
-       )
+       AND e.updated_at < ${staleActivityThreshold}
        AND e.created_at < ${staleCreationThreshold}`,
     [staleDays, staleDays]
   );
@@ -262,17 +247,11 @@ export async function listByCodebaseWithAge(
   codebaseId: string
 ): Promise<readonly (IsolationEnvironmentRow & { days_since_activity: number })[]> {
   const dialect = getDialect();
-  const daysSinceCreated = dialect.daysSince('e.created_at');
-  const daysSinceActivity = dialect.daysSince('MAX(conv.last_activity_at)');
+  const daysSinceUpdated = dialect.daysSince('e.updated_at');
 
   const result = await pool.query<IsolationEnvironmentRow & { days_since_activity: number }>(
     `SELECT e.*,
-            COALESCE(
-              (SELECT ${daysSinceActivity}
-               FROM remote_agent_conversations conv
-               WHERE conv.isolation_env_id = e.id),
-              ${daysSinceCreated}
-            ) as days_since_activity
+            ${daysSinceUpdated} as days_since_activity
      FROM remote_agent_isolation_environments e
      WHERE e.codebase_id = $1 AND e.status = 'active'
      ORDER BY e.created_at DESC`,

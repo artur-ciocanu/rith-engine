@@ -32,7 +32,7 @@ pnpm-lock.yaml
 .env.local
 
 # Per-user MCP server configs (may contain secrets/topics)
-.archon/mcp/
+.rith/mcp/
 
 # Caddy configuration (keep Caddyfile.example)
 Caddyfile
@@ -46,18 +46,18 @@ sessions/
 api_sessions/
 e2e-screenshots/
 
-# Archon logs and artifacts (generated at runtime)
-.archon/logs/
-.archon/artifacts/
+# Rith logs and artifacts (generated at runtime)
+.rith/logs/
+.rith/artifacts/
 
 # Cross-run workflow state (e.g. issue-triage memory)
-.archon/state/
+.rith/state/
 
 # Maintainer standup — per-maintainer state and briefs (direction.md is committed)
-.archon/maintainer-standup/profile.md
-.archon/maintainer-standup/state.json
-.archon/maintainer-standup/briefs/
-.archon/maintainer-standup/reviewed-prs.json
+.rith/maintainer-standup/profile.md
+.rith/maintainer-standup/state.json
+.rith/maintainer-standup/briefs/
+.rith/maintainer-standup/reviewed-prs.json
 
 # Agent artifacts (generated, local only)
 .agents/
@@ -65,7 +65,6 @@ e2e-screenshots/
 .agents/plans/
 .agents/pr-reviews
 .claude/PRPs/
-.claude/archon/
 .claude/mockups/
 .claude/settings.local.json
 .claude/scheduled_tasks.lock
@@ -119,6 +118,6 @@ packages/server/.env
 .playwright-cli/
 skills-lock.json
 test-results/
-.archon/ralph/
+.rith/ralph/
 graphify-out/
 ARCHITECTURE_REVIEW.md

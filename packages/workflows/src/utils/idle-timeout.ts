@@ -100,7 +100,7 @@ export async function* withIdleTimeout<T>(
         // Dynamic import to avoid circular deps — this module has zero @rith/* imports
         try {
           const { createLogger } = await import('@rith/paths');
-          createLogger('idle-timeout').warn(
+          createLogger('workflow.idle-timeout').warn(
             { err: e as Error },
             'idle_timeout.generator_cleanup_failed'
           );

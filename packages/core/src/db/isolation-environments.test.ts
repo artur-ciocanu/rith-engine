@@ -19,7 +19,6 @@ import {
   updateStatus,
   updateMetadata,
   countActiveByCodebase,
-  getConversationsUsingEnv,
   findStaleEnvironments,
   listAllActiveWithCodebase,
 } from './isolation-environments';
@@ -248,28 +247,6 @@ describe('isolation-environments', () => {
       const result = await countActiveByCodebase('empty-codebase');
 
       expect(result).toBe(0);
-    });
-  });
-
-  describe('getConversationsUsingEnv', () => {
-    test('returns conversation IDs using the environment', async () => {
-      mockQuery.mockResolvedValueOnce(createQueryResult([{ id: 'conv-1' }, { id: 'conv-2' }]));
-
-      const result = await getConversationsUsingEnv('env-123');
-
-      expect(result).toEqual(['conv-1', 'conv-2']);
-      expect(mockQuery).toHaveBeenCalledWith(
-        'SELECT id FROM remote_agent_conversations WHERE isolation_env_id = $1',
-        ['env-123']
-      );
-    });
-
-    test('returns empty array when no conversations use env', async () => {
-      mockQuery.mockResolvedValueOnce(createQueryResult([]));
-
-      const result = await getConversationsUsingEnv('unused-env');
-
-      expect(result).toEqual([]);
     });
   });
 

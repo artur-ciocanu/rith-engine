@@ -162,26 +162,6 @@ export class SqliteAdapter implements IDatabase {
    * the columns were added to createSchema().
    */
   private migrateColumns(): void {
-    // Conversations columns
-    try {
-      const cols = this.db.prepare("PRAGMA table_info('remote_agent_conversations')").all() as {
-        name: string;
-      }[];
-      const colNames = new Set(cols.map(c => c.name));
-
-      if (!colNames.has('title')) {
-        this.db.run('ALTER TABLE remote_agent_conversations ADD COLUMN title TEXT');
-      }
-      if (!colNames.has('deleted_at')) {
-        this.db.run('ALTER TABLE remote_agent_conversations ADD COLUMN deleted_at TEXT');
-      }
-      if (!colNames.has('hidden')) {
-        this.db.run('ALTER TABLE remote_agent_conversations ADD COLUMN hidden INTEGER DEFAULT 0');
-      }
-    } catch (e: unknown) {
-      getLog().warn({ err: e as Error }, 'db.sqlite_migration_conversations_columns_failed');
-    }
-
     // Workflow runs columns
     try {
       const wfCols = this.db.prepare("PRAGMA table_info('remote_agent_workflow_runs')").all() as {
@@ -200,20 +180,6 @@ export class SqliteAdapter implements IDatabase {
       }
     } catch (e: unknown) {
       getLog().warn({ err: e as Error }, 'db.sqlite_migration_workflow_runs_columns_failed');
-    }
-
-    // Sessions columns
-    try {
-      const sessCols = this.db.prepare("PRAGMA table_info('remote_agent_sessions')").all() as {
-        name: string;
-      }[];
-      const sessColNames = new Set(sessCols.map(c => c.name));
-
-      if (!sessColNames.has('ended_reason')) {
-        this.db.run('ALTER TABLE remote_agent_sessions ADD COLUMN ended_reason TEXT');
-      }
-    } catch (e: unknown) {
-      getLog().warn({ err: e as Error }, 'db.sqlite_migration_session_columns_failed');
     }
   }
 
@@ -252,7 +218,7 @@ export class SqliteAdapter implements IDatabase {
         UNIQUE(codebase_id, key)
       );
 
-      -- Conversations table
+      -- Conversations table (retained for workflow_runs FK; will be removed in a future migration)
       CREATE TABLE IF NOT EXISTS remote_agent_conversations (
         id TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))),
         platform_type TEXT NOT NULL,
@@ -268,22 +234,6 @@ export class SqliteAdapter implements IDatabase {
         updated_at TEXT DEFAULT (datetime('now')),
         last_activity_at TEXT DEFAULT (datetime('now')),
         UNIQUE(platform_type, platform_conversation_id)
-      );
-
-      -- Sessions table
-      CREATE TABLE IF NOT EXISTS remote_agent_sessions (
-        id TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))),
-        conversation_id TEXT NOT NULL REFERENCES remote_agent_conversations(id) ON DELETE CASCADE,
-        codebase_id TEXT REFERENCES remote_agent_codebases(id) ON DELETE SET NULL,
-        ai_assistant_type TEXT NOT NULL DEFAULT 'pi',
-        assistant_session_id TEXT,
-        active INTEGER DEFAULT 1,
-        metadata TEXT DEFAULT '{}',
-        started_at TEXT DEFAULT (datetime('now')),
-        ended_at TEXT,
-        parent_session_id TEXT REFERENCES remote_agent_sessions(id),
-        transition_reason TEXT,
-        ended_reason TEXT
       );
 
       -- Isolation environments table
@@ -336,45 +286,25 @@ export class SqliteAdapter implements IDatabase {
         created_at TEXT DEFAULT (datetime('now'))
       );
 
-      -- Messages table (conversation history for Web UI)
-      CREATE TABLE IF NOT EXISTS remote_agent_messages (
-        id TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))),
-        conversation_id TEXT NOT NULL REFERENCES remote_agent_conversations(id) ON DELETE CASCADE,
-        role TEXT NOT NULL,
-        content TEXT NOT NULL DEFAULT '',
-        metadata TEXT DEFAULT '{}',
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      );
+      -- NOTE: remote_agent_sessions and remote_agent_messages tables removed (dead code).
+      -- The remote_agent_ table prefix is inherited from Archon and will be renamed
+      -- in a future migration PR.
 
       -- Indexes
       CREATE INDEX IF NOT EXISTS idx_codebase_env_vars_codebase_id ON remote_agent_codebase_env_vars(codebase_id);
-      CREATE INDEX IF NOT EXISTS idx_conversations_platform ON remote_agent_conversations(platform_type, platform_conversation_id);
-      CREATE INDEX IF NOT EXISTS idx_sessions_conversation ON remote_agent_sessions(conversation_id);
-      CREATE INDEX IF NOT EXISTS idx_sessions_active ON remote_agent_sessions(active);
       CREATE INDEX IF NOT EXISTS idx_isolation_codebase ON remote_agent_isolation_environments(codebase_id);
       CREATE INDEX IF NOT EXISTS idx_isolation_workflow ON remote_agent_isolation_environments(workflow_type, workflow_id);
       CREATE INDEX IF NOT EXISTS idx_workflow_runs_conversation ON remote_agent_workflow_runs(conversation_id);
       CREATE INDEX IF NOT EXISTS idx_workflow_runs_status ON remote_agent_workflow_runs(status);
       CREATE INDEX IF NOT EXISTS idx_workflow_events_run_id ON remote_agent_workflow_events(workflow_run_id);
       CREATE INDEX IF NOT EXISTS idx_workflow_events_type ON remote_agent_workflow_events(event_type);
-      CREATE INDEX IF NOT EXISTS idx_messages_conversation_id ON remote_agent_messages(conversation_id, created_at ASC);
       CREATE INDEX IF NOT EXISTS idx_workflow_runs_parent_conv ON remote_agent_workflow_runs(parent_conversation_id);
-      CREATE INDEX IF NOT EXISTS idx_conversations_hidden ON remote_agent_conversations(hidden);
-      DROP INDEX IF EXISTS idx_conversations_codebase;
-      CREATE INDEX IF NOT EXISTS idx_conversations_codebase ON remote_agent_conversations(codebase_id) WHERE deleted_at IS NULL;
-      CREATE INDEX IF NOT EXISTS idx_conversations_isolation_env_id ON remote_agent_conversations(isolation_env_id);
-      CREATE INDEX IF NOT EXISTS idx_sessions_codebase ON remote_agent_sessions(codebase_id);
       CREATE INDEX IF NOT EXISTS idx_isolation_env_status ON remote_agent_isolation_environments(status);
 
       -- From PG migration 009: staleness detection for running workflows
       CREATE INDEX IF NOT EXISTS idx_workflow_runs_last_activity
         ON remote_agent_workflow_runs(last_activity_at) WHERE status = 'running';
 
-      -- From PG migration 010: session audit trail
-      CREATE INDEX IF NOT EXISTS idx_sessions_parent
-        ON remote_agent_sessions(parent_session_id);
-      CREATE INDEX IF NOT EXISTS idx_sessions_conversation_started
-        ON remote_agent_sessions(conversation_id, started_at DESC);
     `);
     getLog().info('db.sqlite_schema_initialized');
   }

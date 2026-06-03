@@ -168,16 +168,6 @@ export async function listCodebases(): Promise<readonly Codebase[]> {
 
 export async function deleteCodebase(id: string): Promise<void> {
   getLog().debug({ codebaseId: id }, 'db.codebase_delete_cascade_started');
-  // First, unlink any sessions referencing this codebase (FK has no cascade)
-  await pool.query('UPDATE remote_agent_sessions SET codebase_id = NULL WHERE codebase_id = $1', [
-    id,
-  ]);
-  // Second, unlink any conversations referencing this codebase (FK has no cascade)
-  await pool.query(
-    'UPDATE remote_agent_conversations SET codebase_id = NULL WHERE codebase_id = $1',
-    [id]
-  );
-  // Then delete the codebase
   await pool.query('DELETE FROM remote_agent_codebases WHERE id = $1', [id]);
   getLog().info({ codebaseId: id }, 'db.codebase_delete_completed');
 }

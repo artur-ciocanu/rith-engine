@@ -17,7 +17,7 @@ import * as workflowEventDb from '../db/workflow-events';
 // Lazy logger — NEVER at module scope
 let cachedLog: ReturnType<typeof createLogger> | undefined;
 function getLog(): ReturnType<typeof createLogger> {
-  if (!cachedLog) cachedLog = createLogger('operations');
+  if (!cachedLog) cachedLog = createLogger('operations.workflow');
   return cachedLog;
 }
 

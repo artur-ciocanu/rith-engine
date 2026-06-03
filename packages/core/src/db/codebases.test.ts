@@ -424,45 +424,15 @@ describe('codebases', () => {
   });
 
   describe('deleteCodebase', () => {
-    test('should unlink sessions, conversations, and delete codebase', async () => {
-      // First call: unlink sessions
-      mockQuery.mockResolvedValueOnce(createQueryResult([], 2));
-      // Second call: unlink conversations
-      mockQuery.mockResolvedValueOnce(createQueryResult([], 1));
-      // Third call: delete codebase
+    test('should delete codebase', async () => {
       mockQuery.mockResolvedValueOnce(createQueryResult([], 1));
 
       await deleteCodebase('codebase-123');
 
-      expect(mockQuery).toHaveBeenCalledTimes(3);
-      expect(mockQuery).toHaveBeenNthCalledWith(
-        1,
-        'UPDATE remote_agent_sessions SET codebase_id = NULL WHERE codebase_id = $1',
-        ['codebase-123']
-      );
-      expect(mockQuery).toHaveBeenNthCalledWith(
-        2,
-        'UPDATE remote_agent_conversations SET codebase_id = NULL WHERE codebase_id = $1',
-        ['codebase-123']
-      );
-      expect(mockQuery).toHaveBeenNthCalledWith(
-        3,
-        'DELETE FROM remote_agent_codebases WHERE id = $1',
-        ['codebase-123']
-      );
-    });
-
-    test('should handle codebase with no sessions or conversations', async () => {
-      // First call: unlink sessions (none affected)
-      mockQuery.mockResolvedValueOnce(createQueryResult([], 0));
-      // Second call: unlink conversations (none affected)
-      mockQuery.mockResolvedValueOnce(createQueryResult([], 0));
-      // Third call: delete codebase
-      mockQuery.mockResolvedValueOnce(createQueryResult([], 1));
-
-      await deleteCodebase('codebase-456');
-
-      expect(mockQuery).toHaveBeenCalledTimes(3);
+      expect(mockQuery).toHaveBeenCalledTimes(1);
+      expect(mockQuery).toHaveBeenCalledWith('DELETE FROM remote_agent_codebases WHERE id = $1', [
+        'codebase-123',
+      ]);
     });
   });
 });
