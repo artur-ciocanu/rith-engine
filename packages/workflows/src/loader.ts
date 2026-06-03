@@ -282,10 +282,7 @@ export function parseWorkflow(content: string, filename: string): ParseResult {
     // Parse workflow-level fields using WorkflowBaseSchema for validation
     // Note: modelReasoningEffort and webSearchMode use warn-and-ignore for invalid values
     // (consistent with original behavior) rather than schema-level rejection.
-    const provider =
-      typeof raw.provider === 'string' && raw.provider.length > 0 ? raw.provider : undefined;
     const model = typeof raw.model === 'string' ? raw.model : undefined;
-
 
     // Validate modelReasoningEffort — warn and ignore invalid values (preserve original behavior)
     const modelReasoningEffortResult = modelReasoningEffortSchema.safeParse(
@@ -396,7 +393,6 @@ export function parseWorkflow(content: string, filename: string): ParseResult {
       workflow: {
         name: raw.name,
         description: raw.description,
-        provider,
         model,
         modelReasoningEffort,
         webSearchMode,
@@ -434,4 +430,3 @@ export function parseWorkflow(content: string, filename: string): ParseResult {
     };
   }
 }
-

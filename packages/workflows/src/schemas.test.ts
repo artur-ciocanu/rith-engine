@@ -633,14 +633,12 @@ describe('dagNodeSchema — ScriptNode', () => {
 // ---------------------------------------------------------------------------
 
 describe('SCRIPT_NODE_AI_FIELDS', () => {
-  test('contains provider and model fields', () => {
-    expect(SCRIPT_NODE_AI_FIELDS).toContain('provider');
+  test('contains model field', () => {
     expect(SCRIPT_NODE_AI_FIELDS).toContain('model');
   });
 
   test('contains all AI-specific fields', () => {
     const expectedFields = [
-      'provider',
       'model',
       'context',
       'output_format',
@@ -667,9 +665,8 @@ describe('SCRIPT_NODE_AI_FIELDS', () => {
 // ---------------------------------------------------------------------------
 
 describe('LOOP_NODE_AI_FIELDS', () => {
-  test('excludes model and provider (loop nodes support them)', () => {
+  test('excludes model (loop nodes support it)', () => {
     expect(LOOP_NODE_AI_FIELDS).not.toContain('model');
-    expect(LOOP_NODE_AI_FIELDS).not.toContain('provider');
   });
 
   test('contains all other AI-specific fields from BASH_NODE_AI_FIELDS', () => {

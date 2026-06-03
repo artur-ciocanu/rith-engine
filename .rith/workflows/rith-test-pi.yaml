@@ -3,7 +3,6 @@ description: |
   Simple test workflow to verify the pi provider works with Rith Engine.
   Triggers: "test pi", "test pi provider".
 
-provider: pi
 model: kiro/minimax-m2-5
 
 nodes:

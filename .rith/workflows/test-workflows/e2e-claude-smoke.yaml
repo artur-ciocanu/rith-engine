@@ -4,7 +4,6 @@
 # because the Claude CLI subprocess is slow with those features in CI.
 name: e2e-claude-smoke
 description: "Smoke test for Claude provider. Verifies prompt response."
-provider: claude
 model: haiku
 
 nodes:

@@ -110,7 +110,6 @@ nodes:
         NOT for: ...
 
       # Optional top-level settings:
-      # provider: claude    (or codex)
       # model: sonnet       (or haiku, opus, etc.)
       # interactive: true   (forces foreground execution in web UI)
 

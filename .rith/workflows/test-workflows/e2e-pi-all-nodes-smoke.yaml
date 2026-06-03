@@ -7,7 +7,6 @@
 # Expected runtime: ~10s on haiku (3 AI round-trips + deterministic nodes).
 name: e2e-pi-all-nodes-smoke
 description: 'Pi provider smoke across every CI-compatible node type.'
-provider: pi
 model: anthropic/claude-haiku-4-5
 
 nodes:

@@ -13,7 +13,6 @@ interactive: false
 # branches under ~/.rith/workspaces/<owner>/<repo>/worktrees/.
 worktree:
   enabled: false
-provider: pi
 model: minimax/MiniMax-M2.7
 
 nodes:

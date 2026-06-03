@@ -134,7 +134,6 @@ export const dagNodeBaseSchema = z.object({
   when: z.string().optional(),
   trigger_rule: triggerRuleSchema.optional(),
   model: z.string().optional(),
-  provider: z.string().trim().min(1).optional(),
   context: z.enum(['fresh', 'shared']).optional(),
   output_format: z.record(z.unknown()).optional(),
   allowed_tools: z.array(z.string()).optional(),
@@ -326,7 +325,6 @@ export type DagNode =
 
 /** AI-specific fields that are meaningless on bash nodes — exported for loader warnings */
 export const BASH_NODE_AI_FIELDS: readonly string[] = [
-  'provider',
   'model',
   'context',
   'output_format',
@@ -349,11 +347,11 @@ export const SCRIPT_NODE_AI_FIELDS: readonly string[] = BASH_NODE_AI_FIELDS;
 
 /**
  * AI-specific fields that are unsupported on loop nodes.
- * `model` and `provider` are excluded because the DAG executor resolves and
- * forwards them to each iteration's AI call (see dag-executor.ts:2602-2648).
+ * `model` is excluded because the DAG executor resolves and
+ * forwards it to each iteration's AI call (see dag-executor.ts).
  */
 export const LOOP_NODE_AI_FIELDS: readonly string[] = BASH_NODE_AI_FIELDS.filter(
-  f => f !== 'model' && f !== 'provider'
+  f => f !== 'model'
 );
 
 // ---------------------------------------------------------------------------
@@ -371,8 +369,7 @@ export const LOOP_NODE_AI_FIELDS: readonly string[] = BASH_NODE_AI_FIELDS.filter
  * - retry not allowed on loop nodes
  * - timeout on bash must be positive
  *
- * Note: provider identity is validated in loader.ts (workflow-level) and
- * dag-executor.ts (node-level). Model strings are passed through to the SDK
+ * Model strings are passed through to the SDK
  * unchanged — the SDK is the source of truth for what model names exist.
  */
 export const dagNodeSchema = dagNodeBaseSchema
@@ -551,7 +548,6 @@ export const dagNodeSchema = dagNodeBaseSchema
     // AI-only fields (not applicable to bash/loop nodes)
     const aiOnly = {
       ...(data.model !== undefined ? { model: data.model } : {}),
-      ...(data.provider !== undefined ? { provider: data.provider } : {}),
       ...(data.context !== undefined ? { context: data.context } : {}),
       ...(data.output_format !== undefined ? { output_format: data.output_format } : {}),
       ...(data.allowed_tools !== undefined ? { allowed_tools: data.allowed_tools } : {}),

@@ -9,7 +9,6 @@
 #   Requires an active GitHub Copilot subscription.
 name: e2e-copilot-all-nodes-smoke
 description: 'Copilot provider smoke across every CI-compatible node type plus Copilot-specific options.'
-provider: copilot
 model: gpt-5-mini
 
 nodes:

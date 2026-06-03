@@ -7,7 +7,6 @@
 # Expected runtime: ~12s on haiku (4 AI round-trips + deterministic nodes).
 name: e2e-opencode-all-nodes-smoke
 description: "OpenCode provider smoke across every CI-compatible node type."
-provider: opencode
 model: opencode/big-pickle
 
 nodes:

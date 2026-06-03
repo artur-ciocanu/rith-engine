@@ -1,27 +1,24 @@
-# E2E smoke test — mixed providers (Claude + Codex in same workflow)
-# Verifies: per-node provider override, cross-provider $nodeId.output refs
+# E2E smoke test — mixed models in same workflow
+# Verifies: per-node model override, cross-node $nodeId.output refs
 name: e2e-mixed-providers
-description: "Tests Claude and Codex providers in the same workflow with cross-provider output refs."
+description: "Tests different models in the same workflow with cross-node output refs."
 
-# Default provider is claude
-provider: claude
 model: haiku
 
 nodes:
-  # 1. Claude node — default provider
+  # 1. Default model node
   - id: claude-node
     prompt: "Say 'claude-ok' and nothing else."
     allowed_tools: []
     idle_timeout: 30000
 
-  # 2. Codex node — provider override (runs parallel with claude-node, different providers)
+  # 2. Different model node (runs parallel, different model)
   - id: codex-node
     prompt: "Say 'codex-ok' and nothing else."
-    provider: codex
     model: gpt-5.2
     idle_timeout: 30000
 
-  # 3. Assert both providers returned output
+  # 3. Assert both nodes returned output
   - id: assert
     bash: |
       claude_out="$claude-node.output"
