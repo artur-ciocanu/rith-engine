@@ -14,20 +14,10 @@ import type {
   TokenUsage,
   SendQueryOptions,
   NodeConfig,
-  ProviderDefaultsMap,
-  ProviderCapabilities,
 } from '@rith/providers/types';
 
 // Re-export provider types so existing workflow engine consumers don't break
-export type {
-  IAgentProvider,
-  MessageChunk,
-  TokenUsage,
-  SendQueryOptions,
-  NodeConfig,
-  ProviderDefaultsMap,
-  ProviderCapabilities,
-};
+export type { IAgentProvider, MessageChunk, TokenUsage, SendQueryOptions, NodeConfig };
 
 // Backwards compat alias — deprecated, prefer direct import from @rith/providers/types
 export type WorkflowTokenUsage = TokenUsage;
@@ -69,8 +59,6 @@ export interface IWorkflowPlatform {
 // ---------------------------------------------------------------------------
 
 export interface WorkflowConfig {
-  /** Default assistant provider */
-  assistant: string;
   baseBranch?: string;
   docsPath?: string;
   envVars?: Record<string, string>;
@@ -79,11 +67,9 @@ export interface WorkflowConfig {
     loadDefaultWorkflows?: boolean;
     loadDefaultCommands?: boolean;
   };
-  assistants: ProviderDefaultsMap & {
-    pi: {
-      model?: string;
-      [key: string]: unknown;
-    };
+  pi: {
+    model?: string;
+    [key: string]: unknown;
   };
 }
 

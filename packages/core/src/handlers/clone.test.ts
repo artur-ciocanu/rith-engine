@@ -19,7 +19,7 @@ const mockCreateCodebase = mock(() =>
     name: 'owner/repo',
     repository_url: 'https://github.com/owner/repo',
     default_cwd: '/home/test/.rith/workspaces/owner/repo/source',
-    ai_assistant_type: 'claude',
+    ai_assistant_type: 'pi',
     commands: {},
     created_at: new Date(),
     updated_at: new Date(),
@@ -61,7 +61,7 @@ mock.module('@rith/paths', () => ({
 }));
 
 // ── config-loader mock ──────────────────────────────────────────────────────
-const mockLoadConfig = mock(() => Promise.resolve({ assistant: 'claude' }));
+const mockLoadConfig = mock(() => Promise.resolve({ pi: { model: 'pi' } }));
 mock.module('../config/config-loader', () => ({
   loadConfig: mockLoadConfig,
 }));
@@ -110,7 +110,7 @@ function clearMocks(): void {
   mockUpdateCodebase.mockReset();
   mockFindMarkdownFilesRecursive.mockReset();
   mockLoadConfig.mockReset();
-  mockLoadConfig.mockResolvedValue({ assistant: 'claude' });
+  mockLoadConfig.mockResolvedValue({ pi: { model: 'pi' } });
   mockLogger.info.mockClear();
   mockLogger.debug.mockClear();
   mockLogger.warn.mockClear();
@@ -147,7 +147,7 @@ function makeCodebase(
     name: 'owner/repo',
     repository_url: 'https://github.com/owner/repo',
     default_cwd: '/home/test/.rith/workspaces/owner/repo/source',
-    ai_assistant_type: 'claude',
+    ai_assistant_type: 'pi',
     commands: {},
     created_at: new Date(),
     updated_at: new Date(),
@@ -746,50 +746,7 @@ describe('cloneRepository', () => {
 
   // ── Assistant type detection ───────────────────────────────────────────
   describe('assistant type detection', () => {
-    test('detects codex assistant when .codex folder exists', async () => {
-      // access(): first call is for .git (does not exist), then .codex (exists), then command search
-      let callIndex = 0;
-      spyFsAccess.mockImplementation((path: string) => {
-        if (typeof path === 'string' && path.endsWith('.codex')) {
-          return Promise.resolve(undefined);
-        }
-        if (typeof path === 'string' && path.endsWith('.git')) {
-          callIndex++;
-          // First call is the .git existence check (must REJECT to proceed to clone)
-          if (callIndex === 1)
-            return Promise.reject(Object.assign(new Error('ENOENT'), { code: 'ENOENT' }));
-        }
-        return Promise.reject(Object.assign(new Error('ENOENT'), { code: 'ENOENT' }));
-      });
-      mockCreateCodebase.mockResolvedValueOnce(
-        makeCodebase({ ai_assistant_type: 'codex' }) as ReturnType<typeof makeCodebase>
-      );
-
-      await cloneRepository('https://github.com/owner/repo');
-
-      const createCall = mockCreateCodebase.mock.calls[0] as [
-        {
-          name: string;
-          ai_assistant_type: string;
-        },
-      ];
-      expect(createCall[0].ai_assistant_type).toBe('codex');
-    });
-
-    test('defaults to claude when neither .codex nor .claude folder exists', async () => {
-      spyFsAccess.mockRejectedValue(Object.assign(new Error('ENOENT'), { code: 'ENOENT' }));
-      mockCreateCodebase.mockResolvedValueOnce(
-        makeCodebase({ ai_assistant_type: 'claude' }) as ReturnType<typeof makeCodebase>
-      );
-
-      await cloneRepository('https://github.com/owner/repo');
-
-      const createCall = mockCreateCodebase.mock.calls[0] as [{ ai_assistant_type: string }];
-      expect(createCall[0].ai_assistant_type).toBe('claude');
-    });
-
-    test('uses configured provider when no .codex or .claude folder exists', async () => {
-      mockLoadConfig.mockResolvedValue({ assistant: 'pi' });
+    test('always uses pi as the assistant type', async () => {
       spyFsAccess.mockRejectedValue(Object.assign(new Error('ENOENT'), { code: 'ENOENT' }));
       mockCreateCodebase.mockResolvedValueOnce(
         makeCodebase({ ai_assistant_type: 'pi' }) as ReturnType<typeof makeCodebase>
@@ -801,35 +758,17 @@ describe('cloneRepository', () => {
       expect(createCall[0].ai_assistant_type).toBe('pi');
     });
 
-    test('falls back to claude when loadConfig fails', async () => {
+    test('uses pi even when loadConfig fails', async () => {
       mockLoadConfig.mockRejectedValue(new Error('config load failed'));
       spyFsAccess.mockRejectedValue(Object.assign(new Error('ENOENT'), { code: 'ENOENT' }));
       mockCreateCodebase.mockResolvedValueOnce(
-        makeCodebase({ ai_assistant_type: 'claude' }) as ReturnType<typeof makeCodebase>
+        makeCodebase({ ai_assistant_type: 'pi' }) as ReturnType<typeof makeCodebase>
       );
 
       await cloneRepository('https://github.com/owner/repo');
 
       const createCall = mockCreateCodebase.mock.calls[0] as [{ ai_assistant_type: string }];
-      expect(createCall[0].ai_assistant_type).toBe('claude');
-    });
-
-    test('detects claude assistant when .claude folder exists but .codex does not', async () => {
-      spyFsAccess.mockImplementation((path: string) => {
-        // .codex → ENOENT, .claude → exists, .git → ENOENT, commands → ENOENT
-        if (typeof path === 'string' && path.endsWith('.claude')) {
-          return Promise.resolve(undefined);
-        }
-        return Promise.reject(Object.assign(new Error('ENOENT'), { code: 'ENOENT' }));
-      });
-      mockCreateCodebase.mockResolvedValueOnce(
-        makeCodebase({ ai_assistant_type: 'claude' }) as ReturnType<typeof makeCodebase>
-      );
-
-      await cloneRepository('https://github.com/owner/repo');
-
-      const createCall = mockCreateCodebase.mock.calls[0] as [{ ai_assistant_type: string }];
-      expect(createCall[0].ai_assistant_type).toBe('claude');
+      expect(createCall[0].ai_assistant_type).toBe('pi');
     });
   });
 });

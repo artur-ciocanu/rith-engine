@@ -17,7 +17,6 @@ import {
 } from '@rith/paths';
 import { findMarkdownFilesRecursive } from '../utils/commands';
 import { createLogger } from '@rith/paths';
-import { resolveDefaultAssistant } from '../config/resolve-assistant';
 
 /** Lazy-initialized logger (deferred so test mocks can intercept createLogger) */
 let cachedLog: ReturnType<typeof createLogger> | undefined;
@@ -139,7 +138,7 @@ async function registerRepoAtPath(
   name: string,
   repositoryUrl: string | null
 ): Promise<RegisterResult> {
-  const suggestedAssistant = await resolveDefaultAssistant(targetPath);
+  const suggestedAssistant = 'pi';
 
   // Check if a codebase with this name already exists (dedup by project identity)
   const existing = await codebaseDb.findCodebaseByName(name);

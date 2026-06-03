@@ -4,14 +4,8 @@ import { join } from 'node:path';
 
 import { createLogger } from '@rith/paths';
 
-import type {
-  IAgentProvider,
-  MessageChunk,
-  ProviderCapabilities,
-  SendQueryOptions,
-} from '../types';
+import type { IAgentProvider, MessageChunk, SendQueryOptions } from '../types';
 
-import { PI_CAPABILITIES } from './capabilities';
 import { parsePiConfig } from './config';
 import { parsePiModelRef } from './model-ref';
 
@@ -578,13 +572,5 @@ export class PiProvider implements IAgentProvider {
     } finally {
       sem?.release();
     }
-  }
-
-  getType(): string {
-    return 'pi';
-  }
-
-  getCapabilities(): ProviderCapabilities {
-    return PI_CAPABILITIES;
   }
 }

@@ -35,7 +35,7 @@ describe('codebases', () => {
     name: 'test-project',
     repository_url: 'https://github.com/user/repo',
     default_cwd: '/workspace/test-project',
-    ai_assistant_type: 'claude',
+    ai_assistant_type: 'pi',
     commands: { plan: { path: '.claude/commands/plan.md', description: 'Plan feature' } },
     created_at: new Date(),
     updated_at: new Date(),
@@ -49,13 +49,13 @@ describe('codebases', () => {
         name: 'test-project',
         repository_url: 'https://github.com/user/repo',
         default_cwd: '/workspace/test-project',
-        ai_assistant_type: 'claude',
+        ai_assistant_type: 'pi',
       });
 
       expect(result).toEqual(mockCodebase);
       expect(mockQuery).toHaveBeenCalledWith(
         'INSERT INTO remote_agent_codebases (name, repository_url, default_cwd, ai_assistant_type) VALUES ($1, $2, $3, $4) RETURNING *',
-        ['test-project', 'https://github.com/user/repo', '/workspace/test-project', 'claude']
+        ['test-project', 'https://github.com/user/repo', '/workspace/test-project', 'pi']
       );
     });
 
@@ -74,12 +74,11 @@ describe('codebases', () => {
       expect(result).toEqual(codebaseWithoutOptional);
       expect(mockQuery).toHaveBeenCalledWith(
         'INSERT INTO remote_agent_codebases (name, repository_url, default_cwd, ai_assistant_type) VALUES ($1, $2, $3, $4) RETURNING *',
-        ['test-project', null, '/workspace/test-project', 'claude']
+        ['test-project', null, '/workspace/test-project', 'pi']
       );
     });
 
-    test('defaults ai_assistant_type to claude when no env var set', async () => {
-      delete process.env.DEFAULT_AI_ASSISTANT;
+    test('defaults ai_assistant_type to pi', async () => {
       mockQuery.mockResolvedValueOnce(createQueryResult([mockCodebase]));
 
       await createCodebase({
@@ -87,29 +86,10 @@ describe('codebases', () => {
         default_cwd: '/workspace/test-project',
       });
 
-      expect(mockQuery).toHaveBeenCalledWith(
-        expect.any(String),
-        expect.arrayContaining(['claude'])
-      );
+      expect(mockQuery).toHaveBeenCalledWith(expect.any(String), expect.arrayContaining(['pi']));
     });
 
-    test('reads DEFAULT_AI_ASSISTANT env var when ai_assistant_type omitted', async () => {
-      process.env.DEFAULT_AI_ASSISTANT = 'codex';
-      mockQuery.mockResolvedValueOnce(
-        createQueryResult([{ ...mockCodebase, ai_assistant_type: 'codex' }])
-      );
-
-      await createCodebase({
-        name: 'test-project',
-        default_cwd: '/workspace/test-project',
-      });
-
-      expect(mockQuery).toHaveBeenCalledWith(expect.any(String), expect.arrayContaining(['codex']));
-      delete process.env.DEFAULT_AI_ASSISTANT;
-    });
-
-    test('explicit ai_assistant_type takes priority over env var', async () => {
-      process.env.DEFAULT_AI_ASSISTANT = 'codex';
+    test('explicit ai_assistant_type is passed through', async () => {
       mockQuery.mockResolvedValueOnce(
         createQueryResult([{ ...mockCodebase, ai_assistant_type: 'pi' }])
       );
@@ -121,7 +101,6 @@ describe('codebases', () => {
       });
 
       expect(mockQuery).toHaveBeenCalledWith(expect.any(String), expect.arrayContaining(['pi']));
-      delete process.env.DEFAULT_AI_ASSISTANT;
     });
   });
 
@@ -344,7 +323,7 @@ describe('codebases', () => {
             id: 'cb-123',
             name: 'test-repo',
             default_cwd: '/workspace/test-repo',
-            ai_assistant_type: 'claude',
+            ai_assistant_type: 'pi',
             repository_url: null,
             commands: {},
             created_at: new Date(),

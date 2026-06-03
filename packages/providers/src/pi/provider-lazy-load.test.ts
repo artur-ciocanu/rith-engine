@@ -39,8 +39,6 @@ test('importing and instantiating the Pi provider does not eagerly load the Pi S
   const { PiProvider } = await import('./provider');
 
   const provider = new PiProvider();
-  expect(provider.getType()).toBe('pi');
-  expect(provider.getCapabilities()).toBeDefined();
 
   // If either of these fails, someone reintroduced a static (non-type)
   // `import { ... }` from a Pi SDK package somewhere in the module chain

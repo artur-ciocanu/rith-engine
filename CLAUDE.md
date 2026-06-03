@@ -70,7 +70,7 @@ These are implementation constraints, not slogans. Apply them by default.
 
 **SRP + ISP — Single Responsibility + Interface Segregation**
 - Keep each module and package focused on one concern
-- Extend behavior by implementing existing narrow interfaces (`IPlatformAdapter`, `IAgentProvider`, `IDatabase`, `IWorkflowStore`) whenever possible
+- Extend behavior by implementing existing narrow interfaces (`IPlatformAdapter`, `IAgentProvider`, `IDatabase`, `IWorkflowStore`) whenever possible — note `IAgentProvider` is a slim send-query contract (no `getType`/`getCapabilities` methods)
 - Avoid fat interfaces and "god modules" that mix policy, transport, and storage
 - Do not add unrelated methods to an existing interface — define a new one
 
@@ -277,15 +277,12 @@ packages/
 │       ├── adapters/         # CLI adapter (stdout output)
 │       ├── commands/         # CLI command implementations
 │       └── cli.ts            # CLI entry point
-├── providers/                # @rith/providers - AI agent providers (SDK deps live here)
+├── providers/                # @rith/providers - Pi Coding Agent provider (SDK deps live here)
 │   └── src/
 │       ├── types.ts          # Contract layer (IAgentProvider, SendQueryOptions, MessageChunk — ZERO SDK deps)
-│       ├── registry.ts       # Typed provider registry (ProviderRegistration records)
-│       ├── errors.ts         # UnknownProviderError
-│       ├── claude/           # ClaudeProvider + parseClaudeConfig + MCP/hooks/skills translation
-│       ├── codex/            # CodexProvider + parseCodexConfig + binary-resolver
-│       ├── community/pi/     # PiProvider (builtIn: false) — @mariozechner/pi-coding-agent, ~20 LLM backends
-│       ├── community/opencode/ # OpenCodeProvider (builtIn: false) — @rith/opencode SDK, local embedded runtime
+│       ├── pi/               # PiProvider + config + model-ref + event-bridge + session-resolver
+│       ├── shared/           # Shared utilities (skills, structured-output)
+│       ├── mcp/              # MCP configuration
 │       └── index.ts          # Package exports
 ├── core/                     # @rith/core - Shared business logic
 │   └── src/
@@ -425,7 +422,7 @@ import type { DagNode, WorkflowDefinition } from '@/lib/api';
 **Package Split:**
 - **@rith/paths**: Path resolution utilities, Pino logger factory, web dist cache path (`getWebDistDir`), CWD env stripper (`stripCwdEnv`, `strip-cwd-env-boot`) (no @rith/* deps; `pino` and `dotenv` are allowed external deps)
 - **@rith/git**: Git operations - worktrees, branches, repos, exec wrappers (depends only on @rith/paths)
-- **@rith/providers**: AI agent providers (Claude, Codex, Pi community) — owns SDK deps, `IAgentProvider` interface, `sendQuery()` contract, and provider-specific option translation. `@rith/providers/types` is the contract subpath (zero SDK deps, zero runtime side effects) that `@rith/workflows` imports from. Providers receive raw `nodeConfig` + `assistantConfig` and translate to SDK-specific options internally. Core providers live under `claude/` and `codex/`; community providers live under `community/` (currently `community/pi/`, registered with `builtIn: false`).
+- **@rith/providers**: Pi Coding Agent provider — owns SDK deps, `IAgentProvider` interface, `sendQuery()` contract, and Pi-specific option translation. `@rith/providers/types` is the contract subpath (zero SDK deps, zero runtime side effects) that `@rith/workflows` imports from. The provider lives under `pi/`; shared utilities under `shared/`.
 - **@rith/isolation**: Worktree isolation types, providers, resolver, error classifiers (depends only on @rith/git + @rith/paths)
 - **@rith/workflows**: Workflow engine - loader, router, executor, DAG, logger, bundled defaults (depends only on @rith/git + @rith/paths + @rith/providers/types + @hono/zod-openapi + zod; DB/AI/config injected via `WorkflowDeps`)
 - **@rith/cli**: Command-line interface for running workflows and starting the web UI server (depends on @rith/server + @rith/adapters for the serve command)
@@ -465,11 +462,9 @@ import type { DagNode, WorkflowDefinition } from '@/lib/api';
 - Session management: Create new or resume existing
 - Stream AI responses to platform
 
-**4. AI Agent Providers** (`packages/providers/src/`)
-- Implement `IAgentProvider` interface
-- **ClaudeProvider**: `@anthropic-ai/claude-agent-sdk`
-- **CodexProvider**: `@openai/codex-sdk`
-- **PiProvider** (community, `builtIn: false`): `@mariozechner/pi-coding-agent` — one harness for ~20 LLM backends via `<provider>/<model>` refs (e.g. `anthropic/claude-haiku-4-5`, `openrouter/qwen/qwen3-coder`); supports extensions, skills, tool restrictions, thinking level, best-effort structured output. See `packages/docs-web/src/content/docs/getting-started/ai-assistants.md` for setup, capability matrix, and extension config.
+**4. AI Agent Provider** (`packages/providers/src/`)
+- Implements `IAgentProvider` interface
+- **PiProvider**: `@mariozechner/pi-coding-agent` — one harness for ~20 LLM backends via `<provider>/<model>` refs (e.g. `anthropic/claude-haiku-4-5`, `openrouter/qwen/qwen3-coder`); supports extensions, skills, tool restrictions, thinking level, best-effort structured output. See `packages/docs-web/src/content/docs/getting-started/ai-assistants.md` for setup, capability matrix, and extension config.
 - Streaming: `for await (const event of events) { await platform.send(event) }`
 
 ### Configuration
@@ -481,30 +476,19 @@ see .rith/config.yaml setup as needed
 
 **Assistant Defaults:**
 
-The system supports configuring default models and options per assistant in `.rith/config.yaml`:
+Pi provider defaults are configured in `.rith/config.yaml`:
 
 ```yaml
 assistants:
-  claude:
-    model: sonnet  # or 'opus', 'haiku', 'claude-*', 'inherit'
-    settingSources:  # Controls which CLAUDE.md, skills, commands, and agents the SDK loads
-      - project      # Project-level <cwd>/.claude/ (included in default)
-      - user         # User-level ~/.claude/ (included in default; omit both to restrict to project-only)
-    claudeBinaryPath: /absolute/path/to/claude  # Optional: Claude Code executable.
-                                                # Native binary (curl installer at
-                                                # ~/.local/bin/claude), npm cli.js, or
-                                                # the npm platform-package directory
-                                                # (e.g. @anthropic-ai/claude-code-win32-x64)
-                                                # which is auto-expanded to claude/claude.exe.
-                                                # Required in compiled binaries if
-                                                # CLAUDE_BIN_PATH env var is not set.
-  codex:
-    model: gpt-5.3-codex
-    modelReasoningEffort: medium  # 'minimal' | 'low' | 'medium' | 'high' | 'xhigh'
-    webSearchMode: live  # 'disabled' | 'cached' | 'live'
-    additionalDirectories:
-      - /absolute/path/to/other/repo
-    codexBinaryPath: /usr/local/bin/codex  # Optional: custom Codex CLI binary path
+  pi:
+    model: anthropic/claude-haiku-4-5  # '<pi-provider-id>/<model-id>' format
+    enableExtensions: false            # load Pi's extension ecosystem (default: false)
+    interactive: false                 # give extensions a UI bridge (requires enableExtensions)
+    extensionFlags:                    # per-extension feature flags
+      plan: true
+    env:                               # env vars for extensions
+      PLANNOTATOR_REMOTE: "1"
+    maxConcurrent: 4                   # max concurrent session.prompt() calls
 
 # docs:
 #   path: docs  # Optional: default is docs/
@@ -516,9 +500,8 @@ assistants:
 3. SDK defaults
 
 **Model Validation:**
-- Workflows are validated at load time for provider _identity_ only — `provider:` (workflow-level and per-node) must be a registered provider id, otherwise the YAML is rejected with `Unknown provider '<id>'. Registered: claude, codex, pi`.
-- Model strings are NOT validated by Rith Engine. Whatever the user writes in `model:` is forwarded verbatim to the resolved SDK. Vendor SDKs ship new models faster tha Rith Engine can update; the SDK and the upstream API are the source of truth for what names exist.
-- Provider is resolved via an explicit chain: `node.provider ?? workflow.provider ?? config.assistant`. Model never influences provider selection.
+- Model strings are NOT validated by Rith Engine. Whatever the user writes in `model:` is forwarded verbatim to the Pi SDK. Vendor SDKs ship new models faster than Rith Engine can update; the SDK and the upstream API are the source of truth for what names exist.
+- Pi is the sole provider — no provider selection chain needed. Model selection is configured via `assistants.pi.model` in config.yaml or per-node `model:` in workflow YAML.
 
 ### Running the App in Worktrees
 
@@ -570,7 +553,6 @@ curl http://localhost:3637/api/conversations/<conversationId>/messages
 │   │   ├── runs/{id}/            # Per-run artifacts ($ARTIFACTS_DIR)
 │   │   └── uploads/{convId}/     # Web UI file uploads (ephemeral)
 │   └── logs/                     # Workflow execution logs
-├── vendor/codex/                  # Codex native binary (binary builds, user-placed)
 ├── web-dist/<version>/            # Cached web UI dist (rith serve, binary only)
 ├── update-check.json              # Update check cache (binary builds, 24h TTL)
 ├── rith.db                     # SQLite database (when DATABASE_URL not set)

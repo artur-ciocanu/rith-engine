@@ -54,7 +54,6 @@ mock.module('./event-emitter', () => ({
   getWorkflowEventEmitter: mock(() => mockEmitter),
 }));
 
-
 // --- Import after mocks ---
 import { executeWorkflow, hydrateResumableRun } from './executor';
 import type { WorkflowDeps, IWorkflowPlatform, WorkflowConfig } from './deps';
@@ -94,11 +93,7 @@ function makeDeps(store?: IWorkflowStore): WorkflowDeps {
     store: store ?? makeStore(),
     loadConfig: mock(
       async (): Promise<WorkflowConfig> => ({
-        assistant: 'claude' as const,
-        assistants: {
-          claude: {},
-          codex: {},
-        },
+        pi: {},
         baseBranch: '',
         commands: { folder: '' },
       })
@@ -474,8 +469,7 @@ describe('executeWorkflow', () => {
         store,
         loadConfig: mock(
           async (): Promise<WorkflowConfig> => ({
-            assistant: 'claude' as const,
-            assistants: { claude: {}, codex: {} },
+            pi: {},
             baseBranch: '',
             commands: { folder: '' },
             docsPath: 'packages/docs-web/src/content/docs',
@@ -640,8 +634,7 @@ describe('executeWorkflow', () => {
       const deps = makeDeps(store);
       // Override loadConfig to return file-level envVars
       (deps.loadConfig as ReturnType<typeof mock>).mockResolvedValueOnce({
-        assistant: 'claude' as const,
-        assistants: { claude: {}, codex: {} },
+        pi: {},
         baseBranch: '',
         commands: { folder: '' },
         envVars: { FILE_KEY: 'file_val' },

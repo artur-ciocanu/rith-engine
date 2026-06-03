@@ -32,22 +32,12 @@ import {
   loadRepoConfig,
   loadConfig,
   clearConfigCache,
-  toSafeConfig,
   updateGlobalConfig,
 } from './config-loader';
 
 describe('config-loader', () => {
   const originalEnv: Record<string, string | undefined> = {};
-  const envVars = [
-    'DEFAULT_AI_ASSISTANT',
-    'TELEGRAM_STREAMING_MODE',
-    'DISCORD_STREAMING_MODE',
-    'SLACK_STREAMING_MODE',
-    'MAX_CONCURRENT_CONVERSATIONS',
-    'WORKSPACE_PATH',
-    'WORKTREE_BASE',
-    'RITH_HOME',
-  ];
+  const envVars = ['WORKSPACE_PATH', 'WORKTREE_BASE', 'RITH_HOME'];
 
   beforeEach(() => {
     clearConfigCache();
@@ -88,21 +78,16 @@ describe('config-loader', () => {
 
     test('parses valid YAML config', async () => {
       mockFsReadFile.mockResolvedValue(`
-defaultAssistant: codex
-streaming:
-  telegram: batch
-concurrency:
-  maxConversations: 5
+pi:
+  model: google/gemini-2.5-pro
 `);
 
       const config = await loadGlobalConfig();
-      expect(config.defaultAssistant).toBe('codex');
-      expect(config.streaming?.telegram).toBe('batch');
-      expect(config.concurrency?.maxConversations).toBe(5);
+      expect(config.pi?.model).toBe('google/gemini-2.5-pro');
     });
 
     test('caches config on subsequent calls', async () => {
-      mockFsReadFile.mockResolvedValue('defaultAssistant: claude');
+      mockFsReadFile.mockResolvedValue('pi:\n  model: opus');
 
       await loadGlobalConfig();
       await loadGlobalConfig();
@@ -112,7 +97,7 @@ concurrency:
     });
 
     test('reloads config when forceReload is true', async () => {
-      mockFsReadFile.mockResolvedValue('defaultAssistant: claude');
+      mockFsReadFile.mockResolvedValue('pi:\n  model: opus');
 
       await loadGlobalConfig();
       await loadGlobalConfig(true);
@@ -161,10 +146,10 @@ concurrency:
 
   describe('loadRepoConfig', () => {
     test('loads from .rith/config.yaml', async () => {
-      mockFsReadFile.mockResolvedValue('assistant: codex');
+      mockFsReadFile.mockResolvedValue('pi:\n  model: google/gemini-2.5-pro');
 
       const config = await loadRepoConfig('/test/repo');
-      expect(config.assistant).toBe('codex');
+      expect(config.pi?.model).toBe('google/gemini-2.5-pro');
     });
 
     test('returns empty object when no config found', async () => {
@@ -223,85 +208,10 @@ concurrency:
 
       const config = await loadConfig();
 
-      expect(config.assistant).toBe('claude');
-      // Built-ins always present; community providers (like `pi`) are
-      // seeded dynamically from the registry — check the built-ins
-      // explicitly rather than asserting an exhaustive shape.
-      expect(config.assistants.claude).toEqual({});
-      expect(config.assistants.codex).toEqual({});
-      expect(config.streaming.telegram).toBe('stream');
-      expect(config.concurrency.maxConversations).toBe(10);
+      expect(config.pi).toEqual({});
     });
 
-    test('env vars override config files', async () => {
-      mockFsReadFile.mockResolvedValue(`
-defaultAssistant: claude
-streaming:
-  telegram: stream
-`);
-
-      process.env.DEFAULT_AI_ASSISTANT = 'codex';
-      process.env.TELEGRAM_STREAMING_MODE = 'batch';
-
-      const config = await loadConfig();
-
-      expect(config.assistant).toBe('codex');
-      expect(config.streaming.telegram).toBe('batch');
-    });
-
-    test('throws on unknown DEFAULT_AI_ASSISTANT env var', async () => {
-      mockFsReadFile.mockResolvedValue('');
-      process.env.DEFAULT_AI_ASSISTANT = 'nonexistent-provider';
-
-      await expect(loadConfig()).rejects.toThrow(/not a registered provider/);
-    });
-
-    test('throws on unknown defaultAssistant in global config', async () => {
-      mockFsReadFile.mockResolvedValue('defaultAssistant: nonexistent-provider');
-
-      await expect(loadConfig()).rejects.toThrow(/not a registered provider/);
-    });
-
-    test('throws on unknown assistant in repo config', async () => {
-      mockFsReadFile.mockImplementation(async (path: string) => {
-        const normalized = path.replace(/\\/g, '/');
-        if (normalized.includes('/tmp/test-repo/.rith/config.yaml')) {
-          return 'assistant: nonexistent-provider';
-        }
-        return '';
-      });
-
-      await expect(loadConfig('/tmp/test-repo')).rejects.toThrow(/not a registered provider/);
-    });
-
-    test('repo config overrides global config', async () => {
-      // Helper to check path in cross-platform way (handles both / and \ separators)
-      const pathMatches = (path: string, pattern: string): boolean => {
-        const normalizedPath = path.replace(/\\/g, '/');
-        return normalizedPath.includes(pattern);
-      };
-
-      let globalConfigRead = false;
-      mockFsReadFile.mockImplementation(async (path: string) => {
-        // First check for repo-specific config path (contains /repo/.rith/)
-        if (pathMatches(path, '/repo/.rith/config.yaml')) {
-          return 'assistant: codex';
-        }
-        // Then check for global config (just .rith/config.yaml but not under /repo/)
-        if (pathMatches(path, '.rith/config.yaml') && !globalConfigRead) {
-          globalConfigRead = true;
-          return 'defaultAssistant: claude';
-        }
-        const error = new Error('ENOENT') as NodeJS.ErrnoException;
-        error.code = 'ENOENT';
-        throw error;
-      });
-
-      const config = await loadConfig('/test/repo');
-      expect(config.assistant).toBe('codex');
-    });
-
-    test('merges assistant defaults from global and repo config', async () => {
+    test('repo config overrides global pi config', async () => {
       const pathMatches = (path: string, pattern: string): boolean => {
         const normalizedPath = path.replace(/\\/g, '/');
         return normalizedPath.includes(pattern);
@@ -310,11 +220,11 @@ streaming:
       let globalConfigRead = false;
       mockFsReadFile.mockImplementation(async (path: string) => {
         if (pathMatches(path, '/repo/.rith/config.yaml')) {
-          return `assistants:\n  codex:\n    webSearchMode: live\n    additionalDirectories:\n      - /repo\n`;
+          return 'pi:\n  model: gemini';
         }
         if (pathMatches(path, '.rith/config.yaml') && !globalConfigRead) {
           globalConfigRead = true;
-          return `assistants:\n  claude:\n    model: sonnet\n  codex:\n    model: gpt-5.2-codex\n    modelReasoningEffort: medium\n`;
+          return 'pi:\n  model: opus';
         }
         const error = new Error('ENOENT') as NodeJS.ErrnoException;
         error.code = 'ENOENT';
@@ -322,11 +232,32 @@ streaming:
       });
 
       const config = await loadConfig('/test/repo');
-      expect(config.assistants.claude.model).toBe('sonnet');
-      expect(config.assistants.codex.model).toBe('gpt-5.2-codex');
-      expect(config.assistants.codex.modelReasoningEffort).toBe('medium');
-      expect(config.assistants.codex.webSearchMode).toBe('live');
-      expect(config.assistants.codex.additionalDirectories).toEqual(['/repo']);
+      expect(config.pi.model).toBe('gemini');
+    });
+
+    test('merges pi config from global and repo', async () => {
+      const pathMatches = (path: string, pattern: string): boolean => {
+        const normalizedPath = path.replace(/\\/g, '/');
+        return normalizedPath.includes(pattern);
+      };
+
+      let globalConfigRead = false;
+      mockFsReadFile.mockImplementation(async (path: string) => {
+        if (pathMatches(path, '/repo/.rith/config.yaml')) {
+          return 'pi:\n  enableExtensions: true';
+        }
+        if (pathMatches(path, '.rith/config.yaml') && !globalConfigRead) {
+          globalConfigRead = true;
+          return 'pi:\n  model: opus';
+        }
+        const error = new Error('ENOENT') as NodeJS.ErrnoException;
+        error.code = 'ENOENT';
+        throw error;
+      });
+
+      const config = await loadConfig('/test/repo');
+      expect(config.pi.model).toBe('opus');
+      expect(config.pi.enableExtensions).toBe(true);
     });
 
     test('propagates baseBranch from repo worktree config', async () => {
@@ -478,22 +409,21 @@ env:
   });
 
   describe('settingSources config', () => {
-    test('merges settingSources from global config', async () => {
+    test('merges settingSources from global pi config', async () => {
       mockFsReadFile.mockResolvedValue(`
-assistants:
-  claude:
-    settingSources:
-      - project
-      - user
+pi:
+  settingSources:
+    - project
+    - user
 `);
       const config = await loadConfig();
-      expect(config.assistants.claude.settingSources).toEqual(['project', 'user']);
+      expect(config.pi.settingSources).toEqual(['project', 'user']);
     });
 
     test('defaults to undefined settingSources when not configured', async () => {
       mockFsReadFile.mockResolvedValue('');
       const config = await loadConfig();
-      expect(config.assistants.claude.settingSources).toBeUndefined();
+      expect(config.pi.settingSources).toBeUndefined();
     });
 
     test('repo settingSources overrides global', async () => {
@@ -505,11 +435,11 @@ assistants:
       let globalConfigRead = false;
       mockFsReadFile.mockImplementation(async (path: string) => {
         if (pathMatches(path, '/repo/.rith/config.yaml')) {
-          return `assistants:\n  claude:\n    settingSources:\n      - project\n`;
+          return 'pi:\n  settingSources:\n    - project';
         }
         if (pathMatches(path, '.rith/config.yaml') && !globalConfigRead) {
           globalConfigRead = true;
-          return `assistants:\n  claude:\n    settingSources:\n      - project\n      - user\n`;
+          return 'pi:\n  settingSources:\n    - project\n    - user';
         }
         const error = new Error('ENOENT') as NodeJS.ErrnoException;
         error.code = 'ENOENT';
@@ -517,34 +447,19 @@ assistants:
       });
 
       const config = await loadConfig('/test/repo');
-      expect(config.assistants.claude.settingSources).toEqual(['project']);
-    });
-
-    test('toSafeConfig does not expose settingSources (server-internal field)', async () => {
-      mockFsReadFile.mockResolvedValue(`
-assistants:
-  claude:
-    settingSources:
-      - project
-      - user
-`);
-      const config = await loadConfig();
-      const safe = toSafeConfig(config);
-      expect(safe.assistants.claude).not.toHaveProperty('settingSources');
+      expect(config.pi.settingSources).toEqual(['project']);
     });
   });
 
   describe('updateGlobalConfig', () => {
-    test('merges assistant config into existing file', async () => {
+    test('merges pi config into existing file', async () => {
       mockFsReadFile.mockResolvedValue(`
-defaultAssistant: claude
-assistants:
-  claude:
-    model: sonnet
+pi:
+  model: sonnet
 `);
 
       await updateGlobalConfig({
-        assistants: { claude: { model: 'opus' } },
+        pi: { model: 'opus' },
       });
 
       expect(mockFsWriteFile).toHaveBeenCalledTimes(1);
@@ -554,22 +469,18 @@ assistants:
 
     test('preserves existing non-updated fields', async () => {
       mockFsReadFile.mockResolvedValue(`
-defaultAssistant: codex
-botName: MyBot
-assistants:
-  codex:
-    model: gpt-5.3-codex
-    modelReasoningEffort: medium
+pi:
+  model: sonnet
+  enableExtensions: true
 `);
 
       await updateGlobalConfig({
-        defaultAssistant: 'claude',
+        pi: { model: 'opus' },
       });
 
       expect(mockFsWriteFile).toHaveBeenCalledTimes(1);
       const writtenContent = mockFsWriteFile.mock.calls[0]?.[1] as string;
-      expect(writtenContent).toContain('claude');
-      expect(writtenContent).toContain('MyBot');
+      expect(writtenContent).toContain('opus');
     });
 
     test('creates config when file does not exist', async () => {
@@ -578,12 +489,12 @@ assistants:
       mockFsReadFile.mockRejectedValue(error);
 
       await updateGlobalConfig({
-        defaultAssistant: 'codex',
+        pi: { model: 'gemini' },
       });
 
-      expect(mockFsWriteFile).toHaveBeenCalled();
-      const writtenContent = mockFsWriteFile.mock.calls[0]?.[1] as string;
-      expect(writtenContent).toContain('codex');
+      expect(mockFsWriteFile).toHaveBeenCalledTimes(2); // 1st: default template, 2nd: merged update
+      const writtenContent = mockFsWriteFile.mock.calls[1]?.[1] as string;
+      expect(writtenContent).toContain('gemini');
     });
 
     test('throws on permission errors', async () => {
@@ -592,52 +503,9 @@ assistants:
       permError.code = 'EACCES';
       mockFsWriteFile.mockRejectedValue(permError);
 
-      await expect(updateGlobalConfig({ defaultAssistant: 'codex' })).rejects.toThrow(
+      await expect(updateGlobalConfig({ pi: { model: 'test' } })).rejects.toThrow(
         'Permission denied'
       );
-    });
-  });
-
-  describe('toSafeConfig', () => {
-    test('strips paths from MergedConfig', async () => {
-      mockFsReadFile.mockResolvedValue('');
-      const config = await loadConfig();
-      const safe = toSafeConfig(config);
-      expect(safe).not.toHaveProperty('paths');
-    });
-
-    test('strips entire commands object from MergedConfig', async () => {
-      mockFsReadFile.mockResolvedValue('');
-      const config = await loadConfig();
-      const safe = toSafeConfig(config);
-      expect(safe).not.toHaveProperty('commands');
-    });
-
-    test('strips additionalDirectories from assistants.codex', async () => {
-      mockFsReadFile.mockResolvedValue(`
-assistants:
-  codex:
-    additionalDirectories:
-      - /sensitive/path
-`);
-      const config = await loadConfig();
-      const safe = toSafeConfig(config);
-      expect(safe.assistants.codex).not.toHaveProperty('additionalDirectories');
-    });
-
-    test('preserves non-sensitive fields', async () => {
-      mockFsReadFile.mockResolvedValue('defaultAssistant: codex');
-      const config = await loadConfig();
-      const safe = toSafeConfig(config);
-      expect(typeof safe.botName).toBe('string');
-      expect(safe.assistant).toBe('codex');
-      expect(safe.streaming).toBeDefined();
-      expect(safe.concurrency).toBeDefined();
-      expect(safe.defaults).toBeDefined();
-      expect(safe.assistants).toBeDefined();
-      expect(safe.assistants.claude).toBeDefined();
-      expect(safe.assistants.codex).toBeDefined();
-      expect(safe.assistants.codex).not.toHaveProperty('additionalDirectories');
     });
   });
 });

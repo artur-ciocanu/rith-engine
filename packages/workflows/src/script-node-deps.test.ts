@@ -111,7 +111,6 @@ const mockSendQuery = mock(function* () {
 
 const mockGetAgentProvider = mock(() => ({
   sendQuery: mockSendQuery,
-  getType: () => 'claude',
 }));
 
 function createMockDeps(): WorkflowDeps {
@@ -120,10 +119,9 @@ function createMockDeps(): WorkflowDeps {
     getAgentProvider: mockGetAgentProvider,
     loadConfig: mock(() =>
       Promise.resolve({
-        assistant: 'claude' as const,
         commands: {},
         defaults: { loadDefaultCommands: false, loadDefaultWorkflows: false },
-        assistants: { claude: {}, codex: {} },
+        pi: {},
       })
     ),
   };
@@ -156,8 +154,7 @@ function makeWorkflowRun(id: string): WorkflowRun {
 }
 
 const minimalConfig: WorkflowConfig = {
-  assistant: 'claude',
-  assistants: { claude: {}, codex: {} },
+  pi: {},
   commands: {},
   defaults: { loadDefaultCommands: false, loadDefaultWorkflows: false },
 };

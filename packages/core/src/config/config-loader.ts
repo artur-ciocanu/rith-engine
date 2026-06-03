@@ -26,39 +26,9 @@ export async function writeConfigFile(
 ): Promise<void> {
   await writeFile(path, content, { encoding: 'utf-8', ...options });
 }
-import type {
-  GlobalConfig,
-  RepoConfig,
-  MergedConfig,
-  AssistantDefaults,
-  AssistantDefaultsConfig,
-} from './config-types';
+import type { GlobalConfig, RepoConfig, MergedConfig } from './config-types';
 
 import { createLogger } from '@rith/paths';
-
-function mergeAssistantDefaults(
-  base: AssistantDefaults,
-  overrides?: AssistantDefaultsConfig
-): AssistantDefaults {
-  const merged: AssistantDefaults = { ...base };
-  for (const [providerId, providerDefaults] of Object.entries(base)) {
-    if (providerDefaults && typeof providerDefaults === 'object') {
-      merged[providerId] = { ...providerDefaults };
-    }
-  }
-
-  if (!overrides) return merged;
-
-  for (const [providerId, providerDefaults] of Object.entries(overrides)) {
-    if (!providerDefaults || typeof providerDefaults !== 'object') continue;
-    merged[providerId] = {
-      ...(merged[providerId] ?? {}),
-      ...providerDefaults,
-    };
-  }
-
-  return merged;
-}
 
 /** Lazy-initialized logger (deferred so test mocks can intercept createLogger) */
 let cachedLog: ReturnType<typeof createLogger> | undefined;
@@ -83,13 +53,9 @@ let cachedGlobalConfig: GlobalConfig | null = null;
 const DEFAULT_CONFIG_CONTENT = `# Rith Engine Global Configuration
 # See: https://github.com/artur-ciocanu/rith-engine/blob/main/docs/configuration.md
 
-# Default AI assistant
-# defaultAssistant: pi
-
-# Assistant defaults
-# assistants:
-#   pi:
-#     model: default
+# Pi assistant defaults
+# pi:
+#   model: default
 `;
 
 /**
@@ -180,11 +146,8 @@ export async function loadRepoConfig(repoPath: string): Promise<RepoConfig> {
  * Get default configuration
  */
 function getDefaults(): MergedConfig {
-  const registeredAssistants: AssistantDefaults = { pi: {} };
-
   return {
-    assistant: 'pi',
-    assistants: registeredAssistants,
+    pi: {},
     paths: {
       workspaces: getRithWorkspacesPath(),
       worktrees: getRithWorktreesPath(),
@@ -205,12 +168,6 @@ function getDefaults(): MergedConfig {
  * Apply environment variable overrides
  */
 function applyEnvOverrides(config: MergedConfig): MergedConfig {
-  // Assistant override
-  const envAssistant = process.env.DEFAULT_AI_ASSISTANT;
-  if (envAssistant && envAssistant.length > 0) {
-    config.assistant = envAssistant;
-  }
-
   // Path overrides (these come from rith-paths.ts which already checks env vars)
   // No need to re-apply here since getDefaults() uses those functions
 
@@ -221,17 +178,9 @@ function applyEnvOverrides(config: MergedConfig): MergedConfig {
  * Merge global config into defaults
  */
 function mergeGlobalConfig(defaults: MergedConfig, global: GlobalConfig): MergedConfig {
-  const result: MergedConfig = {
-    ...defaults,
-    assistants: mergeAssistantDefaults(defaults.assistants),
-  };
+  const result: MergedConfig = { ...defaults };
 
-  // Assistant preference
-  if (global.defaultAssistant) {
-    result.assistant = global.defaultAssistant;
-  }
-
-  result.assistants = mergeAssistantDefaults(result.assistants, global.assistants);
+  result.pi = { ...defaults.pi, ...global.pi };
 
   // Path preferences
   if (global.paths) {
@@ -246,17 +195,9 @@ function mergeGlobalConfig(defaults: MergedConfig, global: GlobalConfig): Merged
  * Merge repo config into merged config
  */
 function mergeRepoConfig(merged: MergedConfig, repo: RepoConfig): MergedConfig {
-  const result: MergedConfig = {
-    ...merged,
-    assistants: mergeAssistantDefaults(merged.assistants),
-  };
+  const result: MergedConfig = { ...merged };
 
-  // Assistant override (repo-level takes precedence)
-  if (repo.assistant) {
-    result.assistant = repo.assistant;
-  }
-
-  result.assistants = mergeAssistantDefaults(result.assistants, repo.assistants);
+  result.pi = { ...merged.pi, ...repo.pi };
 
   // Commands config
   if (repo.commands) {
@@ -340,7 +281,7 @@ export function clearConfigCache(): void {
 export function logConfig(config: MergedConfig): void {
   getLog().info(
     {
-      assistant: config.assistant,
+      pi: config.pi,
     },
     'config_loaded'
   );
@@ -361,13 +302,8 @@ export async function updateGlobalConfig(updates: Partial<GlobalConfig>): Promis
     // Deep-merge: only overwrite defined keys
     const merged: GlobalConfig = { ...current };
 
-    if (updates.defaultAssistant !== undefined) merged.defaultAssistant = updates.defaultAssistant;
-
-    if (updates.assistants) {
-      merged.assistants = mergeAssistantDefaults(
-        mergeAssistantDefaults(getDefaults().assistants, current.assistants),
-        updates.assistants
-      );
+    if (updates.pi) {
+      merged.pi = { ...(current.pi ?? {}), ...updates.pi };
     }
 
     // Serialize to YAML and write

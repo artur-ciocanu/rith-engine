@@ -11,43 +11,15 @@
 
 // Provider config defaults — canonical definitions live in @rith/providers/types.
 // Imported and re-exported here so existing consumers don't break.
-import type {
-  PiProviderDefaults,
-  ProviderDefaultsMap,
-} from '@rith/providers/types';
+import type { PiProviderDefaults } from '@rith/providers/types';
 
-export type {
-  PiProviderDefaults,
-  ProviderDefaultsMap,
-};
-
-/**
- * Optional assistant defaults in user-facing config files.
- * Only `pi` has a typed shape; the generic index signature
- * (`ProviderDefaultsMap`) allows forward-compat without code changes.
- */
-export type AssistantDefaultsConfig = ProviderDefaultsMap & {
-  pi?: PiProviderDefaults;
-};
-
-/**
- * Required variant — after `loadConfig` the pi entry is always present.
- */
-export type AssistantDefaults = ProviderDefaultsMap & {
-  pi: PiProviderDefaults;
-};
+export type { PiProviderDefaults };
 
 export interface GlobalConfig {
   /**
-   * Default AI assistant when no codebase-specific preference
-   * @default 'pi'
+   * Pi assistant defaults (model, reasoning effort, etc.)
    */
-  defaultAssistant?: string;
-
-  /**
-   * Assistant-specific defaults (model, reasoning effort, etc.)
-   */
-  assistants?: AssistantDefaultsConfig;
+  pi?: PiProviderDefaults;
 
   /**
    * Directory preferences (usually not needed - defaults work well)
@@ -153,14 +125,9 @@ export interface RepoConfig {
   };
 
   /**
-   * Override AI assistant for this repository
+   * Pi assistant defaults for this repository
    */
-  assistant?: string;
-
-  /**
-   * Per-repo assistant defaults
-   */
-  assistants?: AssistantDefaultsConfig;
+  pi?: PiProviderDefaults;
 }
 
 /**
@@ -168,8 +135,7 @@ export interface RepoConfig {
  * Environment variables take precedence
  */
 export interface MergedConfig {
-  assistant: string;
-  assistants: AssistantDefaults;
+  pi: PiProviderDefaults;
   paths: {
     workspaces: string;
     worktrees: string;

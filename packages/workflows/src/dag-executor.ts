@@ -16,11 +16,7 @@ import type {
   WorkflowConfig,
   WorkflowDeps,
 } from './deps';
-import type {
-  SendQueryOptions,
-  NodeConfig,
-  TokenUsage,
-} from '@rith/providers/types';
+import type { SendQueryOptions, NodeConfig, TokenUsage } from '@rith/providers/types';
 import type {
   DagNode,
   ApprovalNode,
@@ -348,10 +344,8 @@ async function resolveNodeModelAndOptions(
   model: string | undefined;
   options: SendQueryOptions | undefined;
 }> {
-  const provider = 'pi';
-  const providerAssistantConfig = config.assistants[provider];
-  const model: string | undefined =
-    node.model ?? workflowModel ?? (providerAssistantConfig?.model as string | undefined);
+  const providerAssistantConfig = config.pi;
+  const model: string | undefined = node.model ?? workflowModel ?? providerAssistantConfig?.model;
 
   // Surface agents + skills ID collision — user-defined 'dag-node-skills'
   // silently overrides Rith Engine's skills wrapper.
@@ -396,7 +390,7 @@ async function resolveNodeModelAndOptions(
   };
 
   // Pass assistantConfig from config — provider parses internally
-  const assistantConfig = config.assistants[provider] ?? {};
+  const assistantConfig = config.pi ?? {};
 
   const options: SendQueryOptions = {
     ...baseOptions,
@@ -1658,7 +1652,7 @@ function buildLoopNodeOptions(
   if (config.envVars && Object.keys(config.envVars).length > 0) {
     options.env = config.envVars;
   }
-  options.assistantConfig = config.assistants['pi'] ?? {};
+  options.assistantConfig = config.pi ?? {};
   // Pass workflow-level options as nodeConfig so providers can apply them
   if (workflowLevelOptions) {
     options.nodeConfig = {
@@ -1718,11 +1712,7 @@ async function executeLoopNode(
   let loopTotalCostUsd: number | undefined;
   let loopFinalStopReason: string | undefined;
   let loopTotalNumTurns: number | undefined;
-  const resolvedOptions = buildLoopNodeOptions(
-    workflowModel,
-    config,
-    workflowLevelOptions
-  );
+  const resolvedOptions = buildLoopNodeOptions(workflowModel, config, workflowLevelOptions);
 
   // Helper to log event store errors consistently
   const logEventStoreError = (err: Error, iteration: number): void => {
@@ -2739,9 +2729,9 @@ export async function executeDagWorkflow(
           // 3b. Loop node dispatch — manages its own AI sessions and iteration
           if (isLoopNode(node)) {
             // Resolve per-node model overrides for loop node.
-            const loopAssistantConfig = config.assistants['pi'];
+            const loopAssistantConfig = config.pi;
             const loopModel: string | undefined =
-              node.model ?? workflowModel ?? (loopAssistantConfig?.model as string | undefined);
+              node.model ?? workflowModel ?? loopAssistantConfig?.model;
 
             const output = await executeLoopNode(
               deps,
