@@ -118,7 +118,7 @@ function createMockDeps(storeOverride?: IWorkflowStore): WorkflowDeps {
       Promise.resolve({
         commands: {},
         defaults: { loadDefaultCommands: false, loadDefaultWorkflows: false },
-        pi: {},
+        provider: {},
       })
     ),
   };
@@ -134,7 +134,7 @@ function createMockPlatform(): IWorkflowPlatform {
 }
 
 const minimalConfig: WorkflowConfig = {
-  pi: {},
+  provider: {},
   commands: {},
   defaults: { loadDefaultCommands: false, loadDefaultWorkflows: false },
 };

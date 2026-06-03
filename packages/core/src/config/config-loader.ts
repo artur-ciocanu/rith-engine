@@ -53,8 +53,8 @@ let cachedGlobalConfig: GlobalConfig | null = null;
 const DEFAULT_CONFIG_CONTENT = `# Rith Engine Global Configuration
 # See: https://github.com/artur-ciocanu/rith-engine/blob/main/docs/configuration.md
 
-# Pi assistant defaults
-# pi:
+# Provider defaults
+# provider:
 #   model: default
 `;
 
@@ -147,7 +147,7 @@ export async function loadRepoConfig(repoPath: string): Promise<RepoConfig> {
  */
 function getDefaults(): MergedConfig {
   return {
-    pi: {},
+    provider: {},
     paths: {
       workspaces: getRithWorkspacesPath(),
       worktrees: getRithWorktreesPath(),
@@ -180,7 +180,11 @@ function applyEnvOverrides(config: MergedConfig): MergedConfig {
 function mergeGlobalConfig(defaults: MergedConfig, global: GlobalConfig): MergedConfig {
   const result: MergedConfig = { ...defaults };
 
-  result.pi = { ...defaults.pi, ...global.pi };
+  result.provider = {
+    ...defaults.provider,
+    ...global.provider,
+    ...((global as Record<string, unknown>).pi as object),
+  };
 
   // Path preferences
   if (global.paths) {
@@ -197,7 +201,11 @@ function mergeGlobalConfig(defaults: MergedConfig, global: GlobalConfig): Merged
 function mergeRepoConfig(merged: MergedConfig, repo: RepoConfig): MergedConfig {
   const result: MergedConfig = { ...merged };
 
-  result.pi = { ...merged.pi, ...repo.pi };
+  result.provider = {
+    ...merged.provider,
+    ...repo.provider,
+    ...((repo as Record<string, unknown>).pi as object),
+  };
 
   // Commands config
   if (repo.commands) {
@@ -281,7 +289,7 @@ export function clearConfigCache(): void {
 export function logConfig(config: MergedConfig): void {
   getLog().info(
     {
-      pi: config.pi,
+      provider: config.provider,
     },
     'config_loaded'
   );
@@ -302,8 +310,8 @@ export async function updateGlobalConfig(updates: Partial<GlobalConfig>): Promis
     // Deep-merge: only overwrite defined keys
     const merged: GlobalConfig = { ...current };
 
-    if (updates.pi) {
-      merged.pi = { ...(current.pi ?? {}), ...updates.pi };
+    if (updates.provider) {
+      merged.provider = { ...(current.provider ?? {}), ...updates.provider };
     }
 
     // Serialize to YAML and write

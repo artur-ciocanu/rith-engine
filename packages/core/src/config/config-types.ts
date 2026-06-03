@@ -1,7 +1,5 @@
 /**
  * Configuration types for Rith Engine YAML config files.
- *
- * Pi is the sole provider — multi-provider abstractions have been removed.
  */
 
 /**
@@ -11,15 +9,18 @@
 
 // Provider config defaults — canonical definitions live in @rith/providers/types.
 // Imported and re-exported here so existing consumers don't break.
-import type { PiProviderDefaults } from '@rith/providers/types';
+import type { ProviderDefaults } from '@rith/providers/types';
 
-export type { PiProviderDefaults };
+export type { ProviderDefaults };
 
 export interface GlobalConfig {
   /**
-   * Pi assistant defaults (model, reasoning effort, etc.)
+   * Provider defaults (model, reasoning effort, etc.)
    */
-  pi?: PiProviderDefaults;
+  provider?: ProviderDefaults;
+
+  /** @deprecated Use `provider:` in config.yaml. Kept for backward compatibility. */
+  pi?: ProviderDefaults;
 
   /**
    * Directory preferences (usually not needed - defaults work well)
@@ -125,9 +126,12 @@ export interface RepoConfig {
   };
 
   /**
-   * Pi assistant defaults for this repository
+   * Provider defaults for this repository
    */
-  pi?: PiProviderDefaults;
+  provider?: ProviderDefaults;
+
+  /** @deprecated Use `provider:` in config.yaml. Kept for backward compatibility. */
+  pi?: ProviderDefaults;
 }
 
 /**
@@ -135,7 +139,7 @@ export interface RepoConfig {
  * Environment variables take precedence
  */
 export interface MergedConfig {
-  pi: PiProviderDefaults;
+  provider: ProviderDefaults;
   paths: {
     workspaces: string;
     worktrees: string;
@@ -167,7 +171,6 @@ export interface MergedConfig {
   docsPath?: string;
   /**
    * Merged per-project env vars from .rith/config.yaml env: section.
-   * DB env vars (from Web UI) are merged on top by executeWorkflow.
    * Undefined when no env vars are configured.
    */
   envVars?: Record<string, string>;

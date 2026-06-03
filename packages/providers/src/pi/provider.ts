@@ -6,7 +6,7 @@ import { createLogger } from '@rith/paths';
 
 import type { IAgentProvider, MessageChunk, SendQueryOptions } from '../types';
 
-import { parsePiConfig } from './config';
+import { parseProviderConfig } from './config';
 import { parsePiModelRef } from './model-ref';
 
 // IMPORTANT: Do NOT add static `import { ... } from '@mariozechner/*'` here,
@@ -185,7 +185,7 @@ export class PiProvider implements IAgentProvider {
     const { createAgentSession } = piCodingAgent;
 
     const assistantConfig = requestOptions?.assistantConfig ?? {};
-    const piConfig = parsePiConfig(assistantConfig);
+    const piConfig = parseProviderConfig(assistantConfig);
 
     // 0. Apply config-level env vars to process.env for in-process extensions
     //    (plannotator reads PLANNOTATOR_REMOTE at session_start, etc.).

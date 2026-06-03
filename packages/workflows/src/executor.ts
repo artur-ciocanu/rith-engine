@@ -257,7 +257,7 @@ export async function executeWorkflow(
   const docsDir = config.docsPath ?? 'docs/';
 
   // Pi is the sole provider. Model strings pass through to the SDK as-is.
-  const resolvedModel = workflow.model ?? config.pi?.model;
+  const resolvedModel = workflow.model ?? config.provider?.model;
 
   getLog().info(
     {

@@ -121,7 +121,7 @@ function createMockDeps(): WorkflowDeps {
       Promise.resolve({
         commands: {},
         defaults: { loadDefaultCommands: false, loadDefaultWorkflows: false },
-        pi: {},
+        provider: {},
       })
     ),
   };
@@ -154,7 +154,7 @@ function makeWorkflowRun(id: string): WorkflowRun {
 }
 
 const minimalConfig: WorkflowConfig = {
-  pi: {},
+  provider: {},
   commands: {},
   defaults: { loadDefaultCommands: false, loadDefaultWorkflows: false },
 };

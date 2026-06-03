@@ -109,7 +109,7 @@ function makeDeps(store?: IWorkflowStore): WorkflowDeps {
     store: store ?? makeStore(),
     loadConfig: mock(
       async (): Promise<WorkflowConfig> => ({
-        pi: {},
+        provider: {},
         baseBranch: '',
         commands: { folder: '' },
       })

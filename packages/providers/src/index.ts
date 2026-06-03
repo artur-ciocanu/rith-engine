@@ -8,12 +8,12 @@ export type {
   MessageChunk,
   TokenUsage,
   SystemPromptInput,
-  PiProviderDefaults,
+  ProviderDefaults,
 } from './types';
 
 // Pi provider
 export { PiProvider } from './pi/provider';
-export { parsePiConfig } from './pi/config';
+export { parseProviderConfig } from './pi/config';
 export { PI_CAPABILITIES } from './pi/capabilities';
 
 // Shared utilities

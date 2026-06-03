@@ -208,10 +208,10 @@ pi:
 
       const config = await loadConfig();
 
-      expect(config.pi).toEqual({});
+      expect(config.provider).toEqual({});
     });
 
-    test('repo config overrides global pi config', async () => {
+    test('repo config overrides global provider config', async () => {
       const pathMatches = (path: string, pattern: string): boolean => {
         const normalizedPath = path.replace(/\\/g, '/');
         return normalizedPath.includes(pattern);
@@ -232,10 +232,10 @@ pi:
       });
 
       const config = await loadConfig('/test/repo');
-      expect(config.pi.model).toBe('gemini');
+      expect(config.provider.model).toBe('gemini');
     });
 
-    test('merges pi config from global and repo', async () => {
+    test('merges provider config from global and repo', async () => {
       const pathMatches = (path: string, pattern: string): boolean => {
         const normalizedPath = path.replace(/\\/g, '/');
         return normalizedPath.includes(pattern);
@@ -256,8 +256,8 @@ pi:
       });
 
       const config = await loadConfig('/test/repo');
-      expect(config.pi.model).toBe('opus');
-      expect(config.pi.enableExtensions).toBe(true);
+      expect(config.provider.model).toBe('opus');
+      expect(config.provider.enableExtensions).toBe(true);
     });
 
     test('propagates baseBranch from repo worktree config', async () => {
@@ -409,7 +409,7 @@ env:
   });
 
   describe('settingSources config', () => {
-    test('merges settingSources from global pi config', async () => {
+    test('merges settingSources from global provider config', async () => {
       mockFsReadFile.mockResolvedValue(`
 pi:
   settingSources:
@@ -417,13 +417,13 @@ pi:
     - user
 `);
       const config = await loadConfig();
-      expect(config.pi.settingSources).toEqual(['project', 'user']);
+      expect(config.provider.settingSources).toEqual(['project', 'user']);
     });
 
     test('defaults to undefined settingSources when not configured', async () => {
       mockFsReadFile.mockResolvedValue('');
       const config = await loadConfig();
-      expect(config.pi.settingSources).toBeUndefined();
+      expect(config.provider.settingSources).toBeUndefined();
     });
 
     test('repo settingSources overrides global', async () => {
@@ -447,19 +447,19 @@ pi:
       });
 
       const config = await loadConfig('/test/repo');
-      expect(config.pi.settingSources).toEqual(['project']);
+      expect(config.provider.settingSources).toEqual(['project']);
     });
   });
 
   describe('updateGlobalConfig', () => {
-    test('merges pi config into existing file', async () => {
+    test('merges provider config into existing file', async () => {
       mockFsReadFile.mockResolvedValue(`
 pi:
   model: sonnet
 `);
 
       await updateGlobalConfig({
-        pi: { model: 'opus' },
+        provider: { model: 'opus' },
       });
 
       expect(mockFsWriteFile).toHaveBeenCalledTimes(1);
@@ -475,7 +475,7 @@ pi:
 `);
 
       await updateGlobalConfig({
-        pi: { model: 'opus' },
+        provider: { model: 'opus' },
       });
 
       expect(mockFsWriteFile).toHaveBeenCalledTimes(1);
@@ -489,7 +489,7 @@ pi:
       mockFsReadFile.mockRejectedValue(error);
 
       await updateGlobalConfig({
-        pi: { model: 'gemini' },
+        provider: { model: 'gemini' },
       });
 
       expect(mockFsWriteFile).toHaveBeenCalledTimes(2); // 1st: default template, 2nd: merged update
@@ -503,7 +503,7 @@ pi:
       permError.code = 'EACCES';
       mockFsWriteFile.mockRejectedValue(permError);
 
-      await expect(updateGlobalConfig({ pi: { model: 'test' } })).rejects.toThrow(
+      await expect(updateGlobalConfig({ provider: { model: 'test' } })).rejects.toThrow(
         'Permission denied'
       );
     });

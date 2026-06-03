@@ -21,8 +21,6 @@
     "lint:fix": "bun x eslint . --cache --fix",
     "format": "bun x prettier --write .",
     "format:check": "bun x prettier --check .",
-    "dev:docs": "bun --filter @rith/docs-web dev",
-    "build:docs": "bun --filter @rith/docs-web build",
     "validate": "bun run check:bundled && bun run check:bundled-skill && bun run type-check && bun run lint --max-warnings 0 && bun run format:check && bun run test",
     "prepare": "husky"
   },
@@ -48,8 +46,7 @@
     "follow-redirects": "^1.16.0",
     "path-to-regexp": "^8.4.2",
     "qs": "^6.15.1",
-    "flatted": "^3.4.2",
-    "@hono/node-server": "^1.19.13"
+    "flatted": "^3.4.2"
   },
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "^0.2.121",
