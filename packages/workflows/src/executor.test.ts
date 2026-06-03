@@ -422,22 +422,6 @@ describe('executeWorkflow', () => {
       );
       expect(mockExecuteDagWorkflow).toHaveBeenCalledTimes(1);
     });
-
-    it('throws when workflow.provider is not a registered provider', async () => {
-      const store = makeStore();
-      const deps = makeDeps(store);
-      await expect(
-        executeWorkflow(
-          deps,
-          makePlatform(),
-          'conv-1',
-          '/tmp',
-          makeWorkflow({ provider: 'claud', model: 'sonnet' }),
-          'test message',
-          'db-conv-1'
-        )
-      ).rejects.toThrow(/unknown provider 'claud'/);
-    });
   });
 
   // -------------------------------------------------------------------------
@@ -459,7 +443,7 @@ describe('executeWorkflow', () => {
       );
       expect(mockExecuteDagWorkflow).toHaveBeenCalledTimes(1);
       // docsDir is arg index 11 (0-indexed) of executeDagWorkflow
-      const docsDir = mockExecuteDagWorkflow.mock.calls[0]?.[11];
+      const docsDir = mockExecuteDagWorkflow.mock.calls[0]?.[10];
       expect(docsDir).toBe('docs/');
     });
 
@@ -489,7 +473,7 @@ describe('executeWorkflow', () => {
         'db-conv-1'
       );
       expect(mockExecuteDagWorkflow).toHaveBeenCalledTimes(1);
-      const docsDir = mockExecuteDagWorkflow.mock.calls[0]?.[11];
+      const docsDir = mockExecuteDagWorkflow.mock.calls[0]?.[10];
       expect(docsDir).toBe('packages/docs-web/src/content/docs');
     });
   });
@@ -538,11 +522,11 @@ describe('executeWorkflow', () => {
         'db-conv-1',
         { preCreatedRun: resumed, priorCompletedNodes }
       );
-      // dag-executor receives the priorCompletedNodes map at arg index 15.
+      // dag-executor receives the priorCompletedNodes map at arg index 14.
       // dag-executor signature: deps, platform, conversationId, cwd, workflow,
-      // workflowRun, provider, model, artifactsDir, logDir, baseBranch,
+      // workflowRun, model, artifactsDir, logDir, baseBranch,
       // docsDir, config, configuredCommandFolder, issueContext, priorCompletedNodes
-      const passedPriors = mockExecuteDagWorkflow.mock.calls[0]?.[15] as
+      const passedPriors = mockExecuteDagWorkflow.mock.calls[0]?.[14] as
         | Map<string, string>
         | undefined;
       expect(passedPriors).toBe(priorCompletedNodes);
@@ -655,7 +639,7 @@ describe('executeWorkflow', () => {
       expect(store.getCodebaseEnvVars).toHaveBeenCalledWith('codebase-1');
 
       // The config passed to executeDagWorkflow (arg index 12) should have merged envVars
-      const configArg = mockExecuteDagWorkflow.mock.calls[0]?.[12] as WorkflowConfig | undefined;
+      const configArg = mockExecuteDagWorkflow.mock.calls[0]?.[11] as WorkflowConfig | undefined;
       expect(configArg?.envVars).toEqual({ FILE_KEY: 'file_val', DB_KEY: 'db_val' });
     });
 

@@ -1005,7 +1005,6 @@ describe('executeDagWorkflow -- tool restrictions', () => {
       },
       workflowRun,
       'claude',
-      undefined,
       join(testDir, 'artifacts'),
       join(testDir, 'logs'),
       'main',
@@ -1017,44 +1016,6 @@ describe('executeDagWorkflow -- tool restrictions', () => {
     const optionsArg = mockSendQueryDag.mock.calls[0][3] as Record<string, unknown>;
     const nodeConfig = optionsArg?.nodeConfig as Record<string, unknown>;
     expect(nodeConfig?.allowed_tools).toEqual(['Read', 'Grep']);
-  });
-
-  it('warns user when Codex DAG node has denied_tools only', async () => {
-    mockGetAgentProviderDag.mockReturnValue({
-      sendQuery: mockSendQueryDag,
-    });
-
-    const mockDeps = createMockDeps();
-    const platform = createMockPlatform();
-    const workflowRun = makeWorkflowRun();
-
-    await executeDagWorkflow(
-      mockDeps,
-      platform,
-      'conv-dag',
-      testDir,
-      {
-        name: 'dag-codex-denied',
-        nodes: [
-          { id: 'review', command: 'my-cmd', provider: 'codex', denied_tools: ['WebSearch'] },
-        ],
-      },
-      workflowRun,
-      'codex',
-      undefined,
-      join(testDir, 'artifacts'),
-      join(testDir, 'logs'),
-      'main',
-      'docs/',
-      minimalConfig
-    );
-
-    const sendMessage = platform.sendMessage as ReturnType<typeof mock>;
-    const messages = sendMessage.mock.calls.map((call: unknown[]) => call[1] as string);
-    const warning = messages.find(
-      m => m.includes('allowed_tools/denied_tools') && m.includes('codex')
-    );
-    expect(warning).toBeDefined();
   });
 
   it('passes empty allowed_tools: [] (disable all tools) to sendQuery', async () => {
@@ -1070,7 +1031,6 @@ describe('executeDagWorkflow -- tool restrictions', () => {
       { name: 'dag-empty-tools', nodes: [{ id: 'review', command: 'my-cmd', allowed_tools: [] }] },
       workflowRun,
       'claude',
-      undefined,
       join(testDir, 'artifacts'),
       join(testDir, 'logs'),
       'main',
@@ -1082,83 +1042,6 @@ describe('executeDagWorkflow -- tool restrictions', () => {
     const optionsArg = mockSendQueryDag.mock.calls[0][3] as Record<string, unknown>;
     const nodeConfig = optionsArg?.nodeConfig as Record<string, unknown>;
     expect(nodeConfig?.allowed_tools).toEqual([]);
-  });
-
-  it('passes hooks to sendQuery options for Claude node', async () => {
-    const mockDeps = createMockDeps();
-    const platform = createMockPlatform();
-    const workflowRun = makeWorkflowRun();
-
-    await executeDagWorkflow(
-      mockDeps,
-      platform,
-      'conv-dag',
-      testDir,
-      {
-        name: 'dag-hooks',
-        nodes: [
-          {
-            id: 'review',
-            command: 'my-cmd',
-          },
-        ],
-      },
-      workflowRun,
-      'claude',
-      undefined,
-      join(testDir, 'artifacts'),
-      join(testDir, 'logs'),
-      'main',
-      'docs/',
-      minimalConfig
-    );
-
-    expect(mockSendQueryDag.mock.calls.length).toBeGreaterThan(0);
-    const optionsArg = mockSendQueryDag.mock.calls[0][3] as Record<string, unknown>;
-    const nodeConfig = optionsArg?.nodeConfig as Record<string, unknown>;
-    expect(nodeConfig?.hooks).toBeDefined();
-    const hooks = nodeConfig?.hooks as Record<string, unknown[]>;
-    expect(hooks.PreToolUse).toHaveLength(1);
-  });
-
-  it('warns user when Codex DAG node has hooks', async () => {
-    mockGetAgentProviderDag.mockReturnValue({
-      sendQuery: mockSendQueryDag,
-    });
-
-    const mockDeps = createMockDeps();
-    const platform = createMockPlatform();
-    const workflowRun = makeWorkflowRun();
-
-    await executeDagWorkflow(
-      mockDeps,
-      platform,
-      'conv-dag',
-      testDir,
-      {
-        name: 'dag-codex-hooks',
-        nodes: [
-          {
-            id: 'review',
-            command: 'my-cmd',
-            provider: 'codex',
-          },
-        ],
-      },
-      workflowRun,
-      'codex',
-      undefined,
-      join(testDir, 'artifacts'),
-      join(testDir, 'logs'),
-      'main',
-      'docs/',
-      minimalConfig
-    );
-
-    const sendMessage = platform.sendMessage as ReturnType<typeof mock>;
-    const messages = sendMessage.mock.calls.map((call: unknown[]) => call[1] as string);
-    const warning = messages.find(m => m.includes('hooks') && m.includes('codex'));
-    expect(warning).toBeDefined();
   });
 });
 
@@ -1212,7 +1095,6 @@ describe('executeDagWorkflow -- bash nodes', () => {
       { name: 'bash-exec-test', nodes: [bashNode] },
       workflowRun,
       'claude',
-      undefined,
       join(testDir, 'artifacts'),
       join(testDir, 'logs'),
       'main',
@@ -1251,7 +1133,6 @@ describe('executeDagWorkflow -- bash nodes', () => {
       { name: 'bash-subst-test', nodes },
       workflowRun,
       'claude',
-      undefined,
       join(testDir, 'artifacts'),
       join(testDir, 'logs'),
       'main',
@@ -1288,7 +1169,6 @@ describe('executeDagWorkflow -- bash nodes', () => {
       { name: 'bash-fail-test', nodes: [bashNode] },
       workflowRun,
       'claude',
-      undefined,
       join(testDir, 'artifacts'),
       join(testDir, 'logs'),
       'main',
@@ -1329,7 +1209,6 @@ describe('executeDagWorkflow -- bash nodes', () => {
       { name: 'bash-1389', nodes: [bashNode] },
       workflowRun,
       'claude',
-      undefined,
       join(testDir, 'artifacts'),
       join(testDir, 'logs'),
       'main',
@@ -1374,7 +1253,6 @@ describe('executeDagWorkflow -- bash nodes', () => {
       { name: 'bash-vars-test', nodes: [bashNode] },
       workflowRun,
       'claude',
-      undefined,
       join(testDir, 'artifacts'),
       join(testDir, 'logs'),
       'main',
@@ -1413,7 +1291,6 @@ describe('executeDagWorkflow -- bash nodes', () => {
       { name: 'bash-parallel-test', nodes },
       workflowRun,
       'claude',
-      undefined,
       join(testDir, 'artifacts'),
       join(testDir, 'logs'),
       'main',
@@ -1439,7 +1316,6 @@ describe('executeDagWorkflow -- bash nodes', () => {
       { name: 'bash-env-test', nodes: [{ id: 'stats', bash: 'echo ok' }] },
       workflowRun,
       'claude',
-      undefined,
       join(testDir, 'artifacts'),
       join(testDir, 'logs'),
       'main',
@@ -1486,7 +1362,6 @@ describe('executeDagWorkflow -- bash nodes', () => {
       { name: 'bash-injection-test', nodes },
       workflowRun,
       'claude',
-      undefined,
       join(testDir, 'artifacts'),
       join(testDir, 'logs'),
       'main',
@@ -1529,7 +1404,6 @@ describe('executeDagWorkflow -- bash nodes', () => {
         { name: 'bash-shell-safe-test', nodes: [bashNode] },
         workflowRun,
         'claude',
-        undefined,
         join(testDir, 'artifacts'),
         join(testDir, 'logs'),
         'main',
@@ -1628,7 +1502,6 @@ describe('executeDagWorkflow -- output_format structured output', () => {
       { name: 'output-fmt-test', nodes },
       workflowRun,
       'claude',
-      undefined,
       join(testDir, 'artifacts'),
       join(testDir, 'logs'),
       'main',
@@ -1672,7 +1545,6 @@ describe('executeDagWorkflow -- output_format structured output', () => {
       { name: 'no-fmt-test', nodes },
       workflowRun,
       'claude',
-      undefined,
       join(testDir, 'artifacts'),
       join(testDir, 'logs'),
       'main',
@@ -1718,7 +1590,6 @@ describe('executeDagWorkflow -- output_format structured output', () => {
       { name: 'fallback-test', nodes },
       workflowRun,
       'claude',
-      undefined,
       join(testDir, 'artifacts'),
       join(testDir, 'logs'),
       'main',
@@ -1785,7 +1656,6 @@ describe('executeDagWorkflow -- output_format structured output', () => {
       { name: 'codex-output-fmt', nodes },
       workflowRun,
       'codex',
-      undefined,
       join(testDir, 'artifacts'),
       join(testDir, 'logs'),
       'main',
@@ -1836,7 +1706,6 @@ describe('executeDagWorkflow -- output_format structured output', () => {
       { name: 'codex-no-warn', nodes },
       workflowRun,
       'codex',
-      undefined,
       join(testDir, 'artifacts'),
       join(testDir, 'logs'),
       'main',
@@ -1909,7 +1778,6 @@ describe('executeDagWorkflow -- when condition parse errors (fail-closed)', () =
       { name: 'parse-err-skip-test', nodes },
       workflowRun,
       'claude',
-      undefined,
       join(testDir, 'artifacts'),
       join(testDir, 'logs'),
       'main',
@@ -1937,7 +1805,6 @@ describe('executeDagWorkflow -- when condition parse errors (fail-closed)', () =
       { name: 'parse-warn-test', nodes },
       workflowRun,
       'claude',
-      undefined,
       join(testDir, 'artifacts'),
       join(testDir, 'logs'),
       'main',
@@ -1969,7 +1836,6 @@ describe('executeDagWorkflow -- when condition parse errors (fail-closed)', () =
         { name: 'all-skipped-test', nodes },
         workflowRun,
         'claude',
-        undefined,
         join(testDir, 'artifacts'),
         join(testDir, 'logs'),
         'main',
@@ -2038,7 +1904,6 @@ describe('executeDagWorkflow -- node-level retry for transient errors', () => {
       { name: 'dag-retry-succeed', nodes },
       workflowRun,
       'claude',
-      undefined,
       join(testDir, 'artifacts'),
       join(testDir, 'logs'),
       'main',
@@ -2074,7 +1939,6 @@ describe('executeDagWorkflow -- node-level retry for transient errors', () => {
       { name: 'dag-retry-exhaust', nodes },
       workflowRun,
       'claude',
-      undefined,
       join(testDir, 'artifacts'),
       join(testDir, 'logs'),
       'main',
@@ -2110,7 +1974,6 @@ describe('executeDagWorkflow -- node-level retry for transient errors', () => {
       { name: 'dag-retry-fatal', nodes },
       workflowRun,
       'claude',
-      undefined,
       join(testDir, 'artifacts'),
       join(testDir, 'logs'),
       'main',
@@ -2150,7 +2013,6 @@ describe('executeDagWorkflow -- node-level retry for transient errors', () => {
       { name: 'dag-retry-notify', nodes },
       workflowRun,
       'claude',
-      undefined,
       join(testDir, 'artifacts'),
       join(testDir, 'logs'),
       'main',
@@ -2214,7 +2076,6 @@ describe('executeDagWorkflow -- tool_called event persistence', () => {
       },
       workflowRun,
       'claude',
-      undefined,
       join(testDir, 'artifacts'),
       join(testDir, 'logs'),
       'main',
@@ -2255,7 +2116,6 @@ describe('executeDagWorkflow -- tool_called event persistence', () => {
       { name: 'dag-tool-test', nodes: [node('my-cmd')] },
       workflowRun,
       'claude',
-      undefined,
       join(testDir, 'artifacts'),
       join(testDir, 'logs'),
       'main',
@@ -2318,7 +2178,6 @@ describe('executeDagWorkflow -- tool_completed event emission', () => {
       { name: 'dag-complete-test', nodes: [node('my-cmd')] },
       workflowRun,
       'claude',
-      undefined,
       join(testDir, 'artifacts'),
       join(testDir, 'logs'),
       'main',
@@ -2356,7 +2215,6 @@ describe('executeDagWorkflow -- tool_completed event emission', () => {
       { name: 'dag-last-test', nodes: [node('my-cmd')] },
       workflowRun,
       'claude',
-      undefined,
       join(testDir, 'artifacts'),
       join(testDir, 'logs'),
       'main',
@@ -2392,7 +2250,6 @@ describe('executeDagWorkflow -- tool_completed event emission', () => {
       { name: 'dag-notools-test', nodes: [node('my-cmd')] },
       workflowRun,
       'claude',
-      undefined,
       join(testDir, 'artifacts'),
       join(testDir, 'logs'),
       'main',
@@ -2709,7 +2566,6 @@ describe('executeDagWorkflow -- skills options', () => {
       },
       workflowRun,
       'claude',
-      undefined,
       join(testDir, 'artifacts'),
       join(testDir, 'logs'),
       'main',
@@ -2747,7 +2603,6 @@ describe('executeDagWorkflow -- skills options', () => {
       },
       workflowRun,
       'claude',
-      undefined,
       join(testDir, 'artifacts'),
       join(testDir, 'logs'),
       'main',
@@ -2761,43 +2616,6 @@ describe('executeDagWorkflow -- skills options', () => {
     // skills and allowed_tools are both in nodeConfig — provider merges internally
     expect(nodeConfig?.skills).toEqual(['codebase-search']);
     expect(nodeConfig?.allowed_tools).toEqual(['Read', 'Grep']);
-  });
-
-  it('warns user when Codex DAG node has skills and does not pass agents', async () => {
-    mockGetAgentProviderDag.mockReturnValue({
-      sendQuery: mockSendQueryDag,
-    });
-
-    const mockDeps = createMockDeps();
-    const platform = createMockPlatform();
-    const workflowRun = makeWorkflowRun();
-
-    await executeDagWorkflow(
-      mockDeps,
-      platform,
-      'conv-dag',
-      testDir,
-      {
-        name: 'dag-codex-skills',
-        nodes: [
-          { id: 'review', command: 'my-cmd', provider: 'codex', skills: ['codebase-search'] },
-        ],
-      },
-      workflowRun,
-      'codex',
-      undefined,
-      join(testDir, 'artifacts'),
-      join(testDir, 'logs'),
-      'main',
-      'docs/',
-      minimalConfig
-    );
-
-    // Warning sent to user
-    const sendMessage = platform.sendMessage as ReturnType<typeof mock>;
-    const messages = sendMessage.mock.calls.map((call: unknown[]) => call[1] as string);
-    const warning = messages.find(m => m.includes('skills') && m.includes('codex'));
-    expect(warning).toBeDefined();
   });
 
   it('passes agents to sendQuery nodeConfig when node has inline agents', async () => {
@@ -2825,7 +2643,6 @@ describe('executeDagWorkflow -- skills options', () => {
       },
       workflowRun,
       'claude',
-      undefined,
       join(testDir, 'artifacts'),
       join(testDir, 'logs'),
       'main',
@@ -2837,49 +2654,6 @@ describe('executeDagWorkflow -- skills options', () => {
     const optionsArg = mockSendQueryDag.mock.calls[0][3] as Record<string, unknown>;
     const nodeConfig = optionsArg?.nodeConfig as Record<string, unknown>;
     expect(nodeConfig?.agents).toEqual(agentsMap);
-  });
-
-  it('warns user when Codex DAG node has inline agents', async () => {
-    mockGetAgentProviderDag.mockReturnValue({
-      sendQuery: mockSendQueryDag,
-    });
-
-    const mockDeps = createMockDeps();
-    const platform = createMockPlatform();
-    const workflowRun = makeWorkflowRun();
-
-    await executeDagWorkflow(
-      mockDeps,
-      platform,
-      'conv-dag',
-      testDir,
-      {
-        name: 'dag-codex-agents',
-        nodes: [
-          {
-            id: 'review',
-            command: 'my-cmd',
-            provider: 'codex',
-            agents: {
-              'brief-gen': { description: 'd', prompt: 'p' },
-            },
-          },
-        ],
-      },
-      workflowRun,
-      'codex',
-      undefined,
-      join(testDir, 'artifacts'),
-      join(testDir, 'logs'),
-      'main',
-      'docs/',
-      minimalConfig
-    );
-
-    const sendMessage = platform.sendMessage as ReturnType<typeof mock>;
-    const messages = sendMessage.mock.calls.map((call: unknown[]) => call[1] as string);
-    const warning = messages.find(m => m.includes('agents') && m.includes('codex'));
-    expect(warning).toBeDefined();
   });
 });
 
@@ -3192,7 +2966,6 @@ describe('executeDagWorkflow -- resume with priorCompletedNodes', () => {
       },
       workflowRun,
       'claude',
-      undefined,
       join(testDir, 'artifacts'),
       join(testDir, 'logs'),
       'main',
@@ -3236,7 +3009,6 @@ describe('executeDagWorkflow -- resume with priorCompletedNodes', () => {
       },
       workflowRun,
       'claude',
-      undefined,
       join(testDir, 'artifacts'),
       join(testDir, 'logs'),
       'main',
@@ -3273,7 +3045,6 @@ describe('executeDagWorkflow -- resume with priorCompletedNodes', () => {
       },
       workflowRun,
       'claude',
-      undefined,
       join(testDir, 'artifacts'),
       join(testDir, 'logs'),
       'main',
@@ -3319,7 +3090,6 @@ describe('executeDagWorkflow -- resume with priorCompletedNodes', () => {
       },
       workflowRun,
       'claude',
-      undefined,
       join(testDir, 'artifacts'),
       join(testDir, 'logs'),
       'main',
@@ -3361,7 +3131,6 @@ describe('executeDagWorkflow -- resume with priorCompletedNodes', () => {
       },
       workflowRun,
       'claude',
-      undefined,
       join(testDir, 'artifacts'),
       join(testDir, 'logs'),
       'main',
@@ -3392,7 +3161,6 @@ describe('executeDagWorkflow -- resume with priorCompletedNodes', () => {
       { name: 'bash-output-test', nodes: [bashNode] },
       workflowRun,
       'claude',
-      undefined,
       join(testDir, 'artifacts'),
       join(testDir, 'logs'),
       'main',
@@ -3431,7 +3199,6 @@ describe('executeDagWorkflow -- resume with priorCompletedNodes', () => {
       { name: 'single-node', nodes: [{ id: 'step1', command: 'step1' }] },
       workflowRun,
       'claude',
-      undefined,
       join(testDir, 'artifacts'),
       join(testDir, 'logs'),
       'main',
@@ -3484,7 +3251,6 @@ describe('executeDagWorkflow -- resume with priorCompletedNodes', () => {
         },
         workflowRun,
         'claude',
-        undefined,
         join(testDir, 'artifacts'),
         join(testDir, 'logs'),
         'main',
@@ -3543,7 +3309,6 @@ describe('executeDagWorkflow -- resume with priorCompletedNodes', () => {
         },
         workflowRun,
         'claude',
-        undefined,
         join(testDir, 'artifacts'),
         join(testDir, 'logs'),
         'main',
@@ -3595,7 +3360,6 @@ describe('executeDagWorkflow -- resume with priorCompletedNodes', () => {
         },
         workflowRun,
         'claude',
-        undefined,
         join(testDir, 'artifacts'),
         join(testDir, 'logs'),
         'main',
@@ -3658,7 +3422,6 @@ describe('executeDagWorkflow -- resume with priorCompletedNodes', () => {
         },
         workflowRun,
         'claude',
-        undefined,
         join(testDir, 'artifacts'),
         join(testDir, 'logs'),
         'main',
@@ -3716,7 +3479,6 @@ describe('executeDagWorkflow -- resume with priorCompletedNodes', () => {
         },
         freshRun,
         'claude',
-        undefined,
         join(testDir, 'artifacts'),
         join(testDir, 'logs'),
         'main',
@@ -3787,7 +3549,6 @@ describe('executeDagWorkflow -- resume with priorCompletedNodes', () => {
         },
         resumedRun,
         'claude',
-        undefined,
         join(testDir, 'artifacts'),
         join(testDir, 'logs'),
         'main',
@@ -3844,7 +3605,6 @@ describe('executeDagWorkflow -- resume with priorCompletedNodes', () => {
         },
         workflowRun,
         'claude',
-        undefined,
         join(testDir, 'artifacts'),
         join(testDir, 'logs'),
         'main',
@@ -3899,7 +3659,6 @@ describe('executeDagWorkflow -- resume with priorCompletedNodes', () => {
         },
         workflowRun,
         'claude',
-        undefined,
         join(testDir, 'artifacts'),
         join(testDir, 'logs'),
         'main',
@@ -3980,7 +3739,6 @@ describe('executeDagWorkflow -- resume with priorCompletedNodes', () => {
         },
         workflowRun,
         'claude',
-        undefined,
         join(testDir, 'artifacts'),
         join(testDir, 'logs'),
         'main',
@@ -4029,7 +3787,6 @@ describe('executeDagWorkflow -- resume with priorCompletedNodes', () => {
         },
         workflowRun,
         'claude',
-        undefined,
         join(testDir, 'artifacts'),
         join(testDir, 'logs'),
         'main',
@@ -4082,7 +3839,6 @@ describe('executeDagWorkflow -- resume with priorCompletedNodes', () => {
         },
         workflowRun,
         'claude',
-        undefined,
         join(testDir, 'artifacts'),
         join(testDir, 'logs'),
         'main',
@@ -4127,7 +3883,6 @@ describe('executeDagWorkflow -- resume with priorCompletedNodes', () => {
         },
         workflowRun,
         'claude',
-        undefined,
         join(testDir, 'artifacts'),
         join(testDir, 'logs'),
         'main',
@@ -4186,7 +3941,6 @@ describe('executeDagWorkflow -- resume with priorCompletedNodes', () => {
         },
         workflowRun,
         'claude',
-        undefined,
         join(testDir, 'artifacts'),
         join(testDir, 'logs'),
         'main',
@@ -4227,7 +3981,6 @@ describe('executeDagWorkflow -- resume with priorCompletedNodes', () => {
         },
         workflowRun,
         'claude',
-        undefined,
         join(testDir, 'artifacts'),
         join(testDir, 'logs'),
         'main',
@@ -4274,7 +4027,6 @@ describe('executeDagWorkflow -- resume with priorCompletedNodes', () => {
         },
         workflowRun,
         'claude',
-        undefined,
         join(testDir, 'artifacts'),
         join(testDir, 'logs'),
         'main',
@@ -4325,7 +4077,6 @@ describe('executeDagWorkflow -- resume with priorCompletedNodes', () => {
         },
         workflowRun,
         'claude',
-        undefined,
         join(testDir, 'artifacts'),
         join(testDir, 'logs'),
         'main',
@@ -4376,7 +4127,6 @@ describe('executeDagWorkflow -- resume with priorCompletedNodes', () => {
         },
         workflowRun,
         'claude',
-        undefined,
         join(testDir, 'artifacts'),
         join(testDir, 'logs'),
         'main',
@@ -4436,7 +4186,6 @@ describe('executeDagWorkflow -- resume with priorCompletedNodes', () => {
         },
         workflowRun,
         'claude',
-        undefined,
         join(testDir, 'artifacts'),
         join(testDir, 'logs'),
         'main',
@@ -4507,7 +4256,6 @@ describe('executeDagWorkflow -- resume with priorCompletedNodes', () => {
         },
         workflowRun,
         'claude',
-        undefined,
         join(testDir, 'artifacts'),
         join(testDir, 'logs'),
         'main',
@@ -4571,7 +4319,6 @@ describe('executeDagWorkflow -- resume with priorCompletedNodes', () => {
         },
         workflowRun,
         'claude',
-        undefined,
         join(testDir, 'artifacts'),
         join(testDir, 'logs'),
         'main',
@@ -4628,7 +4375,6 @@ describe('executeDagWorkflow -- resume with priorCompletedNodes', () => {
         },
         workflowRun,
         'claude',
-        undefined,
         join(testDir, 'artifacts'),
         join(testDir, 'logs'),
         'main',
@@ -4695,7 +4441,6 @@ describe('executeDagWorkflow -- resume with priorCompletedNodes', () => {
         },
         workflowRun,
         'claude',
-        undefined,
         join(testDir, 'artifacts'),
         join(testDir, 'logs'),
         'main',
@@ -4741,7 +4486,6 @@ describe('executeDagWorkflow -- resume with priorCompletedNodes', () => {
         },
         workflowRun,
         'claude',
-        undefined,
         join(testDir, 'artifacts'),
         join(testDir, 'logs'),
         'main',
@@ -4815,7 +4559,6 @@ describe('executeDagWorkflow -- always_run resume opt-out', () => {
       },
       workflowRun,
       'claude',
-      undefined,
       join(testDir, 'artifacts'),
       join(testDir, 'logs'),
       'main',
@@ -4875,7 +4618,6 @@ describe('executeDagWorkflow -- always_run resume opt-out', () => {
       },
       workflowRun,
       'claude',
-      undefined,
       join(testDir, 'artifacts'),
       join(testDir, 'logs'),
       'main',
@@ -4933,7 +4675,6 @@ describe('executeDagWorkflow -- always_run resume opt-out', () => {
       },
       workflowRun,
       'claude',
-      undefined,
       join(testDir, 'artifacts'),
       join(testDir, 'logs'),
       'main',
@@ -5007,7 +4748,6 @@ describe('executeDagWorkflow -- break after result (no hang on subprocess exit)'
         { name: 'break-test', nodes: [{ id: 'n1', command: 'my-cmd' }] },
         workflowRun,
         'claude',
-        undefined,
         join(testDir, 'artifacts'),
         join(testDir, 'logs'),
         'main',
@@ -5052,7 +4792,6 @@ describe('executeDagWorkflow -- break after result (no hang on subprocess exit)'
         },
         workflowRun,
         'claude',
-        undefined,
         join(testDir, 'artifacts'),
         join(testDir, 'logs'),
         'main',
@@ -5127,7 +4866,6 @@ describe('executeDagWorkflow -- terminal node output selection', () => {
       },
       workflowRun,
       'claude',
-      undefined,
       join(testDir, 'artifacts'),
       join(testDir, 'logs'),
       'main',
@@ -5160,7 +4898,6 @@ describe('executeDagWorkflow -- terminal node output selection', () => {
       { name: 'empty-dag', nodes: [{ id: 'only', command: 'my-cmd' }] },
       workflowRun,
       'claude',
-      undefined,
       join(testDir, 'artifacts'),
       join(testDir, 'logs'),
       'main',
@@ -5216,7 +4953,6 @@ describe('executeDagWorkflow -- terminal node output selection', () => {
       },
       workflowRun,
       'claude',
-      undefined,
       join(testDir, 'artifacts'),
       join(testDir, 'logs'),
       'main',
@@ -5233,93 +4969,6 @@ describe('executeDagWorkflow -- terminal node output selection', () => {
       (call: unknown[]) => (call[0] as Record<string, unknown>).event_type === 'node_completed'
     );
     expect(nodeCompletedEvents.length).toBeGreaterThan(0);
-  });
-
-  it('fails the run when a node specifies an unknown provider (defense-in-depth at execution time)', async () => {
-    // Loader-time validation also catches this (loader.ts iterates dagNodes
-    // after parsing), but the dag-executor's resolveNodeProviderAndModel
-    // throws as defense-in-depth in case a code path bypasses the loader.
-    const store = createMockStore();
-    const mockDeps = createMockDeps(store);
-    const platform = createMockPlatform();
-    const workflowRun = makeWorkflowRun();
-
-    await executeDagWorkflow(
-      mockDeps,
-      platform,
-      'conv-dag',
-      testDir,
-      {
-        name: 'unknown-provider-dag',
-        nodes: [
-          {
-            id: 'bad',
-            command: 'my-cmd',
-            provider: 'claud', // typo
-          },
-        ],
-      },
-      workflowRun,
-      'claude',
-      undefined,
-      join(testDir, 'artifacts'),
-      join(testDir, 'logs'),
-      'main',
-      'docs/',
-      minimalConfig
-    );
-
-    expect(store.failWorkflowRun).toHaveBeenCalled();
-    // The "unknown provider" detail surfaces on the node_failed event; the
-    // workflow-level fail message names the failing node(s).
-    const eventCalls = (store.createWorkflowEvent as ReturnType<typeof mock>).mock.calls;
-    const nodeFailedEvents = eventCalls.filter(
-      (call: unknown[]) => (call[0] as Record<string, unknown>).event_type === 'node_failed'
-    );
-    expect(nodeFailedEvents.length).toBeGreaterThan(0);
-    const nodeFailedData = (nodeFailedEvents[0][0] as Record<string, unknown>).data as Record<
-      string,
-      unknown
-    >;
-    expect(nodeFailedData.error).toContain("unknown provider 'claud'");
-  });
-
-  it('failure message names the failing node instead of generic summary', async () => {
-    const store = createMockStore();
-    const mockDeps = createMockDeps(store);
-    const platform = createMockPlatform();
-    const workflowRun = makeWorkflowRun();
-
-    await executeDagWorkflow(
-      mockDeps,
-      platform,
-      'conv-dag',
-      testDir,
-      {
-        name: 'fail-msg-test',
-        nodes: [
-          {
-            id: 'fail-node',
-            command: 'my-cmd',
-            provider: 'nonexistent',
-          },
-        ],
-      },
-      workflowRun,
-      'claude',
-      undefined,
-      join(testDir, 'artifacts'),
-      join(testDir, 'logs'),
-      'main',
-      'docs/',
-      minimalConfig
-    );
-
-    expect(store.failWorkflowRun).toHaveBeenCalled();
-    const failCall = (store.failWorkflowRun as ReturnType<typeof mock>).mock.calls[0];
-    const failMsg = failCall[1] as string;
-    expect(failMsg).toContain('fail-node failed');
-    expect(failMsg).not.toContain('no successful nodes');
   });
 
   it('excludes intermediate nodes with dependents from terminal set (fan-in DAG)', async () => {
@@ -5354,7 +5003,6 @@ describe('executeDagWorkflow -- terminal node output selection', () => {
       },
       workflowRun,
       'claude',
-      undefined,
       join(testDir, 'artifacts'),
       join(testDir, 'logs'),
       'main',
@@ -5419,7 +5067,6 @@ describe('executeDagWorkflow -- cancel node', () => {
       },
       workflowRun,
       'claude',
-      undefined,
       join(testDir, 'artifacts'),
       join(testDir, 'logs'),
       'main',
@@ -5458,7 +5105,6 @@ describe('executeDagWorkflow -- cancel node', () => {
       },
       workflowRun,
       'claude',
-      undefined,
       join(testDir, 'artifacts'),
       join(testDir, 'logs'),
       'main',
@@ -5528,7 +5174,6 @@ describe('executeDagWorkflow -- credit exhaustion', () => {
       },
       workflowRun,
       'claude',
-      undefined,
       join(testDir, 'artifacts'),
       join(testDir, 'logs'),
       'main',
@@ -5600,7 +5245,6 @@ describe('executeDagWorkflow -- approval node', () => {
       },
       workflowRun,
       'claude',
-      undefined,
       join(testDir, 'artifacts'),
       join(testDir, 'logs'),
       'main',
@@ -5648,7 +5292,6 @@ describe('executeDagWorkflow -- approval node', () => {
       },
       workflowRun,
       'claude',
-      undefined,
       join(testDir, 'artifacts'),
       join(testDir, 'logs'),
       'main',
@@ -5715,7 +5358,6 @@ describe('executeDagWorkflow -- approval node', () => {
       },
       workflowRun,
       'claude',
-      undefined,
       join(testDir, 'artifacts'),
       join(testDir, 'logs'),
       'main',
@@ -5779,7 +5421,6 @@ describe('executeDagWorkflow -- approval node', () => {
       },
       workflowRun,
       'claude',
-      undefined,
       join(testDir, 'artifacts'),
       join(testDir, 'logs'),
       'main',
@@ -5845,7 +5486,6 @@ describe('executeDagWorkflow -- approval node', () => {
       },
       workflowRun,
       'claude',
-      undefined,
       join(testDir, 'artifacts'),
       join(testDir, 'logs'),
       'main',
@@ -5905,7 +5545,6 @@ describe('executeDagWorkflow -- approval node', () => {
       },
       workflowRun,
       'claude',
-      undefined,
       join(testDir, 'artifacts'),
       join(testDir, 'logs'),
       'main',
@@ -5977,7 +5616,6 @@ describe('executeDagWorkflow -- approval node', () => {
       },
       workflowRun,
       'claude',
-      undefined,
       join(testDir, 'artifacts'),
       join(testDir, 'logs'),
       'main',
@@ -6068,7 +5706,6 @@ describe('executeDagWorkflow -- env var injection', () => {
       { name: 'dag-env-test', nodes: [{ id: 'task', command: 'my-cmd' }] },
       workflowRun,
       'claude',
-      undefined,
       join(testDir, 'artifacts'),
       join(testDir, 'logs'),
       'main',
@@ -6094,7 +5731,6 @@ describe('executeDagWorkflow -- env var injection', () => {
       { name: 'dag-no-env', nodes: [{ id: 'task', command: 'my-cmd' }] },
       workflowRun,
       'claude',
-      undefined,
       join(testDir, 'artifacts'),
       join(testDir, 'logs'),
       'main',
@@ -6167,7 +5803,6 @@ describe('executeDagWorkflow -- Claude SDK advanced options', () => {
       },
       workflowRun,
       'claude',
-      undefined,
       join(testDir, 'artifacts'),
       join(testDir, 'logs'),
       'main',
@@ -6220,7 +5855,6 @@ describe('executeDagWorkflow -- Claude SDK advanced options', () => {
       },
       workflowRun,
       'claude',
-      undefined,
       join(testDir, 'artifacts'),
       join(testDir, 'logs'),
       'main',
@@ -6264,7 +5898,6 @@ describe('executeDagWorkflow -- Claude SDK advanced options', () => {
       },
       workflowRun,
       'claude',
-      undefined,
       join(testDir, 'artifacts'),
       join(testDir, 'logs'),
       'main',
@@ -6319,7 +5952,6 @@ describe('executeDagWorkflow -- Claude SDK advanced options', () => {
       },
       workflowRun,
       'claude',
-      undefined,
       join(testDir, 'artifacts'),
       join(testDir, 'logs'),
       'main',
@@ -6354,7 +5986,6 @@ describe('executeDagWorkflow -- Claude SDK advanced options', () => {
       },
       workflowRun,
       'claude',
-      undefined,
       join(testDir, 'artifacts'),
       join(testDir, 'logs'),
       'main',
@@ -6385,7 +6016,6 @@ describe('executeDagWorkflow -- Claude SDK advanced options', () => {
       },
       workflowRun,
       'claude',
-      undefined,
       join(testDir, 'artifacts'),
       join(testDir, 'logs'),
       'main',
@@ -6397,40 +6027,6 @@ describe('executeDagWorkflow -- Claude SDK advanced options', () => {
     const optionsArg = mockSendQueryDag.mock.calls[0][3] as Record<string, unknown>;
     const nodeConfig = optionsArg?.nodeConfig as Record<string, unknown>;
     expect(nodeConfig?.effort).toBe('max');
-  });
-
-  it('warns user when Codex node has Claude-only options (effort)', async () => {
-    mockGetAgentProviderDag.mockImplementation(() => ({
-      sendQuery: mockSendQueryDag,
-    }));
-
-    const mockDeps = createMockDeps();
-    const platform = createMockPlatform();
-    const workflowRun = makeWorkflowRun();
-
-    await executeDagWorkflow(
-      mockDeps,
-      platform,
-      'conv-dag',
-      testDir,
-      {
-        name: 'codex-claude-opts-test',
-        nodes: [{ id: 'step1', command: 'my-cmd', provider: 'codex', effort: 'high' }],
-      },
-      workflowRun,
-      'codex',
-      undefined,
-      join(testDir, 'artifacts'),
-      join(testDir, 'logs'),
-      'main',
-      'docs/',
-      minimalConfig
-    );
-
-    const sendMessage = platform.sendMessage as ReturnType<typeof mock>;
-    const messages = sendMessage.mock.calls.map((call: unknown[]) => call[1] as string);
-    const warning = messages.find(m => m.includes('effort') && m.toLowerCase().includes('codex'));
-    expect(warning).toBeDefined();
   });
 });
 
@@ -6479,7 +6075,6 @@ describe('executeDagWorkflow -- cost tracking', () => {
       { name: 'dag-cost', nodes: [{ id: 'step', prompt: 'Do thing.' }] },
       workflowRun,
       'claude',
-      undefined,
       join(testDir, 'artifacts'),
       join(testDir, 'logs'),
       'main',
@@ -6526,7 +6121,6 @@ describe('executeDagWorkflow -- cost tracking', () => {
       },
       workflowRun,
       'claude',
-      undefined,
       join(testDir, 'artifacts'),
       join(testDir, 'logs'),
       'main',
@@ -6562,7 +6156,6 @@ describe('executeDagWorkflow -- cost tracking', () => {
       { name: 'dag-no-cost', nodes: [{ id: 'step', prompt: 'Do thing.' }] },
       workflowRun,
       'claude',
-      undefined,
       join(testDir, 'artifacts'),
       join(testDir, 'logs'),
       'main',
@@ -6613,7 +6206,6 @@ describe('executeDagWorkflow -- cost tracking', () => {
       },
       workflowRun,
       'claude',
-      undefined,
       join(testDir, 'artifacts'),
       join(testDir, 'logs'),
       'main',
@@ -6686,7 +6278,6 @@ describe('executeDagWorkflow -- script nodes', () => {
       { name: 'script-inline-bun-test', nodes: [scriptNode] },
       workflowRun,
       'claude',
-      undefined,
       join(testDir, 'artifacts'),
       join(testDir, 'logs'),
       'main',
@@ -6725,7 +6316,6 @@ describe('executeDagWorkflow -- script nodes', () => {
       { name: 'script-subst-test', nodes },
       workflowRun,
       'claude',
-      undefined,
       join(testDir, 'artifacts'),
       join(testDir, 'logs'),
       'main',
@@ -6762,7 +6352,6 @@ describe('executeDagWorkflow -- script nodes', () => {
       { name: 'script-inline-uv-test', nodes: [scriptNode] },
       workflowRun,
       'claude',
-      undefined,
       join(testDir, 'artifacts'),
       join(testDir, 'logs'),
       'main',
@@ -6802,7 +6391,6 @@ describe('executeDagWorkflow -- script nodes', () => {
       { name: 'named-script-test', nodes: [scriptNode] },
       workflowRun,
       'claude',
-      undefined,
       join(testDir, 'artifacts'),
       join(testDir, 'logs'),
       'main',
@@ -6836,7 +6424,6 @@ describe('executeDagWorkflow -- script nodes', () => {
       { name: 'script-fail-test', nodes: [scriptNode] },
       workflowRun,
       'claude',
-      undefined,
       join(testDir, 'artifacts'),
       join(testDir, 'logs'),
       'main',
@@ -6878,7 +6465,6 @@ describe('executeDagWorkflow -- script nodes', () => {
       { name: 'script-1389', nodes: [scriptNode] },
       workflowRun,
       'claude',
-      undefined,
       join(testDir, 'artifacts'),
       join(testDir, 'logs'),
       'main',
@@ -6930,7 +6516,6 @@ describe('executeDagWorkflow -- script nodes', () => {
       { name: 'script-timeout-test', nodes: [scriptNode] },
       workflowRun,
       'claude',
-      undefined,
       join(testDir, 'artifacts'),
       join(testDir, 'logs'),
       'main',
@@ -6969,7 +6554,6 @@ describe('executeDagWorkflow -- script nodes', () => {
       { name: 'script-stderr-test', nodes: [scriptNode] },
       workflowRun,
       'claude',
-      undefined,
       join(testDir, 'artifacts'),
       join(testDir, 'logs'),
       'main',
@@ -7018,7 +6602,6 @@ describe('executeDagWorkflow -- script nodes', () => {
       { name: 'script-subst-vars', nodes },
       workflowRun,
       'claude',
-      undefined,
       artifactsDir,
       join(testDir, 'logs'),
       'main',
@@ -7058,7 +6641,6 @@ describe('executeDagWorkflow -- script nodes', () => {
       { name: 'script-notfound-test', nodes: [scriptNode] },
       workflowRun,
       'claude',
-      undefined,
       join(testDir, 'artifacts'),
       join(testDir, 'logs'),
       'main',
@@ -7100,7 +6682,6 @@ describe('executeDagWorkflow -- script nodes', () => {
       { name: 'env-leak-test', nodes: [scriptNode] },
       workflowRun,
       'claude',
-      undefined,
       join(testDir, 'artifacts'),
       join(testDir, 'logs'),
       'main',
@@ -7138,7 +6719,6 @@ describe('executeDagWorkflow -- script nodes', () => {
       },
       workflowRun,
       'claude',
-      undefined,
       join(testDir, 'artifacts'),
       join(testDir, 'logs'),
       'main',
@@ -7313,7 +6893,6 @@ describe('executeDagWorkflow -- MCP failure filtering', () => {
       },
       makeWorkflowRun(),
       'claude',
-      undefined,
       join(testDir, 'artifacts'),
       join(testDir, 'logs'),
       'main',
@@ -7464,7 +7043,6 @@ describe('executeDagWorkflow -- final status derivation', () => {
       { name: 'status-test', nodes },
       workflowRun,
       'claude',
-      undefined,
       join(testDir, 'artifacts'),
       join(testDir, 'logs'),
       'main',
@@ -7507,7 +7085,6 @@ describe('executeDagWorkflow -- final status derivation', () => {
       { name: 'status-test-multi', nodes },
       workflowRun,
       'claude',
-      undefined,
       join(testDir, 'artifacts'),
       join(testDir, 'logs'),
       'main',
@@ -7551,7 +7128,6 @@ describe('executeDagWorkflow -- final status derivation', () => {
       { name: 'status-test-skip', nodes },
       workflowRun,
       'claude',
-      undefined,
       join(testDir, 'artifacts'),
       join(testDir, 'logs'),
       'main',
@@ -7565,105 +7141,6 @@ describe('executeDagWorkflow -- final status derivation', () => {
       expect.anything(),
       expect.stringContaining('b')
     );
-  });
-});
-
-describe('provider resolution -- regression for #1610', () => {
-  let testDir: string;
-
-  beforeEach(async () => {
-    testDir = join(
-      tmpdir(),
-      `dag-provider-test-${Date.now()}-${Math.random().toString(36).slice(2)}`
-    );
-    const commandsDir = join(testDir, '.rith', 'commands');
-    await mkdir(commandsDir, { recursive: true });
-    await writeFile(join(commandsDir, 'my-cmd.md'), 'My command prompt for $USER_MESSAGE');
-
-    mockSendQueryDag.mockClear();
-    mockGetAgentProviderDag.mockClear();
-
-    mockSendQueryDag.mockImplementation(function* () {
-      yield { type: 'assistant', content: 'response' };
-      yield { type: 'result', sessionId: 'session-id' };
-    });
-    mockGetAgentProviderDag.mockImplementation(() => ({
-      sendQuery: mockSendQueryDag,
-    }));
-  });
-
-  afterEach(async () => {
-    mockGetAgentProviderDag.mockImplementation(() => ({
-      sendQuery: mockSendQueryDag,
-    }));
-    try {
-      await rm(testDir, { recursive: true, force: true });
-    } catch {
-      // ignore cleanup errors
-    }
-  });
-
-  it('node with no provider annotation routes to workflowProvider (codex), not to model-implied provider', async () => {
-    // Regression: a node with model: opus[1m] but no provider: must route to
-    // workflowProvider ('codex' when defaultAssistant: codex), not to 'claude'.
-    mockGetAgentProviderDag.mockImplementation(() => ({
-      sendQuery: mockSendQueryDag,
-    }));
-
-    const mockDeps = createMockDeps();
-    const platform = createMockPlatform();
-    const workflowRun = makeWorkflowRun();
-
-    await executeDagWorkflow(
-      mockDeps,
-      platform,
-      'conv-provider',
-      testDir,
-      // Node has model: opus[1m] but NO provider: — must inherit workflowProvider
-      {
-        name: 'provider-regression',
-        nodes: [{ id: 'implement', command: 'my-cmd', model: 'opus[1m]' }],
-      },
-      workflowRun,
-      'codex', // workflowProvider (simulates defaultAssistant: codex)
-      undefined,
-      join(testDir, 'artifacts'),
-      join(testDir, 'logs'),
-      'main',
-      'docs/',
-      minimalConfig
-    );
-
-    expect(mockGetAgentProviderDag).toHaveBeenCalled();
-  });
-
-  it('node with explicit provider: claude routes to claude even when workflowProvider is codex', async () => {
-    // When provider: claude is set on the node, it must override workflowProvider.
-    const mockDeps = createMockDeps();
-    const platform = createMockPlatform();
-    const workflowRun = makeWorkflowRun();
-
-    await executeDagWorkflow(
-      mockDeps,
-      platform,
-      'conv-provider',
-      testDir,
-      // Node has both model: opus[1m] AND provider: claude
-      {
-        name: 'provider-explicit',
-        nodes: [{ id: 'implement', command: 'my-cmd', model: 'opus[1m]', provider: 'claude' }],
-      },
-      workflowRun,
-      'codex', // workflowProvider
-      undefined,
-      join(testDir, 'artifacts'),
-      join(testDir, 'logs'),
-      'main',
-      'docs/',
-      minimalConfig
-    );
-
-    expect(mockGetAgentProviderDag).toHaveBeenCalled();
   });
 });
 
