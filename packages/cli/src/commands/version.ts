@@ -12,7 +12,7 @@ import { execFileAsync } from '@rith/git';
 import { BUNDLED_GIT_COMMIT, BUNDLED_IS_BINARY, BUNDLED_VERSION, createLogger } from '@rith/paths';
 import { getDatabaseType } from '@rith/core';
 
-const log = createLogger('cli:version');
+const log = createLogger('cli.version');
 
 const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url));
 

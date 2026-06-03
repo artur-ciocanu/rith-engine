@@ -12,7 +12,7 @@ import { createLogger } from '@rith/paths';
 /** Lazy-initialized logger (deferred so test mocks can intercept createLogger) */
 let cachedLog: ReturnType<typeof createLogger> | undefined;
 function getLog(): ReturnType<typeof createLogger> {
-  if (!cachedLog) cachedLog = createLogger('worktree-copy');
+  if (!cachedLog) cachedLog = createLogger('isolation.worktree-copy');
   return cachedLog;
 }
 

@@ -1,16 +1,14 @@
 ## Project Overview
 
-**CLI Workflow Engine**: Run AI coding workflows from the command line using Claude Code SDK, Codex SDK, and Pi. Built with **Bun + TypeScript + SQLite**, single-developer tool for AI-assisted development practitioners. Architecture prioritizes simplicity, flexibility, and user control.
+**CLI Workflow Engine**: Run AI coding workflows from the command line using Pi Coding Agent. Built with **Bun + TypeScript + SQLite**, single-developer tool for AI-assisted development practitioners. Architecture prioritizes simplicity, flexibility, and user control.
 
 ## Core Principles
 
 **Single-Developer Tool**
 - No multi-tenant complexity
 
-**Platform Agnostic**
-- Unified conversation interface across Slack/Telegram/GitHub/cli/web
-- Platform adapters implement `IPlatformAdapter`
-- Stream/batch AI responses in real-time to all platforms
+**CLI-Only**
+- Single entry point via `rith` CLI; no server, web UI, or platform adapters
 
 **Type Safety (CRITICAL)**
 - Strict TypeScript configuration enforced
@@ -367,28 +365,16 @@ import * as core from '@rith/core';  // Don't do this
 - **@rith/core**: Business logic, database, orchestration (depends on @rith/providers for AI; provides `createWorkflowStore()` adapter bridging core DB → `IWorkflowStore`)
 
 
-**Adapter Authorization Pattern:**
-- Auth checks happen INSIDE adapters (encapsulation, consistency)
-- Auth utilities co-located with each adapter (e.g., `packages/adapters/src/chat/slack/auth.ts`)
-- Parse whitelist from env var in constructor (e.g., `TELEGRAM_ALLOWED_USER_IDS`)
-- Check authorization in message handler (before calling `onMessage` callback)
-- Silent rejection for unauthorized users (no error response)
-- Log unauthorized attempts with masked user IDs for privacy
-- Adapters expose `onMessage(handler)` callback; errors handled by caller
 
 **2. Command Handler** (`packages/core/src/handlers/`)
-- Process slash commands (deterministic, no AI)
-- The orchestrator treats only these top-level commands as deterministic: `/help`, `/status`, `/reset`, `/workflow`, `/register-project`, `/update-project`, `/remove-project`, `/commands`, `/init`, `/worktree`
-- `/workflow` handles subcommands like `list`, `run`, `status`, `cancel`, `resume`, `abandon`, `approve`, `reject`
+- Process registration and clone operations
 - Update database, perform operations, return responses
 
-**3. Orchestrator** (`packages/core/src/orchestrator/`)
-- Manage AI conversations
-- Load conversation + codebase context from database
+**3. Workflow Executor** (`packages/workflows/src/`)
+- DAG-based workflow execution engine
 - Variable substitution: `$1`, `$2`, `$3`, `$ARGUMENTS`
-- Session management: Create new or resume existing
-- Stream AI responses to platform
-
+- Session management via Pi Coding Agent SDK
+- Stream AI responses to CLI output
 **4. AI Agent Provider** (`packages/providers/src/`)
 - Implements `IAgentProvider` interface
 - **PiProvider**: `@mariozechner/pi-coding-agent` — one harness for ~20 LLM backends via `<provider>/<model>` refs (e.g. `anthropic/claude-haiku-4-5`, `openrouter/qwen/qwen3-coder`); supports extensions, skills, tool restrictions, thinking level, best-effort structured output. See `packages/docs-web/src/content/docs/getting-started/ai-assistants.md` for setup, capability matrix, and extension config.
@@ -465,38 +451,25 @@ assistants:
 ### When Creating New Features
 
 **Quick reference:**
-- **Platform Adapters**: Implement `IPlatformAdapter`, handle auth, polling/webhooks
 - **AI Providers**: Implement `IAgentProvider`, session management, streaming
-- **Slash Commands**: Add to command-handler.ts, update database, no AI
 - **Database Operations**: Use `IDatabase` interface (supports SQLite via adapter)
 - **Plan insertion points**: Use stable text anchors (e.g., "after the `it('throws on ...')` test block"), never raw line numbers — line numbers drift on every preceding edit.
 
 ### SDK Type Patterns
 
-When working with external SDKs (Claude Agent SDK, Codex SDK), prefer importing and using SDK types directly:
+When working with the Pi Coding Agent SDK, prefer importing and using SDK types directly:
 
 ```typescript
-// ✅ CORRECT - Import SDK types directly
-import { query, type Options } from '@anthropic-ai/claude-agent-sdk';
-
-const options: Options = {
-  cwd,
-  permissionMode: 'bypassPermissions',
-  // ...
-};
-
-// Use type assertions for SDK response structures
-const message = msg as { message: { content: ContentBlock[] } };
+// ✅ CORRECT - Import SDK types directly from the provider package
+import type { IAgentProvider, MessageChunk } from '@rith/providers/types';
 ```
 
 ```typescript
 // ❌ AVOID - Defining duplicate types
-interface MyQueryOptions {  // Don't duplicate SDK types
-  cwd: string;
-  // ...
+interface MyMessageChunk {  // Don't duplicate provider types
+  type: string;
+  content: string;
 }
-const options: MyQueryOptions = { ... };
-query({ prompt, options: options as any });  // Avoid 'as any'
 ```
 
 This ensures type compatibility with SDK updates and eliminates `as any` casts.

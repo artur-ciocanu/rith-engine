@@ -2,10 +2,10 @@
  * @rith/core - Shared business logic for Rith Engine
  *
  * This package contains:
- * - AI client adapters (Claude, Codex)
  * - Database operations (SQLite/PostgreSQL)
- * - Orchestration logic
  * - Workflow store adapter (bridges core DB to @rith/workflows IWorkflowStore)
+ * - Configuration loading and management
+ * - Shared operations (workflow, isolation)
  * - Utility functions
  */
 
@@ -72,24 +72,11 @@ export {
 // Utils
 // =============================================================================
 
-// Conversation lock
-export { ConversationLockManager, type LockAcquisitionResult } from './utils/conversation-lock';
-
-// Error formatting
-export { classifyAndFormatError } from './utils/error-formatter';
+// Error coercion
 export { toError } from './utils/error';
 
 // Credential sanitization
 export { sanitizeCredentials, sanitizeError } from './utils/credential-sanitizer';
-
-// GitHub GraphQL
-export { getLinkedIssueNumbers } from './utils/github-graphql';
-
-// Path validation
-export { isPathWithinWorkspace, validateAndResolvePath } from './utils/path-validation';
-
-// Port allocation
-export { getPort } from './utils/port-allocation';
 
 // Worktree sync
 export { syncRithToWorktree } from './utils/worktree-sync';

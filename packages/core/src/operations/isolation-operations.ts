@@ -10,7 +10,7 @@ import * as isolationDb from '../db/isolation-environments';
 // Lazy logger — NEVER at module scope
 let cachedLog: ReturnType<typeof createLogger> | undefined;
 function getLog(): ReturnType<typeof createLogger> {
-  if (!cachedLog) cachedLog = createLogger('operations');
+  if (!cachedLog) cachedLog = createLogger('operations.isolation');
   return cachedLog;
 }
 

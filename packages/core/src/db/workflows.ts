@@ -333,40 +333,6 @@ export async function findResumableRun(
   }
 }
 
-/**
- * Find a resumable (failed/paused) run for a workflow scoped to (parent conversation, codebase).
- * Used by the orchestrator (all platforms) to detect approved runs that need foreground resume
- * on the prior run's worktree. Codebase scope prevents cross-project resume on persistent
- * chat conversation IDs (Telegram chat_id, Slack thread, etc.).
- */
-export async function findResumableRunByParentConversation(
-  workflowName: string,
-  parentConversationId: string,
-  codebaseId: string
-): Promise<WorkflowRun | null> {
-  try {
-    const result = await pool.query<WorkflowRun>(
-      `SELECT * FROM remote_agent_workflow_runs
-       WHERE workflow_name = $1
-         AND parent_conversation_id = $2
-         AND codebase_id = $3
-         AND status IN ('failed', 'paused')
-       ORDER BY started_at DESC
-       LIMIT 1`,
-      [workflowName, parentConversationId, codebaseId]
-    );
-    const row = result.rows[0];
-    return row ? normalizeWorkflowRun(row) : null;
-  } catch (error) {
-    const err = error as Error;
-    getLog().error(
-      { err, workflowName, parentConversationId, codebaseId },
-      'db.workflow_run_find_resumable_by_parent_failed'
-    );
-    throw new Error(`Failed to find resumable run by parent conversation: ${err.message}`);
-  }
-}
-
 export async function resumeWorkflowRun(id: string): Promise<WorkflowRun> {
   const dialect = getDialect();
 
@@ -425,30 +391,6 @@ export async function resumeWorkflowRun(id: string): Promise<WorkflowRun> {
     throw new Error(`Workflow run vanished after update (id: ${id})`);
   }
   return normalizeWorkflowRun(row);
-}
-
-/**
- * Find the most recent workflow run for a worker platform conversation ID.
- * Joins with conversations table to resolve platform_conversation_id → DB id.
- */
-export async function getWorkflowRunByWorkerPlatformId(
-  platformConversationId: string
-): Promise<WorkflowRun | null> {
-  try {
-    const result = await pool.query<WorkflowRun>(
-      `SELECT r.* FROM remote_agent_workflow_runs r
-       JOIN remote_agent_conversations c ON r.conversation_id = c.id
-       WHERE c.platform_conversation_id = $1
-       ORDER BY r.started_at DESC LIMIT 1`,
-      [platformConversationId]
-    );
-    const row = result.rows[0];
-    return row ? normalizeWorkflowRun(row) : null;
-  } catch (error) {
-    const err = error as Error;
-    getLog().error({ err }, 'db.workflow_run_get_by_worker_platform_id_failed');
-    throw new Error(`Failed to get workflow run by worker platform ID: ${err.message}`);
-  }
 }
 
 /**
@@ -618,210 +560,6 @@ export async function pauseWorkflowRun(
 }
 
 /**
- * Enriched workflow run with joined data for the dashboard Command Center.
- */
-export interface DashboardWorkflowRun extends WorkflowRun {
-  codebase_name: string | null;
-  platform_type: string | null;
-  worker_platform_id: string | null;
-  parent_platform_id: string | null;
-  // Step-level progress (from latest step_started/step_completed event)
-  current_step_name: string | null;
-  total_steps: number | null;
-  current_step_status: 'running' | 'completed' | 'failed' | null;
-  // Parallel agent progress (from parallel_agent_* events)
-  agents_completed: number | null;
-  agents_failed: number | null;
-  agents_total: number | null;
-}
-
-/** Options for listing dashboard runs with server-side search, filtering, and pagination. */
-export interface ListDashboardRunsOptions {
-  status?: WorkflowRunStatus;
-  codebaseId?: string;
-  search?: string;
-  after?: string;
-  before?: string;
-  limit?: number;
-  offset?: number;
-}
-
-/** Response envelope for paginated dashboard runs. */
-export interface DashboardRunsResult {
-  runs: DashboardWorkflowRun[];
-  total: number;
-  counts: {
-    all: number;
-    running: number;
-    completed: number;
-    failed: number;
-    cancelled: number;
-    pending: number;
-    paused: number;
-  };
-}
-
-/**
- * Build WHERE clauses shared between the list and count queries.
- * Returns the clauses array and values array (mutated in place).
- */
-function buildDashboardWhereClauses(
-  options: ListDashboardRunsOptions | undefined,
-  values: unknown[]
-): string[] {
-  const whereClauses: string[] = [];
-
-  if (options?.status) {
-    values.push(options.status);
-    whereClauses.push(`r.status = $${String(values.length)}`);
-  }
-  if (options?.codebaseId) {
-    values.push(options.codebaseId);
-    whereClauses.push(`r.codebase_id = $${String(values.length)}`);
-  }
-  if (options?.search) {
-    const pattern = `%${options.search}%`;
-    values.push(pattern, pattern);
-    whereClauses.push(
-      `(r.workflow_name LIKE $${String(values.length - 1)} OR r.user_message LIKE $${String(values.length)})`
-    );
-  }
-  if (options?.after) {
-    values.push(options.after);
-    whereClauses.push(`r.started_at >= $${String(values.length)}`);
-  }
-  if (options?.before) {
-    values.push(options.before);
-    whereClauses.push(`r.started_at < $${String(values.length)}`);
-  }
-
-  return whereClauses;
-}
-
-/**
- * Returns a SQL fragment to extract and cast an integer from a JSON data column.
- * Handles SQLite (`json_extract`) and PostgreSQL (`->>`/`::INTEGER`) dialects.
- */
-function jsonIntExtract(col: string, key: string): string {
-  return getDatabaseType() === 'postgresql'
-    ? `(${col}->>'${key}')::INTEGER`
-    : `CAST(json_extract(${col}, '$.${key}') AS INTEGER)`;
-}
-
-/**
- * List workflow runs with enriched JOINs for the dashboard Command Center.
- * Supports server-side search, status/date filtering, and offset-based pagination.
- * Returns runs, total matching count, and per-status counts for the filter bar.
- */
-export async function listDashboardRuns(
-  options?: ListDashboardRunsOptions
-): Promise<DashboardRunsResult> {
-  // Build shared WHERE for both queries
-  const listValues: unknown[] = [];
-  const whereClauses = buildDashboardWhereClauses(options, listValues);
-
-  const limit = options?.limit ?? 50;
-  const offset = options?.offset ?? 0;
-  listValues.push(limit);
-  const limitParam = `$${String(listValues.length)}`;
-  listValues.push(offset);
-  const offsetParam = `$${String(listValues.length)}`;
-
-  const whereStr = whereClauses.length > 0 ? `WHERE ${whereClauses.join(' AND ')}` : '';
-
-  // Build count query with the same base filters MINUS the status filter.
-  // This lets us compute per-status counts across the full filtered set.
-  const countValues: unknown[] = [];
-  const countWhereClauses = buildDashboardWhereClauses(
-    options ? { ...options, status: undefined } : undefined,
-    countValues
-  );
-  const countWhereStr =
-    countWhereClauses.length > 0 ? `WHERE ${countWhereClauses.join(' AND ')}` : '';
-
-  try {
-    const [listResult, countResult] = await Promise.all([
-      pool.query<DashboardWorkflowRun>(
-        `SELECT r.*,
-                c.platform_type,
-                c.platform_conversation_id AS worker_platform_id,
-                pc.platform_conversation_id AS parent_platform_id,
-                cb.name AS codebase_name,
-                (SELECT e.step_name
-                 FROM remote_agent_workflow_events e
-                 WHERE e.workflow_run_id = r.id AND e.event_type = 'step_started'
-                 ORDER BY e.created_at DESC LIMIT 1) AS current_step_name,
-                (SELECT ${jsonIntExtract('e.data', 'total_steps')}
-                 FROM remote_agent_workflow_events e
-                 WHERE e.workflow_run_id = r.id AND e.event_type = 'step_started'
-                 ORDER BY e.created_at DESC LIMIT 1) AS total_steps,
-                CASE (SELECT e2.event_type
-                      FROM remote_agent_workflow_events e2
-                      WHERE e2.workflow_run_id = r.id
-                        AND e2.event_type IN ('step_completed','step_failed','step_started')
-                      ORDER BY e2.created_at DESC LIMIT 1)
-                  WHEN 'step_completed' THEN 'completed'
-                  WHEN 'step_failed' THEN 'failed'
-                  WHEN 'step_started' THEN 'running'
-                  ELSE NULL
-                END AS current_step_status,
-                (SELECT COUNT(*) FROM remote_agent_workflow_events e
-                 WHERE e.workflow_run_id = r.id AND e.event_type = 'parallel_agent_completed') AS agents_completed,
-                (SELECT COUNT(*) FROM remote_agent_workflow_events e
-                 WHERE e.workflow_run_id = r.id AND e.event_type = 'parallel_agent_failed') AS agents_failed,
-                (SELECT ${jsonIntExtract('e.data', 'totalAgents')}
-                 FROM remote_agent_workflow_events e
-                 WHERE e.workflow_run_id = r.id AND e.event_type = 'parallel_agent_started'
-                 ORDER BY e.created_at DESC LIMIT 1) AS agents_total
-         FROM remote_agent_workflow_runs r
-         LEFT JOIN remote_agent_conversations c ON r.conversation_id = c.id
-         LEFT JOIN remote_agent_conversations pc ON r.parent_conversation_id = pc.id
-         LEFT JOIN remote_agent_codebases cb ON r.codebase_id = cb.id
-         ${whereStr}
-         ORDER BY r.started_at DESC
-         LIMIT ${limitParam} OFFSET ${offsetParam}`,
-        listValues
-      ),
-      pool.query<{ status: string; cnt: string }>(
-        `SELECT r.status, COUNT(*) AS cnt
-         FROM remote_agent_workflow_runs r
-         ${countWhereStr}
-         GROUP BY r.status`,
-        countValues
-      ),
-    ]);
-
-    const counts = {
-      all: 0,
-      running: 0,
-      completed: 0,
-      failed: 0,
-      cancelled: 0,
-      pending: 0,
-      paused: 0,
-    };
-    for (const row of countResult.rows) {
-      const n = Number(row.cnt);
-      counts.all += n;
-      if (row.status in counts) {
-        counts[row.status as keyof Omit<typeof counts, 'all'>] = n;
-      }
-    }
-
-    // Total for the current filter (with status applied)
-    const total = options?.status
-      ? (counts[options.status as keyof typeof counts] ?? 0)
-      : counts.all;
-
-    return { runs: listResult.rows.map(normalizeWorkflowRun), total, counts };
-  } catch (error) {
-    const err = error as Error;
-    getLog().error({ err }, 'list_dashboard_runs_failed');
-    throw new Error(`Failed to list dashboard runs: ${err.message}`);
-  }
-}
-
-/**
  * List workflow runs with optional filters.
  */
 export async function listWorkflowRuns(options?: {
@@ -848,9 +586,7 @@ export async function listWorkflowRuns(options?: {
   }
   if (options?.codebaseId) {
     values.push(options.codebaseId);
-    whereClauses.push(
-      `conversation_id IN (SELECT id FROM remote_agent_conversations WHERE codebase_id = $${String(values.length)})`
-    );
+    whereClauses.push(`codebase_id = $${String(values.length)}`);
   }
 
   const limit = options?.limit ?? 50;
@@ -869,26 +605,6 @@ export async function listWorkflowRuns(options?: {
     const err = error as Error;
     getLog().error({ err }, 'db.workflow_run_list_failed');
     throw new Error(`Failed to list workflow runs: ${err.message}`);
-  }
-}
-
-/**
- * Update parent_conversation_id on a workflow run.
- * Non-critical — logs error but does not throw.
- */
-export async function updateWorkflowRunParent(
-  runId: string,
-  parentConversationId: string
-): Promise<void> {
-  try {
-    await pool.query(
-      'UPDATE remote_agent_workflow_runs SET parent_conversation_id = $1 WHERE id = $2',
-      [parentConversationId, runId]
-    );
-  } catch (error) {
-    const err = error as Error;
-    getLog().error({ err, runId, parentConversationId }, 'db.workflow_run_update_parent_failed');
-    // Non-critical — don't throw
   }
 }
 
