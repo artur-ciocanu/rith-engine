@@ -1,3 +1,3 @@
 export { PI_CAPABILITIES } from './capabilities';
-export { parsePiConfig, type PiProviderDefaults } from './config';
+export { parseProviderConfig, type ProviderDefaults } from './config';
 export { PiProvider } from './provider';

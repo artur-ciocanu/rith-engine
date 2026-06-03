@@ -93,7 +93,7 @@ function makeDeps(store?: IWorkflowStore): WorkflowDeps {
     store: store ?? makeStore(),
     loadConfig: mock(
       async (): Promise<WorkflowConfig> => ({
-        pi: {},
+        provider: {},
         baseBranch: '',
         commands: { folder: '' },
       })
@@ -469,7 +469,7 @@ describe('executeWorkflow', () => {
         store,
         loadConfig: mock(
           async (): Promise<WorkflowConfig> => ({
-            pi: {},
+            provider: {},
             baseBranch: '',
             commands: { folder: '' },
             docsPath: 'packages/docs-web/src/content/docs',
@@ -634,7 +634,7 @@ describe('executeWorkflow', () => {
       const deps = makeDeps(store);
       // Override loadConfig to return file-level envVars
       (deps.loadConfig as ReturnType<typeof mock>).mockResolvedValueOnce({
-        pi: {},
+        provider: {},
         baseBranch: '',
         commands: { folder: '' },
         envVars: { FILE_KEY: 'file_val' },

@@ -67,7 +67,7 @@ export interface WorkflowConfig {
     loadDefaultWorkflows?: boolean;
     loadDefaultCommands?: boolean;
   };
-  pi: {
+  provider: {
     model?: string;
     [key: string]: unknown;
   };

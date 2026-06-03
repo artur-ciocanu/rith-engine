@@ -1,6 +1,6 @@
 ## Project Overview
 
-**Remote Agentic Coding Platform**: Control AI coding assistants (Claude Code SDK, Codex SDK) remotely from Slack, Telegram, and GitHub. Built with **Bun + TypeScript + SQLite/PostgreSQL**, single-developer tool for AI-assisted development practitioners. Architecture prioritizes simplicity, flexibility, and user control.
+**CLI Workflow Engine**: Run AI coding workflows from the command line using Claude Code SDK, Codex SDK, and Pi. Built with **Bun + TypeScript + SQLite**, single-developer tool for AI-assisted development practitioners. Architecture prioritizes simplicity, flexibility, and user control.
 
 ## Core Principles
 
@@ -22,11 +22,9 @@
 - Schema naming: camelCase, descriptive suffix (e.g., `workflowRunSchema`, `errorSchema`)
 - Type derivation: always use `z.infer<typeof schema>` — never write parallel hand-crafted interfaces
 - Import `z` from `@hono/zod-openapi` (not from `zod` directly)
-- All new/modified API routes must use `registerOpenApiRoute(createRoute({...}), handler)` — the local wrapper handles the TypedResponse bypass. Two narrow exceptions exist: (1) routes that serve raw non-JSON content (e.g. `/api/artifacts/:runId/*` returns `text/markdown`/`text/plain`) AND use wildcard path params that OpenAPI 3.0 can't represent, use `app.get(...)` with an explanatory comment; (2) multipart-or-JSON routes (e.g. `/api/conversations/:id/message`, `/api/workflows/:name/run`) register through `registerOpenApiRoute` but drop `request.body` from the route config so Zod doesn't validate multipart payloads against a JSON schema — the handler parses both content types manually.
-- Route schemas live in `packages/server/src/routes/schemas/` — one file per domain
 - Engine schemas live in `packages/workflows/src/schemas/` — one file per concern (dag-node, workflow, workflow-run, retry, loop, hooks); `index.ts` re-exports all
 - Engine schema naming: camelCase (e.g., `dagNodeSchema`, `workflowBaseSchema`, `nodeOutputSchema`)
-- `TRIGGER_RULES` and `WORKFLOW_HOOK_EVENTS` are derived from schema `.options` — never duplicate as a plain array (exception: `@rith/web` must define a local constant since `api.generated.d.ts` is type-only and cannot export runtime values)
+- `TRIGGER_RULES` and `WORKFLOW_HOOK_EVENTS` are derived from schema `.options` — never duplicate as a plain array
 - `loader.ts` uses `dagNodeSchema.safeParse()` for node validation; graph-level checks (cycles, deps, `$nodeId.output` refs) remain as imperative code in `validateDagStructure()`
 
 **Git Workflow and Releases**
@@ -80,7 +78,7 @@ These are implementation constraints, not slogans. Apply them by default.
 - Document fallback behavior with a comment when a fallback is intentional and safe; otherwise throw
 
 **No Autonomous Lifecycle Mutation Across Process Boundaries**
-- When a process cannot reliably distinguish "actively running elsewhere" from "orphaned by a crash" — typically because the work was started by a different process or input source (CLI, adapter, webhook, web UI, cron) — it must not autonomously mark that work as failed/cancelled/abandoned based on a timer or staleness guess.
+- When a process cannot reliably distinguish "actively running elsewhere" from "orphaned by a crash" — typically because the work was started by a different process or input source (CLI, cron) — it must not autonomously mark that work as failed/cancelled/abandoned based on a timer or staleness guess.
 - Surface the ambiguous state to the user and provide a one-click action.
 - Heuristics for *recoverable* operations (retry backoff, subprocess timeouts, hygiene cleanup of terminal-status data) remain appropriate; the rule is about destructive mutation of *non-terminal* state owned by an unknowable other party.
 - Reference: #1216 and the CLI orphan-cleanup precedent at `packages/cli/src/cli.ts:256-258`.
@@ -100,26 +98,11 @@ These are implementation constraints, not slogans. Apply them by default.
 ### Development
 
 ```bash
-# Start server + Web UI together (hot reload for both)
+# Run CLI in dev mode
+bun run cli <command>
+
+# Run all package dev tasks
 bun run dev
-
-# Or start individually
-bun run dev:server  # Backend only (port 3090)
-bun run dev:web     # Frontend only (port 5173)
-```
-
-Regenerating frontend API types (requires server to be running at port 3090):
-
-```bash
-bun run dev:server  # must be running first
-bun --filter @rith/web generate:types
-```
-
-Optional: Use PostgreSQL instead of SQLite by setting `DATABASE_URL` in `.env`:
-
-```bash
-docker-compose --profile with-db up -d postgres
-# Set DATABASE_URL=postgresql://postgres:postgres@localhost:5432/remote_coding_agent in .env
 ```
 
 ### Testing
@@ -171,18 +154,12 @@ This runs `check:bundled`, `check:bundled-skill`, type-check, lint, format check
 
 ### Database
 
-**Auto-Detection (SQLite is the default — zero setup):**
-- **Without `DATABASE_URL`**: Uses SQLite at `~/.rith/rith.db` (auto-initialized, recommended for most users)
-- **With `DATABASE_URL` set**: Uses PostgreSQL (optional, for cloud/advanced deployments)
-
-```bash
-# PostgreSQL only: Run SQL migrations (manual)
-psql $DATABASE_URL < migrations/000_combined.sql
-```
+**SQLite (default — zero setup):**
+- Uses SQLite at `~/.rith/rith.db` (auto-initialized)
 
 ### CLI (Command Line)
 
-Run workflows directly from the command line without needing the server. Workflow and isolation commands require running from within a git repository (subdirectories work - resolves to repo root).
+Run workflows from the command line. Workflow and isolation commands require running from within a git repository (subdirectories work - resolves to repo root).
 
 ```bash
 # List available workflows (requires git repo)
@@ -248,10 +225,6 @@ bun run cli validate commands my-command    # Single command
 bun run cli complete <branch-name>
 bun run cli complete <branch-name> --force  # Skip uncommitted-changes check
 
-# Start the web UI server (compiled binary only, downloads web UI on first run)
-bun run cli serve
-bun run cli serve --port 4000
-bun run cli serve --download-only  # Download without starting
 
 # Install the bundled Rith Engine skill into a project
 bun run cli skill install
@@ -336,30 +309,6 @@ packages/
 │       ├── rith-paths.ts   # Rith Engine directory path utilities
 │       ├── logger.ts         # Pino logger factory
 │       └── index.ts          # Package exports
-├── adapters/                 # @rith/adapters - Platform adapters (Slack, Telegram, GitHub, Discord)
-│   └── src/
-│       ├── chat/             # Chat platform adapters (Slack, Telegram)
-│       ├── forge/            # Forge adapters (GitHub)
-│       ├── community/        # Community adapters (Discord)
-│       ├── utils/            # Shared adapter utilities (message splitting)
-│       └── index.ts          # Package exports
-├── server/                   # @rith/server - HTTP server + Web adapter
-│   └── src/
-│       ├── adapters/         # Web platform adapter (SSE streaming)
-│       ├── routes/           # API routes (REST + SSE)
-│       └── index.ts          # Hono server entry point
-└── web/                      # @rith/web - React frontend (Web UI)
-    └── src/
-        ├── components/       # React components (chat, layout, projects, ui, workflows)
-        ├── hooks/            # Custom hooks (useSSE, etc.)
-        ├── lib/              # API client, types, utilities
-        ├── stores/           # Zustand stores (workflow-store)
-        ├── routes/           # Route pages (ChatPage, WorkflowsPage, WorkflowBuilderPage, etc.)
-        ├── experiments/      # Isolated in-repo spikes; lint-guarded against
-        │   │                 # importing production web modules. Drop-in or
-        │   │                 # delete cleanly. See experiments/README.md.
-        │   └── console/      # Run-centric console UI mounted at /console
-        └── App.tsx           # Router + layout
 ```
 
 **Import Patterns:**
@@ -387,29 +336,18 @@ import { findWorkflow } from '@rith/workflows/router';
 
 // ❌ WRONG: Never use generic import for main package
 import * as core from '@rith/core';  // Don't do this
-
-// ❌ WRONG: In @rith/web, never import from @rith/workflows (it's a server package)
-import type { DagNode } from '@rith/workflows/schemas/dag-node';  // Don't do this from @rith/web
-// ✅ CORRECT: Use re-exports from api.ts (derived from generated OpenAPI spec)
-import type { DagNode, WorkflowDefinition } from '@/lib/api';
 ```
 
 ### Database Schema
 
-**8 Tables (all prefixed with `remote_agent_`):**
-1. **`codebases`** - Repository metadata and commands (JSONB)
-2. **`conversations`** - Track platform conversations with titles and soft-delete support
-3. **`sessions`** - Track AI SDK sessions with resume capability
-4. **`isolation_environments`** - Git worktree isolation tracking
-5. **`workflow_runs`** - Workflow execution tracking and state
-6. **`workflow_events`** - Step-level workflow event log (step transitions, artifacts, errors)
-7. **`messages`** - Conversation message history with tool call metadata (JSONB)
-8. **`codebase_env_vars`** - Per-project env vars injected into project-scoped execution surfaces (Claude, Codex, bash/script nodes, and direct chat when codebase-scoped), managed via Web UI or `env:` in config
-
-**Key Patterns:**
-- Conversation ID format: Platform-specific (`thread_ts`, `chat_id`, `user/repo#123`)
-- One active session per conversation
-- Codebase commands stored in filesystem, paths in `codebases.commands` JSONB
+**Database Tables (all prefixed with `remote_agent_`):**
+- `codebases` - Repository metadata and commands (JSONB)
+- `conversations` - Track platform conversations with titles and soft-delete
+- `sessions` - Track AI SDK sessions with resume capability
+- `isolation_environments` - Git worktree isolation tracking
+- `workflow_runs` - Workflow execution tracking and state
+- `workflow_events` - Step-level workflow event log
+- `codebase_env_vars` - Per-project env vars injected into workflow commands, managed via `env:` in config
 
 **Session Transitions:**
 - Sessions are immutable - transitions create new linked sessions
@@ -425,20 +363,9 @@ import type { DagNode, WorkflowDefinition } from '@/lib/api';
 - **@rith/providers**: Pi Coding Agent provider — owns SDK deps, `IAgentProvider` interface, `sendQuery()` contract, and Pi-specific option translation. `@rith/providers/types` is the contract subpath (zero SDK deps, zero runtime side effects) that `@rith/workflows` imports from. The provider lives under `pi/`; shared utilities under `shared/`.
 - **@rith/isolation**: Worktree isolation types, providers, resolver, error classifiers (depends only on @rith/git + @rith/paths)
 - **@rith/workflows**: Workflow engine - loader, router, executor, DAG, logger, bundled defaults (depends only on @rith/git + @rith/paths + @rith/providers/types + @hono/zod-openapi + zod; DB/AI/config injected via `WorkflowDeps`)
-- **@rith/cli**: Command-line interface for running workflows and starting the web UI server (depends on @rith/server + @rith/adapters for the serve command)
+- **@rith/cli**: Command-line interface for running workflows (depends on @rith/core + @rith/providers + @rith/workflows + @rith/git + @rith/isolation)
 - **@rith/core**: Business logic, database, orchestration (depends on @rith/providers for AI; provides `createWorkflowStore()` adapter bridging core DB → `IWorkflowStore`)
-- **@rith/adapters**: Platform adapters for Slack, Telegram, GitHub, Discord (depends on @rith/core)
-- **@rith/server**: OpenAPIHono HTTP server (Zod + OpenAPI spec generation via `@hono/zod-openapi`), Web adapter (SSE), API routes, Web UI static serving (depends on @rith/adapters)
-- **@rith/web**: React frontend (Vite + Tailwind v4 + shadcn/ui + Zustand), SSE streaming to server. `WorkflowRunStatus`, `WorkflowDefinition`, and `DagNode` are all derived from `src/lib/api.generated.d.ts` (generated from the OpenAPI spec via `bun generate:types`; never import from `@rith/workflows`)
 
-**1. Platform Adapters**
-- Implement `IPlatformAdapter` interface
-- Handle platform-specific message formats
-- **Web** (`packages/server/src/adapters/web/`): Server-Sent Events (SSE) streaming, conversation ID = user-provided string
-- **Slack** (`packages/adapters/src/chat/slack/`): SDK with polling (not webhooks), conversation ID = `thread_ts`
-- **Telegram** (`packages/adapters/src/chat/telegram/`): Bot API with polling, conversation ID = `chat_id`
-- **GitHub** (`packages/adapters/src/forge/github/`): Webhooks + GitHub CLI, conversation ID = `owner/repo#number`
-- **Discord** (`packages/adapters/src/community/chat/discord/`): discord.js WebSocket, conversation ID = channel ID
 
 **Adapter Authorization Pattern:**
 - Auth checks happen INSIDE adapters (encapsulation, consistency)
@@ -503,43 +430,6 @@ assistants:
 - Model strings are NOT validated by Rith Engine. Whatever the user writes in `model:` is forwarded verbatim to the Pi SDK. Vendor SDKs ship new models faster than Rith Engine can update; the SDK and the upstream API are the source of truth for what names exist.
 - Pi is the sole provider — no provider selection chain needed. Model selection is configured via `assistants.pi.model` in config.yaml or per-node `model:` in workflow YAML.
 
-### Running the App in Worktrees
-
-Agents working in worktrees can run the app for self-testing (make changes → run app → test via curl → fix). Ports are automatically allocated to avoid conflicts:
-
-```bash
-# Run in worktree (port auto-allocated based on path)
-bun dev &
-# [Hono] Worktree detected (/path/to/worktree)
-# [Hono] Auto-allocated port: 3637 (base: 3090, offset: +547)
-
-# Test via web API (production path)
-# 1) Create a conversation
-curl -X POST http://localhost:3637/api/conversations \
-  -H "Content-Type: application/json" \
-  -d '{}'
-
-# 2) Send a message
-curl -X POST http://localhost:3637/api/conversations/<conversationId>/message \
-  -H "Content-Type: application/json" \
-  -d '{"message":"/status"}'
-
-# 3) Fetch messages (polling)
-curl http://localhost:3637/api/conversations/<conversationId>/messages
-
-# Note: SSE streaming is available at /api/stream/<conversationId>
-```
-
-**Port Allocation:**
-- Worktrees: Automatic unique port (3190-4089 range, hash-based on path)
-- Main repo: Default 3090
-- Override: `PORT=4000 bun dev` (works in both contexts)
-- Same worktree always gets same port (deterministic)
-
-**Important:**
-- Use the web API routes for manual validation (avoid running multiple platform adapters)
-- Database is shared (same conversations/codebases available)
-- Kill the server when done: `pkill -f "bun.*dev"` or use the specific port
 
 ### Rith Engine Directory Structure
 
@@ -551,9 +441,7 @@ curl http://localhost:3637/api/conversations/<conversationId>/messages
 │   ├── worktrees/                # Git worktrees for this project
 │   ├── artifacts/                # Workflow artifacts (NEVER in git)
 │   │   ├── runs/{id}/            # Per-run artifacts ($ARTIFACTS_DIR)
-│   │   └── uploads/{convId}/     # Web UI file uploads (ephemeral)
 │   └── logs/                     # Workflow execution logs
-├── web-dist/<version>/            # Cached web UI dist (rith serve, binary only)
 ├── update-check.json              # Update check cache (binary builds, 24h TTL)
 ├── rith.db                     # SQLite database (when DATABASE_URL not set)
 └── config.yaml                   # Global configuration (non-secrets)
@@ -570,18 +458,9 @@ curl http://localhost:3637/api/conversations/<conversationId>/messages
 ```
 
 - `RITH_HOME` - Override the base directory (default: `~/.rith`)
-- Docker: Paths automatically set to `/.rith/`
 
 ## Development Guidelines
 
-### UI and Visual Design
-
-All UI changes — production web (`packages/web/`), experiments (`packages/web/src/experiments/`), the docs site, marketing surfaces, and any future visual surface — must align with the Rith Engine brand foundation.
-
-- **Canonical brand guide:** https://github.com/artur-ciocanu/rith-engine/brand/ (source: `packages/docs-web/src/content/docs/brand/index.md` + `packages/docs-web/public/brand/foundation.html`).
-- **Use brand tokens, not ad-hoc values.** Colors, gradients, surfaces, and typography must come from the established design tokens (`packages/web/src/index.css`) or the brand guide. Don't hard-code hex values that aren't in the system.
-- **Introducing a new visual token** (color, font, radius, spacing) means updating both the token source and the brand guide. Don't fork the palette per package.
-- **When in doubt, consult the brand guide first** before inventing new visual treatments. Open a discussion if the guide doesn't cover your case.
 
 ### When Creating New Features
 
@@ -589,7 +468,7 @@ All UI changes — production web (`packages/web/`), experiments (`packages/web/
 - **Platform Adapters**: Implement `IPlatformAdapter`, handle auth, polling/webhooks
 - **AI Providers**: Implement `IAgentProvider`, session management, streaming
 - **Slash Commands**: Add to command-handler.ts, update database, no AI
-- **Database Operations**: Use `IDatabase` interface (supports PostgreSQL and SQLite via adapters)
+- **Database Operations**: Use `IDatabase` interface (supports SQLite via adapter)
 - **Plan insertion points**: Use stable text anchors (e.g., "after the `it('throws on ...')` test block"), never raw line numbers — line numbers drift on every preceding edit.
 
 ### SDK Type Patterns
@@ -682,7 +561,6 @@ async function createSession(conversationId: string, codebaseId: string) {
 **Verbosity:**
 - CLI: `rith --quiet` (errors only) — suppresses Pino logs and workflow progress output
 - CLI: `rith --verbose` (debug) — enables debug Pino logs and tool-level workflow progress events
-- Server: `LOG_LEVEL=debug bun run start`
 
 **Never log:** API keys or tokens (mask: `token.slice(0, 8) + '...'`), user message content, PII.
 
@@ -712,7 +590,7 @@ async function createSession(conversationId: string, codebaseId: string) {
    - **`nodes:` (DAG format)**: Nodes with explicit `depends_on` edges; independent nodes in the same topological layer run concurrently. Node types: `command:` (named command file), `prompt:` (inline prompt), `bash:` (shell script, stdout captured as `$nodeId.output`, no AI, receives managed per-project env vars in its subprocess environment when configured), `loop:` (iterative AI prompt until completion signal), `approval:` (human gate; pauses until user approves or rejects; `capture_response: true` stores the user's comment as `$<node-id>.output` for downstream nodes, default false), `script:` (inline TypeScript/Python or named script from `.rith/scripts/`, runs via `bun` or `uv`, stdout captured as `$nodeId.output`, no AI, receives managed per-project env vars in its subprocess environment when configured, supports `deps:` for dependency installation and `timeout:` in ms, requires `runtime: bun` or `runtime: uv`) . Supports `when:` conditions, `trigger_rule` join semantics, `$nodeId.output` substitution, `output_format` for structured JSON output (Claude and Codex via SDK enforcement; Pi best-effort via prompt augmentation + JSON extraction), `allowed_tools`/`denied_tools` for per-node tool restrictions (Claude only), `hooks` for per-node SDK hook callbacks (Claude only), `mcp` for per-node MCP server config files (Claude only, env vars expanded at execution time), and `skills` for per-node skill preloading via AgentDefinition wrapping (Claude only), `agents` for inline sub-agent definitions invokable via the Task tool (Claude only), and `effort`/`thinking`/`maxBudgetUsd`/`systemPrompt`/`fallbackModel`/`betas`/`sandbox` for Claude SDK advanced options (Claude only, also settable at workflow level)
    - Provider inherited from `.rith/config.yaml` unless explicitly set; per-node `provider` and `model` overrides supported
    - Model and options can be set per workflow or inherited from config defaults
-   - `interactive: true` at the workflow level forces foreground execution on web (required for approval-gate workflows in the web UI)
+   - `interactive: true` at the workflow level forces foreground execution (required for approval-gate workflows)
    - Model validation ensures provider/model compatibility at load time
    - Commands: `/workflow list`, `/workflow reload`, `/workflow status`, `/workflow cancel`, `/workflow resume <id>` (re-runs failed workflow, skipping completed nodes), `/workflow abandon <id>`, `/workflow cleanup [days]` (CLI only — deletes old run records)
    - Resilient loading: One broken YAML doesn't abort discovery; errors shown in `/workflow list`
@@ -776,58 +654,11 @@ try {
 
 Pattern: Use `classifyIsolationError()` (from `@rith/isolation`) to map git errors (permission denied, timeout, no space, not a git repo) to user-friendly messages. Always log the raw error for debugging and send a classified message to the user.
 
-### API Endpoints
+### CLI Commands
 
-**Web UI REST API** (`packages/server/src/routes/api.ts`):
-
-**Workflow Management:**
-- `GET /api/workflows` - List available workflows; optional `?cwd=`; returns `{ workflows: [...], errors?: [...] }`
-- `POST /api/workflows/validate` - Validate a workflow definition in-memory (no save); body: `{ definition: object }`; returns `{ valid: boolean, errors?: string[] }`
-- `GET /api/workflows/:name` - Fetch a single workflow by name; optional `?cwd=` query param; returns `{ workflow, filename, source: 'project' | 'bundled' }`
-- `PUT /api/workflows/:name` - Save (create or update) a workflow YAML; body: `{ definition: object }`; validates before writing; requires `?cwd=` or registered codebase
-- `DELETE /api/workflows/:name` - Delete a user-defined workflow; bundled defaults cannot be deleted
-
-**Workflow Run Lifecycle:**
-- `POST /api/workflows/runs/{runId}/resume` - Resume a failed run from where it left off (skips already-completed DAG nodes; AI session context is not restored).
-- `POST /api/workflows/runs/{runId}/abandon` - Abandon a non-terminal run (marks as cancelled)
-- `DELETE /api/workflows/runs/{runId}` - Delete a terminal workflow run and its events
-
-**Codebases:**
-- `GET /api/codebases` / `GET /api/codebases/:id` - List / fetch codebases
-- `POST /api/codebases` - Register a codebase (clone or local path)
-- `DELETE /api/codebases/:id` - Delete a codebase and clean up resources
-- `GET /api/codebases/:id/env` - List env var keys for a codebase (never returns values)
-- `PUT /api/codebases/:id/env` / `DELETE /api/codebases/:id/env/:key` - Upsert / delete a single codebase env var
-- `GET /api/codebases/:id/environments` - List tracked isolation environments for a codebase
-
-**Artifact Files:**
-- `GET /api/runs/:runId/artifacts` - List artifact files for a run; walks the on-disk artifact directory (dotfiles skipped) and returns `{ files: [{ path, size, modifiedAt }] }`; 400 on invalid run id or path-escape attempt, 404 if the run does not exist
-- `GET /api/artifacts/:runId/*` - Serve a workflow artifact file by run ID and relative path; returns `text/markdown` for `.md` files, `text/plain` otherwise; 400 on path traversal (`..`), 404 if run or file not found
-
-**Command Listing:**
-- `GET /api/commands` - List available command names (bundled + project-defined); optional `?cwd=`; returns `{ commands: [{ name, source: 'bundled' | 'project' }] }`
-
-**Providers:**
-- `GET /api/providers` - List registered AI providers; returns `{ providers: [{ id, displayName, capabilities, builtIn }] }`
-
-**System:**
-- `GET /api/health` - Health check with adapter/system status
-- `GET /api/update-check` - Check for available updates; returns `{ updateAvailable, currentVersion, latestVersion, releaseUrl }`; skips GitHub API call for non-binary builds
-
-**OpenAPI Spec:**
-- `GET /api/openapi.json` - Generated OpenAPI 3.0 spec for all Zod-validated routes
-
-**Webhooks:**
-- `POST /webhooks/github` - GitHub webhook events
-- Signature verification required (HMAC SHA-256)
-- Return 200 immediately, process async
-
-**Security:**
-- Verify webhook signatures (GitHub: `X-Hub-Signature-256`)
-- Use `c.req.text()` for raw webhook body (signature verification)
-- Never log or expose tokens in responses
-
-**@Mention Detection:**
-- Parse `@rith` in issue/PR **comments only** (not descriptions)
-- Events: `issue_comment` only
-- Note: Descriptions often contain example commands or documentation - these are NOT command invocations (see #96)
+See `rith --help` for the full command list. Key commands:
+- `rith workflow list` — list available workflows
+- `rith workflow run <name>` — run a workflow
+- `rith workflow status` — show running workflows
+- `rith workflow cancel <id>` — cancel a running workflow
+- `rith workflow resume <id>` — resume a failed workflow

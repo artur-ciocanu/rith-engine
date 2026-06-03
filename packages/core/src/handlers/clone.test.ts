@@ -61,7 +61,7 @@ mock.module('@rith/paths', () => ({
 }));
 
 // ── config-loader mock ──────────────────────────────────────────────────────
-const mockLoadConfig = mock(() => Promise.resolve({ pi: { model: 'pi' } }));
+const mockLoadConfig = mock(() => Promise.resolve({ provider: { model: 'pi' } }));
 mock.module('../config/config-loader', () => ({
   loadConfig: mockLoadConfig,
 }));
@@ -110,7 +110,7 @@ function clearMocks(): void {
   mockUpdateCodebase.mockReset();
   mockFindMarkdownFilesRecursive.mockReset();
   mockLoadConfig.mockReset();
-  mockLoadConfig.mockResolvedValue({ pi: { model: 'pi' } });
+  mockLoadConfig.mockResolvedValue({ provider: { model: 'pi' } });
   mockLogger.info.mockClear();
   mockLogger.debug.mockClear();
   mockLogger.warn.mockClear();

@@ -1,6 +1,6 @@
-import type { PiProviderDefaults } from '../types'
+import type { ProviderDefaults } from '../types';
 
-export type { PiProviderDefaults };
+export type { ProviderDefaults };
 
 /**
  * Parse raw YAML-derived config into typed Pi defaults.
@@ -8,8 +8,8 @@ export type { PiProviderDefaults };
  * and parseCodexConfig — never throws, so broken user config can't prevent
  * provider registration or workflow discovery).
  */
-export function parsePiConfig(raw: Record<string, unknown>): PiProviderDefaults {
-  const result: PiProviderDefaults = {};
+export function parseProviderConfig(raw: Record<string, unknown>): ProviderDefaults {
+  const result: ProviderDefaults = {};
 
   if (typeof raw.model === 'string') {
     result.model = raw.model;
