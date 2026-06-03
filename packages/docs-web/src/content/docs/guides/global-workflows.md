@@ -9,7 +9,7 @@ sidebar:
   order: 9
 ---
 
-Workflows placed in `~/.rith/workflows/`, commands in `~/.rith/commands/`, and scripts in `~/.rith/scripts/` are loaded globally -- they appear in every project and can be invoked from any repository. Workflows and commands carry the `source: 'global'` label in the Web UI node palette; scripts resolve under the same repo-wins-over-home precedence.
+Workflows placed in `~/.rith/workflows/`, commands in `~/.rith/commands/`, and scripts in `~/.rith/scripts/` are loaded globally -- they appear in every project and can be invoked from any repository. Workflows and commands carry the `source: 'global'` label; scripts resolve under the same repo-wins-over-home precedence.
 
 ## Paths
 
@@ -170,9 +170,9 @@ cp ~/dotfiles/rith/commands/*.md    ~/.rith/commands/
 
 This way your personal workflows and commands travel with you across machines.
 
-## CLI and Web Support
+## CLI Support
 
-Both the CLI, the server, and the Web UI discover home-scoped content automatically -- no flag, no config option.
+The CLI discovers home-scoped content automatically -- no flag, no config option.
 
 ```bash
 # Lists bundled + global + repo-specific workflows
@@ -181,8 +181,6 @@ rith workflow list
 # Run a global workflow from any repo
 rith workflow run my-review
 ```
-
-In the Web UI workflow builder, commands from `~/.rith/commands/` appear under a **Global (~/.rith/commands/)** section in the node palette, distinct from project and bundled entries.
 
 ## Migrating from the old path
 

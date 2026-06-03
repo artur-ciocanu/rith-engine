@@ -31,7 +31,7 @@ docker compose ps
 
 Local:
 ```bash
-# Server logs are printed to stdout when running `bun run dev`
+# Check application logs via Docker or rith serve output
 ```
 
 Docker:
@@ -39,10 +39,10 @@ Docker:
 docker compose logs -f app
 ```
 
-**Verify bot token:**
+**Verify configuration:**
 ```bash
-# In your .env file
-cat .env | grep TELEGRAM_BOT_TOKEN
+# Check your Rith Engine config
+rith doctor
 ```
 
 **Test with health check:**
@@ -153,16 +153,16 @@ netstat -ano | findstr :3090
 
 You can override the port with the `PORT` environment variable:
 ```bash
-PORT=4000 bun run dev
+PORT=4000 rith serve
 ```
 
 When running in a git worktree, Rith Engine automatically allocates a unique port (3190-4089 range) so you don't need to worry about conflicts with the main instance.
 
 ### Stale Processes (Windows)
 
-**Symptom:** The Web UI shows a spinning indicator with no response, and the terminal shows no activity — even though you've started `bun run dev`.
+**Symptom:** The CLI or `rith serve` is unresponsive, and the terminal shows no activity — even though you've started the process.
 
-**Cause:** A previous `bun` or `node` process is still holding the port. This is common on Windows when the terminal is closed without stopping the server.
+**Cause:** A previous `bun`, `rith`, or `node` process is still holding the port. This is common on Windows when the terminal is closed without stopping the process.
 
 **Diagnose:**
 
@@ -189,13 +189,11 @@ If multiple stale processes are present:
 ```powershell
 taskkill /F /IM bun.exe
 taskkill /F /IM node.exe
+taskkill /F /IM rith.exe
 ```
 
-:::caution
-Do not kill `claude.exe` processes — those are active Claude Code sessions.
-:::
-
 See also: [Windows Setup](/deployment/windows/) for more Windows-specific guidance.
+
 
 ## E2E Testing / agent-browser
 
@@ -321,7 +319,7 @@ See the [AI Assistants → Binary path configuration](/getting-started/ai-assist
 
 **Cause:** Nested Claude Code sessions can deadlock — the outer session waits for tool results that the inner session never delivers.
 
-**Fix:** Run `rith serve` from a regular shell outside Claude Code and use the Web UI or HTTP API instead.
+**Fix:** Run `rith` from a regular shell outside a nested session.
 
 **Suppress the warning:** If you have a non-deadlocking setup and want to silence the warning:
 

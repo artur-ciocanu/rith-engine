@@ -124,8 +124,8 @@ Most extensions need three config surfaces:
 | Surface | Purpose |
 |---|---|
 | `extensionFlags` | Per-extension feature flags (maps 1:1 to Pi's `--flag` CLI switches) |
-| `env` | Env vars the extension reads at runtime (managed via `.rith/config.yaml` or the Web UI codebase env panel) |
-| Workflow-level `interactive: true` | Required for **approval-gate extensions** on the web UI — forces foreground execution so the user can respond |
+| `env` | Env vars the extension reads at runtime (managed via `.rith/config.yaml`) |
+| Workflow-level `interactive: true` | Required for approval-gate extensions — forces foreground execution so the user can respond in the CLI |
 
 **Example — [plannotator](https://github.com/dmcglinn/plannotator) (human-in-the-loop plan review):**
 
@@ -148,10 +148,10 @@ assistants:
 ```yaml
 # .rith/workflows/my-piv.yaml
 name: my-piv
-interactive: true             # plannotator gates the node on human approval — required on web UI
+interactive: true             # plannotator gates the node on human approval
 ```
 
-When the node runs, plannotator prints a review URL and blocks until you click approve/deny in the browser. Rith Engine's CLI/SSE batch buffer flushes that URL to you immediately so you never get stuck waiting on a node that silently wants input.
+When the node runs, plannotator prints a review URL and blocks until you click approve/deny in the browser. Rith Engine's CLI batch buffer flushes that URL to you immediately so you never get stuck waiting on a node that silently wants input.
 
 ## Model reference format
 

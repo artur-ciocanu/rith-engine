@@ -80,12 +80,6 @@ assistants:
       - /absolute/path/to/other/repo
     # codexBinaryPath: /absolute/path/to/codex  # Optional: Codex CLI path
 
-# Streaming preferences per platform
-streaming:
-  telegram: stream # 'stream' or 'batch'
-  discord: batch
-  slack: batch
-  github: batch
 
 # Custom paths (usually not needed)
 paths:
@@ -145,8 +139,8 @@ defaults:
   loadDefaultCommands: true   # Load app's bundled default commands at runtime
   loadDefaultWorkflows: true  # Load app's bundled default workflows at runtime
 
-# Per-project environment variables for workflow execution (Claude SDK only)
-# Injected into the Claude subprocess env. Use the Web UI Settings panel for secrets.
+# Per-project environment variables for workflow execution
+# Injected into the Pi subprocess env. Configure in .rith/config.yaml.
 # env:
 #   MY_API_KEY: value
 #   CUSTOM_ENDPOINT: https://...
@@ -229,7 +223,7 @@ Environment variables override all other configuration. They are organized by ca
 | `PORT` | HTTP server listen port | `3090` (auto-allocated in worktrees) |
 | `LOG_LEVEL` | Logging verbosity (`fatal`, `error`, `warn`, `info`, `debug`, `trace`) | `info` |
 | `BOT_DISPLAY_NAME` | Bot name shown in batch-mode "starting" messages | `Rith Engine` |
-| `DEFAULT_AI_ASSISTANT` | Default AI assistant. Must match a registered provider id — currently `claude`, `codex`, `pi`, or `copilot`. | `claude` |
+| `DEFAULT_AI_ASSISTANT` | Default AI assistant. Must match a registered provider id — currently `pi`. | `pi` |
 | `MAX_CONCURRENT_CONVERSATIONS` | Maximum concurrent AI conversations | `10` |
 | `SESSION_RETENTION_DAYS` | Delete inactive sessions older than N days | `30` |
 | `RITH_SUPPRESS_NESTED_CLAUDE_WARNING` | When set to `1`, suppresses the stderr warning emitted when `rith` is run inside a Claude Code session | -- |
@@ -265,32 +259,7 @@ When `CLAUDE_USE_GLOBAL_AUTH` is unset, Rith Engine auto-detects: it uses explic
 
 The Copilot provider also reads `assistants.copilot.{model, modelReasoningEffort, copilotCliPath, configDir, enableConfigDiscovery, useLoggedInUser, logLevel}` from `~/.rith/config.yaml` or `.rith/config.yaml`. See the [AI Assistants guide](/getting-started/ai-assistants/) for the full setup.
 
-### Platform Adapters -- Slack
-
-| Variable | Description | Default |
-| --- | --- | --- |
-| `SLACK_BOT_TOKEN` | Slack bot token (`xoxb-...`) | -- |
-| `SLACK_APP_TOKEN` | Slack app-level token for Socket Mode (`xapp-...`) | -- |
-| `SLACK_ALLOWED_USER_IDS` | Comma-separated Slack user IDs for whitelist | Open access |
-| `SLACK_STREAMING_MODE` | Streaming mode (`stream` or `batch`) | `batch` |
-
-### Platform Adapters -- Telegram
-
-| Variable | Description | Default |
-| --- | --- | --- |
-| `TELEGRAM_BOT_TOKEN` | Telegram bot token from @BotFather | -- |
-| `TELEGRAM_ALLOWED_USER_IDS` | Comma-separated Telegram user IDs for whitelist | Open access |
-| `TELEGRAM_STREAMING_MODE` | Streaming mode (`stream` or `batch`) | `stream` |
-
-### Platform Adapters -- Discord
-
-| Variable | Description | Default |
-| --- | --- | --- |
-| `DISCORD_BOT_TOKEN` | Discord bot token from Developer Portal | -- |
-| `DISCORD_ALLOWED_USER_IDS` | Comma-separated Discord user IDs for whitelist | Open access |
-| `DISCORD_STREAMING_MODE` | Streaming mode (`stream` or `batch`) | `batch` |
-
-### Platform Adapters -- GitHub
+### Forge Integrations -- GitHub
 
 | Variable | Description | Default |
 | --- | --- | --- |
@@ -300,7 +269,7 @@ The Copilot provider also reads `assistants.copilot.{model, modelReasoningEffort
 | `GITHUB_ALLOWED_USERS` | Comma-separated GitHub usernames for whitelist (case-insensitive) | Open access |
 | `GITHUB_BOT_MENTION` | @mention name the bot responds to in issues/PRs | Falls back to `BOT_DISPLAY_NAME` |
 
-### Platform Adapters -- Gitea
+### Forge Integrations -- Gitea
 
 | Variable | Description | Default |
 | --- | --- | --- |
@@ -316,12 +285,6 @@ The Copilot provider also reads `assistants.copilot.{model, modelReasoningEffort
 | --- | --- | --- |
 | `DATABASE_URL` | PostgreSQL connection string (omit to use SQLite) | SQLite at `~/.rith/rith.db` |
 
-### Web UI
-
-| Variable | Description | Default |
-| --- | --- | --- |
-| `WEB_UI_ORIGIN` | CORS origin for API routes (restrict when exposing publicly) | `*` (allow all) |
-| `WEB_UI_DEV` | When set, skip serving static frontend (Vite dev server used instead) | -- |
 
 ### Worktree Management
 
@@ -338,11 +301,7 @@ The Copilot provider also reads `assistants.copilot.{model, modelReasoningEffort
 | `RITH_DATA` | Host path for Rith Engine data (workspaces, worktrees, artifacts). Compose-only — read by `docker-compose.yml` to choose the bind-mount source for `/.rith`; not read by Rith Engine source code. | Docker-managed volume |
 | `RITH_USER_HOME` | Host path for `/home/appuser` (Claude/Codex/Pi config, `~/.gitconfig`, shell history). Compose-only — read by `docker-compose.yml` to choose the bind-mount source for `/home/appuser`; not read by Rith Engine source code. Persisted by default to a Docker-managed volume so user state survives rebuilds. | Docker-managed volume |
 | `DOMAIN` | Public domain for Caddy reverse proxy (TLS auto-provisioned) | -- |
-| `CADDY_BASIC_AUTH` | Caddy basicauth directive to protect Web UI and API | Disabled |
-| `AUTH_USERNAME` | Username for form-based auth (Caddy forward_auth) | -- |
-| `AUTH_PASSWORD_HASH` | Bcrypt hash for form-based auth password (escape `$` as `$$` in Compose) | -- |
-| `COOKIE_SECRET` | 64-hex-char secret for auth session cookies | -- |
-| `AUTH_SERVICE_PORT` | Port for the auth service container | `9000` |
+| `CADDY_BASIC_AUTH` | Caddy basicauth directive to protect API | Disabled |
 | `COOKIE_MAX_AGE` | Auth cookie lifetime in seconds | `86400` |
 
 ### `.env` File Locations
@@ -376,19 +335,9 @@ The `[rith] loaded N keys from …` lines are suppressed by default (they would 
 
 **Which file should I use?**
 
-- **`~/.rith/.env`** — user-wide defaults (your personal `SLACK_WEBHOOK`, `DATABASE_URL`, etc.). Applies to every project.
-- **`<cwd>/.rith/.env`** — per-project overrides. Different webhook per repo, different DB per environment, etc.
+- **`~/.rith/.env`** — user-wide defaults (your personal `DATABASE_URL`, tokens, etc.). Applies to every project.
+- **`<cwd>/.rith/.env`** — per-project overrides. Different tokens per repo, different DB per environment, etc.
 - **`<cwd>/.env`** — **your app's** env file. Rith Engine does not read this file; it strips the keys at boot so they do not leak into Rith Engine's process.
-
-```bash
-# User-wide
-mkdir -p ~/.rith
-cp .env.example ~/.rith/.env
-
-# Per-project override (e.g. a different Slack webhook for this repo)
-mkdir -p /path/to/repo/.rith
-printf 'SLACK_WEBHOOK=https://hooks.slack.com/...\n' > /path/to/repo/.rith/.env
-```
 
 ## Docker Configuration
 
@@ -427,9 +376,7 @@ commands:
 No configuration needed. Rith Engine works out of the box with:
 
 - `~/.rith/` for all managed files
-- Claude as default AI assistant
-- Platform-appropriate streaming modes
-
+- Pi as default AI assistant
 ### Custom AI Preference
 
 ```yaml
@@ -452,63 +399,6 @@ commands:
 docker run -v /my/data:/.rith ghcr.io/artur-ciocanu/rith-engine
 ```
 
-## Streaming Modes
-
-Each platform adapter supports two streaming modes, configured via environment variable or `~/.rith/config.yaml`.
-
-### Stream Mode
-
-Messages are sent in real-time as the AI generates responses.
-
-```ini
-TELEGRAM_STREAMING_MODE=stream
-SLACK_STREAMING_MODE=stream
-DISCORD_STREAMING_MODE=stream
-```
-
-**Pros:**
-- Real-time feedback and progress indication
-- More interactive and engaging
-- See AI reasoning as it works
-
-**Cons:**
-- More API calls to platform
-- May hit rate limits with very long responses
-- Creates many messages/comments
-
-**Best for:** Interactive chat platforms (Telegram)
-
-### Batch Mode
-
-Only the final summary message is sent after AI completes processing.
-
-```ini
-TELEGRAM_STREAMING_MODE=batch
-SLACK_STREAMING_MODE=batch
-DISCORD_STREAMING_MODE=batch
-```
-
-**Pros:**
-- Single coherent message/comment
-- Fewer API calls
-- No spam or clutter
-
-**Cons:**
-- No progress indication during processing
-- Longer wait for first response
-- Can't see intermediate steps
-
-**Best for:** Issue trackers and async platforms (GitHub)
-
-### Platform Defaults
-
-| Platform | Default Mode |
-|----------|-------------|
-| Telegram | `stream` |
-| Discord  | `batch` |
-| Slack    | `batch` |
-| GitHub   | `batch` |
-| Web UI   | SSE streaming (always real-time, not configurable) |
 
 ---
 

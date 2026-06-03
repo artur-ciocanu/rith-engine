@@ -153,12 +153,12 @@ The database has 8 tables, all prefixed with `remote_agent_`:
 7. **`remote_agent_messages`** - Conversation message history
    - Persists user and assistant messages with timestamps
    - Stores tool call metadata (name, input, duration) in JSONB
-   - Enables message history in Web UI across page refreshes
+   - Stores message history for conversation continuity
 
 8. **`remote_agent_codebase_env_vars`** - Per-project env vars for workflow execution
    - Key-value pairs scoped to a codebase
    - Injected into Claude SDK subprocess environment at execution time
-   - Managed via Web UI Settings panel; `env:` in `.rith/config.yaml` for CLI users
+   - Managed via `env:` in `.rith/config.yaml`
 
 ## Migration List
 

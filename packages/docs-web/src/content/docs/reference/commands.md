@@ -1,6 +1,6 @@
 ---
 title: Commands Reference
-description: All slash commands available in Rith Engine adapters including Web UI, Telegram, Slack, Discord, and GitHub.
+description: All commands available in the Rith Engine CLI.
 category: reference
 area: handlers
 audience: [user]
@@ -9,13 +9,13 @@ sidebar:
   order: 4
 ---
 
-All slash commands available in Rith Engine. Type `/help` in any platform adapter (Web UI, Telegram, Slack, Discord, GitHub) to see this list.
+All commands available in Rith Engine. Run `rith help` to see this list.
 
 ---
 
 ## Deterministic Commands
 
-These commands are handled deterministically by the orchestrator — they always execute the same way regardless of AI state:
+These commands are handled deterministically by the CLI — they always execute the same way regardless of AI state:
 
 ## Project Management
 
@@ -54,7 +54,7 @@ These commands are handled deterministically by the orchestrator — they always
 
 ## AI-Routed Commands
 
-The following commands exist in the command handler but are **not** deterministically routed. Instead, they are routed through the AI orchestrator, which decides whether to invoke them based on context. They work when the AI routes a message to them:
+The following commands exist in the command handler but are **not** deterministically routed. Instead, they are routed through the workflow engine, which decides whether to invoke them based on context. They work when the AI routes a message to them:
 
 | Command | Description |
 |---------|-------------|
@@ -78,42 +78,6 @@ The following commands exist in the command handler but are **not** deterministi
 > **Note:** In practice, you rarely need to type these commands directly. Describe what you want in natural language and the AI router will invoke the appropriate command or workflow.
 
 ---
-
-## Example Workflow (Telegram)
-
-### Ask Questions Directly
-
-```
-You: What's the structure of this repo?
-
-Bot: [Claude analyzes and responds...]
-```
-
-### Check Status
-
-```
-You: /status
-
-Bot: Platform: telegram
-     AI Assistant: claude
-
-     Codebase: my-project
-     Repository: https://github.com/user/my-project
-
-     Repository: my-project @ main
-
-     Worktrees: 0/10
-```
-
-### Reset Session
-
-```
-You: /reset
-
-Bot: Session cleared. Starting fresh on next message.
-
-     Codebase configuration preserved.
-```
 
 ---
 

@@ -13,7 +13,7 @@ DAG workflow nodes support a `mcp` field that attaches MCP (Model Context Protoc
 servers to individual nodes. Each node gets exactly the external tools it needs —
 GitHub, Linear, Postgres, etc. — without over-provisioning.
 
-MCP works with Codex and Claude workflow nodes. Pi nodes still warn and ignore
+MCP works with Claude workflow nodes. Pi nodes still warn and ignore
 the `mcp` field.
 
 ## Quick Start
@@ -124,8 +124,7 @@ Connects to an SSE endpoint.
 ## Environment Variable Expansion
 
 Values in `env` and `headers` fields support `$VAR_NAME` and `${VAR_NAME}` references. They are
-expanded from Rith Engine's process environment at execution time. Codex workflow
-nodes also include codebase-scoped env vars in that expansion.
+expanded from Rith Engine's process environment at execution time.
 
 ```json
 {
@@ -178,9 +177,8 @@ named `github` and `postgres`, the node gets:
 - `mcp__github__*`
 - `mcp__postgres__*`
 
-Codex nodes pass the same MCP config as per-node `mcp_servers` overrides to the
-Codex SDK, so the servers are available for that node without requiring global
-`~/.codex/config.toml` setup.
+Claude nodes automatically add tool wildcards to `allowed_tools`, so MCP server
+tools are available without additional configuration.
 
 ## MCP-Only Nodes
 
@@ -197,9 +195,7 @@ nodes:
 ```
 
 This is useful for sandboxing — the AI can only interact through the MCP server
-and cannot touch the filesystem or run shell commands. Codex currently does not
-support Rith Engine's `allowed_tools` / `denied_tools` restrictions, so this pattern
-is enforced for Claude nodes but not Codex nodes.
+and cannot touch the filesystem or run shell commands.
 
 ## Connection Failure Handling
 
@@ -219,7 +215,7 @@ fail to connect inside headless workflow subprocesses and are **not** surfaced
 when the workflow did not configure MCP itself — they're not actionable for the
 workflow author. They appear only in debug logs as
 `dag.mcp_plugin_connection_suppressed`. Run the CLI with `--verbose` (or set
-`LOG_LEVEL=debug` on the server) if you need to see them.
+`LOG_LEVEL=debug`) if you need to see them.
 
 ## Workflow Examples
 
@@ -377,8 +373,7 @@ bun run cli workflow run rith-smart-pr-review "Review PR #123"
 
 ## Limitations
 
-- **Codex tool restrictions** — Codex nodes support `mcp`, but Rith Engine's
-  `allowed_tools` / `denied_tools` restrictions are still ignored by Codex.
+- **Tool restrictions** — `allowed_tools` / `denied_tools` restrictions are Claude-only.
 - **Haiku model** — Tool search (lazy loading for many tools) is not supported on
   Haiku. You'll see a warning. Consider using Sonnet or Opus for MCP nodes.
 - **No load-time validation** — The MCP config file is read at execution time, not
@@ -396,7 +391,7 @@ bun run cli workflow run rith-smart-pr-review "Review PR #123"
 | `undefined env vars: VAR_NAME` | Environment variable not set | Export the variable or add it to your `.env` |
 | `MCP server connection failed` | Server process crashed or URL unreachable | Check command/URL, test the server standalone |
 | Plugin MCP missing from workflow output | User-level plugin MCPs are filtered out of workflow warnings | Run with `--verbose` and look for provider MCP debug logs |
-| `allowed_tools` ignored with Codex | Codex provider does not support Rith Engine's tool restrictions yet | Do not rely on `allowed_tools: []` for Codex sandboxing |
+| `allowed_tools` not enforced | Only Claude supports Rith Engine's tool restrictions | Use Claude provider for MCP sandboxing |
 | `Haiku model with MCP servers` | Haiku doesn't support tool search | Use `model: sonnet` or `model: opus` instead |
 
 ## Finding MCP Servers

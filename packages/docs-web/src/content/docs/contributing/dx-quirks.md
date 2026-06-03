@@ -15,22 +15,21 @@ Development experience notes and workarounds.
 When running `bun dev` from the repo root, Bun's `--filter` truncates logs:
 
 ```
-@rith/server dev $ bun --watch src/index.ts
+@rith/core dev $ bun --watch src/index.ts
 │ [129 lines elided]
-│ [Hono] Server listening on port 3090
 └─ Running...
 ```
 
-**To see full logs**, run directly from the server package:
+**To see full logs**, run directly from the package:
 
 ```bash
-cd packages/server && bun --watch src/index.ts
+cd packages/core && bun --watch src/index.ts
 ```
 
 Or:
 
 ```bash
-bun --cwd packages/server run dev
+bun --cwd packages/core run dev
 ```
 
 Note: The root `bun dev` uses `--filter` to fix hot reload path issues, but this comes with log condensing.
@@ -48,8 +47,8 @@ Bun's `mock.module()` is process-global and irreversible — `mock.restore()` do
 
 Worktrees auto-allocate ports (3190–4089 range, hash-based on path). Same worktree always gets same port.
 
-- Main repo defaults to 3090
-- Override: `PORT=4000 bun dev`
+- Default port: 3090
+- Override: `PORT=4000 rith serve`
 - Same worktree always gets same port (deterministic)
 
 ## `bun run test` vs `bun test`

@@ -11,7 +11,7 @@ sidebar:
 
 Rith Engine runs on Windows in two ways:
 
-- **Native Windows with Bun**: Works for basic usage (server, Web UI, simple workflows). No WSL2 required. Install [Bun for Windows](https://bun.sh), clone the repo, and run `bun install && bun run dev`.
+- **Native Windows with Bun**: Works for basic usage (simple workflows, no worktree isolation). No WSL2 required. Install [Bun for Windows](https://bun.sh), clone the repo, and run `bun install`.
 - **WSL2 (recommended)**: Required for full compatibility, especially git worktree isolation, shell-based workflow steps, and CLI features that depend on Unix tooling.
 
 The rest of this guide covers the WSL2 setup for full compatibility.
@@ -72,12 +72,12 @@ For best performance, keep projects inside the WSL2 file system (`~/projects/`) 
 ## Stale Processes (Native Windows Only)
 
 :::note
-This section applies to native Windows (`bun run dev` in PowerShell or CMD). If you're using WSL2, use `pkill -f bun` instead.
+This section applies to native Windows usage. If you're using WSL2, use `pkill -f rith` instead.
 :::
 
-**Symptom:** The Web UI shows a spinning indicator with no response after starting `bun run dev`, or you see `EADDRINUSE` errors on startup.
+**Symptom:** You see `EADDRINUSE` errors on startup, or the `rith` CLI hangs when trying to start.
 
-**Cause:** A previous `bun` or `node` process is still holding the port, typically because the terminal was closed without stopping the server.
+**Cause:** A previous `rith` or `bun` process is still holding the port, typically because the terminal was closed without stopping the process.
 
 **Diagnose:**
 
@@ -103,12 +103,7 @@ If there are multiple stale processes:
 
 ```powershell
 taskkill /F /IM bun.exe
-taskkill /F /IM node.exe
 ```
-
-:::caution
-Do not kill `claude.exe` processes — those are active Claude Code sessions.
-:::
 
 See also: [Port Conflicts](/reference/troubleshooting/#port-conflicts) in the troubleshooting guide.
 
