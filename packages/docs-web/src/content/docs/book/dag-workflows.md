@@ -288,10 +288,10 @@ Rith Engine supports seven node types. Exactly one mode field is required per no
     fresh_context: true
 ```
 
-**Approval** pauses the workflow for human review. The downstream nodes don't run until the user approves in chat, CLI, or web UI:
+**Approval** pauses the workflow for human review. The downstream nodes don't run until the user approves via the CLI:
 
 ```yaml
-interactive: true                 # required at workflow level for web UI delivery
+interactive: true                 # required for approval gates
 
 nodes:
   - id: plan

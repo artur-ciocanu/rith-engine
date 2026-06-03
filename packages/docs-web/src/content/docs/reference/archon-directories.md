@@ -153,10 +153,6 @@ Key configuration options:
 | Option | Env Override | Default |
 |--------|--------------|---------|
 | `RITH_HOME` | `RITH_HOME` | `~/.rith` |
-| Default AI Assistant | `DEFAULT_AI_ASSISTANT` | `claude` |
-| Telegram Streaming | `TELEGRAM_STREAMING_MODE` | `stream` |
-| Discord Streaming | `DISCORD_STREAMING_MODE` | `batch` |
-| Slack Streaming | `SLACK_STREAMING_MODE` | `batch` |
 
 ## Command Folders
 
@@ -237,9 +233,8 @@ export interface GlobalConfig {
 - User preferences in global config (portable)
 - Project settings in repo config (version-controlled)
 
-## UI Integration
+## Integration
 
-The config type system is designed for:
-- Web UI configuration
+- CLI configuration
 - API-driven config updates
 - Real-time config validation

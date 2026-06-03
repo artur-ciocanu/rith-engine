@@ -61,7 +61,7 @@ Rith Engine discovers workflows recursively - subdirectories are fine. If a work
 
 > **Global workflows:** For workflows that apply to every project, place them in `~/.rith/workflows/`. Global workflows are overridden by same-named repo workflows. See [Global Workflows](/guides/global-workflows/).
 
-> **CLI vs Server:** The CLI reads workflow files from wherever you run it (sees uncommitted changes). The server reads from the workspace clone at `~/.rith/workspaces/owner/repo/`, which only syncs from the remote before worktree creation. If you edit a workflow locally but don't push, the server won't see it.
+> The CLI reads workflow files from wherever you run it (sees uncommitted changes).
 
 ---
 
@@ -117,16 +117,14 @@ description: |
 # Optional workflow-level configuration
 provider: claude
 model: sonnet
-modelReasoningEffort: medium     # Codex only
-webSearchMode: live              # Codex only
-interactive: true                # Web only: run in foreground instead of background
+interactive: true                # Ensures approval gates pause for user input
 worktree:                        # Optional: pin isolation behavior regardless of caller
-  enabled: false                 #   false = always run in the live checkout (CLI --no-worktree
-                                 #           and web both honor it). Use for read-only workflows
-                                 #           like triage/reporting. true = must use a worktree;
-                                 #           CLI --no-worktree hard-errors. Omit to let the
-                                 #           caller decide (current default = worktree).
-tags: [GitLab, Review]           # Optional: explicit Web UI filter tags. Overrides the
+  enabled: false                 #   false = always run in the live checkout (--no-worktree).
+                                 #           Use for read-only workflows like triage/reporting.
+                                 #           true = must use a worktree; CLI --no-worktree
+                                 #           hard-errors. Omit to let the caller decide
+                                 #           (current default = worktree).
+tags: [GitLab, Review]           # Optional: filter tags for categorization. Overrides the
                                  #   keyword-based tag inference. An empty list (`tags: []`)
                                  #   suppresses inference and shows no tags. Omit to fall
                                  #   back to inferred tags (the default).
@@ -135,7 +133,7 @@ tags: [GitLab, Review]           # Optional: explicit Web UI filter tags. Overri
 nodes:
   - id: classify                 # Unique node ID (used for dependency refs and $id.output)
     command: classify-issue      # Loads from .rith/commands/classify-issue.md
-    output_format:               # Optional: structured JSON output. SDK-enforced on Claude/Codex; best-effort (prompt + JSON extraction) on Pi.
+    output_format:               # Optional: structured JSON output. SDK-enforced on Claude; best-effort (prompt + JSON extraction) on Pi.
       type: object
       properties:
         type:
@@ -165,7 +163,7 @@ nodes:
     provider: claude             # Per-node provider override
     model: haiku                 # Per-node model override
     # hooks:                     # Optional: per-node SDK hook callbacks (Claude only) — see hooks guide
-    # mcp: .rith/mcp/servers.json  # Optional: per-node MCP servers (Codex and Claude)
+    # mcp: .rith/mcp/servers.json  # Optional: per-node MCP servers (Claude)
     # skills: [remotion-best-practices]  # Optional: per-node skills (Claude only) — see skills guide
 ```
 
@@ -200,13 +198,13 @@ nodes:
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
-| `provider` | string | inherited | Per-node provider override (any registered provider, e.g. `'claude'`, `'codex'`) |
+| `provider` | string | inherited | Per-node provider override (any registered provider, e.g. `'claude'`, `'pi'`) |
 | `model` | string | inherited | Per-node model override |
-| `output_format` | object | — | JSON Schema for structured output. SDK-enforced on Claude and Codex; best-effort on Pi (schema appended to prompt, JSON extracted from result text) |
+| `output_format` | object | — | JSON Schema for structured output. SDK-enforced on Claude; best-effort on Pi (schema appended to prompt, JSON extracted from result text) |
 | `allowed_tools` | string[] | — | Whitelist of built-in tools. `[]` = no tools. Claude only |
 | `denied_tools` | string[] | — | Tools to remove. Applied after `allowed_tools`. Claude only |
 | `hooks` | object | — | Per-node SDK hook callbacks. Claude only. See [Hooks](/guides/hooks/) |
-| `mcp` | string | — | Path to MCP server config JSON file. Codex and Claude. See [MCP Servers](/guides/mcp-servers/) |
+| `mcp` | string | — | Path to MCP server config JSON file. Claude only. See [MCP Servers](/guides/mcp-servers/) |
 | `skills` | string[] | — | Skills to preload. Claude only. See [Skills](/guides/skills/) |
 | `agents` | object | — | Inline sub-agent definitions keyed by kebab-case ID. Claude only. See [Inline sub-agents](#inline-sub-agents) |
 | `effort` | `'low'`\|`'medium'`\|`'high'`\|`'max'` | — | Reasoning depth. Claude only. Also settable at workflow level |
@@ -219,7 +217,7 @@ nodes:
 
 ### Claude SDK Advanced Options
 
-These fields map directly to Claude Agent SDK options. All are Claude-only — Codex nodes emit a warning and ignore them. They can be set **per-node** or at the **workflow level** as defaults (per-node takes precedence). `maxBudgetUsd` and `systemPrompt` are per-node only.
+These fields map directly to Claude Agent SDK options. All are Claude-only. They can be set **per-node** or at the **workflow level** as defaults (per-node takes precedence). `maxBudgetUsd` and `systemPrompt` are per-node only.
 
 **effort** — reasoning depth:
 
@@ -372,7 +370,7 @@ Variable substitution order:
 
 ### `output_format` for Structured JSON
 
-Use `output_format` to enforce JSON output from an AI node. For Claude, the schema is passed via the SDK's `outputFormat` option and `structured_output` is used directly. For Codex (v0.116.0+), the schema is passed via `TurnOptions.outputSchema` and the agent's inline JSON response is used. Both ensure clean JSON for `when:` conditions and `$nodeId.output` substitution:
+Use `output_format` to enforce JSON output from an AI node. The schema is passed via the Pi SDK's structured output support. For Claude, it uses the SDK's `outputFormat` option. Both ensure clean JSON for `when:` conditions and `$nodeId.output` substitution:
 
 ```yaml
 nodes:
@@ -415,11 +413,11 @@ nodes:
 - `allowed_tools: []` disables all built-in tools (useful for MCP-only nodes). Use the `mcp` field on a node to attach per-node MCP servers — see [Node Fields](#node-fields)
 - If both are set, `denied_tools` is applied after `allowed_tools`
 - `undefined` (field absent) and `[]` have different semantics — absent means use default tool set, `[]` means no tools
-- Claude only — Codex nodes/steps emit a warning and continue (Codex doesn't support per-call tool restrictions)
+- Claude only
 
 ### Inline sub-agents
 
-Define Claude sub-agents directly in the workflow YAML, without authoring `.claude/agents/*.md` files. The main agent can spawn them in parallel via the `Task` tool — useful for map-reduce patterns where a cheap model (e.g. Haiku) briefs items and a stronger model reduces.
+Define sub-agents directly in the workflow YAML. The main agent can spawn them in parallel via the `Task` tool — useful for map-reduce patterns where a cheap model (e.g. Haiku) briefs items and a stronger model reduces.
 
 ```yaml
 nodes:
@@ -445,7 +443,7 @@ Keys:
 - Agent IDs must be **kebab-case** (`^[a-z0-9]+(-[a-z0-9]+)*$`)
 - Each definition requires `description` and `prompt`; `model`, `tools`, `disallowedTools`, `skills`, and `maxTurns` are optional
 - Map is merged with any SDK-level agents and with the internal `dag-node-skills` wrapper created by `skills:` — user-defined agents win on ID collision (a warning is logged when this happens)
-- Claude only. Codex and community providers that don't support inline agents emit a warning and ignore the field
+- Claude only. Community providers that don't support inline agents emit a warning and ignore the field
 
 **When to use `agents:` vs `.claude/agents/*.md` files:**
 
@@ -518,7 +516,7 @@ Workflow fails → user opts in to resume on next invocation
 
 This means a single transient crash may trigger up to **3 SDK retries** before a single node retry attempt is consumed.
 
-> **DAG resume**: For `nodes:` (DAG) workflows, resume is opt-in — pass `--resume` to `rith workflow run`, run `rith workflow resume <id>`, or use the web UI resume button. Plain `rith workflow run <name>` always starts a fresh run. See [DAG Resume on Failure](#dag-resume-on-failure) below.
+> **DAG resume**: For `nodes:` (DAG) workflows, resume is opt-in — pass `--resume` to `rith workflow run` or run `rith workflow resume <id>`. Plain `rith workflow run <name>` always starts a fresh run. See [DAG Resume on Failure](#dag-resume-on-failure) below.
 
 ---
 
@@ -529,21 +527,18 @@ When a `nodes:` (DAG) workflow fails, the prior run stays in the database as a c
 **How to resume:**
 
 - **CLI**: `rith workflow run <name> --resume` resumes the most recent failed run for `(workflow_name, cwd)`. Or `rith workflow resume <run-id>` to target a specific run.
-- **Chat (web)**: Approving or rejecting a paused workflow auto-resumes from where it left off (the platform already knows the run id).
-- **Web UI**: Resume button on the workflow card.
 
 **What happens on resume:**
 
-1. The CLI / orchestrator looks up the resumable run, loads its `node_completed` events to determine which nodes finished successfully, and transitions the row back to `running`.
+1. The CLI looks up the resumable run, loads its `node_completed` events to determine which nodes finished successfully, and transitions the row back to `running`.
 2. Completed nodes are skipped; only failed and not-yet-run nodes are executed.
 3. You receive a platform message like: `Resuming workflow — skipping 3 already-completed node(s).`
 
 > **Why opt-in?** Earlier versions silently auto-resumed on plain `rith workflow run`, which caused state from prior failed runs (e.g. cached node outputs with stale inputs) to bleed into new invocations of the same workflow at the same path. See #1392 for the bug; now resume is always a user-driven decision.
 
-**Crashed servers / orphaned runs**: Rith Engine does **not** auto-fail `running` rows on server startup — that would kill workflows actively executing in another process (CLI, adapter). If a server crash leaves a row stuck as `running`, it remains visible in the dashboard (the Dashboard nav tab shows a count of running workflows). Transition it to a terminal status explicitly:
+**Orphaned runs**: If a crash leaves a row stuck as `running`, transition it to a terminal status explicitly:
 
-- **Web UI**: click the Abandon or Cancel button on the workflow card. Abandon marks the run `cancelled` and keeps completed-node history. Cancel also terminates any in-flight subprocess.
-- **CLI**: `rith workflow abandon <run-id>` (equivalent to the dashboard Abandon button). Run IDs are listed by `rith workflow status`.
+- **CLI**: `rith workflow abandon <run-id>`. Run IDs are listed by `rith workflow status`.
 
 Once the row reaches a terminal status, you can resume it explicitly via the paths above. Plain `rith workflow run` never resumes implicitly.
 
@@ -621,7 +616,7 @@ Model and options are resolved in this order:
 
 1. **Workflow-level** - Explicit settings in the workflow YAML
 2. **Config defaults** - `assistants.*` in `.rith/config.yaml`
-3. **SDK defaults** - Built-in defaults from Claude/Codex SDKs
+3. **SDK defaults** - Built-in defaults from the Claude SDK
 
 ### Provider and Model
 
@@ -636,55 +631,23 @@ model: sonnet        # Model override (default: from config assistants.claude.mo
 Common shapes you'll see in practice:
 
 - **Claude (Anthropic):** family aliases (`sonnet`, `opus`, `haiku`), full model IDs (`claude-opus-4-7`, `claude-3-5-sonnet-20241022`), context-window suffixed forms (`opus[1m]`, `claude-opus-4-7[1m]`), or `inherit` to reuse the previous session's model.
-- **Codex (OpenAI):** any OpenAI model ID — `gpt-5.3-codex`, `gpt-5.2`, `o5-pro`, etc.
-- **Pi (community):** `<backend>/<model-id>` refs — e.g. `google/gemini-2.5-pro`, `openrouter/qwen/qwen3-coder`.
+- **Pi (Oh My Pi):** `<backend>/<model-id>` refs — e.g. `google/gemini-2.5-pro`, `openrouter/qwen/qwen3-coder`.
 - **Copilot (community):** GitHub Copilot model names — e.g. `gpt-5`, `gpt-5-mini`, `claude-sonnet-4.5`, or `auto`.
 
 If the SDK rejects the string at request time, the node fails loudly with the SDK's error message — Rith Engine never silently re-routes a model from one provider to another based on the string.
 
 **Provider selection is independent of the model string** — a `model: opus[1m]` node with no `provider:` field will route to your `defaultAssistant` regardless of the model name. Always pair a provider-specific model string with an explicit `provider:` on the node.
 
-### Codex-Specific Options
 
-```yaml
-name: my-workflow
-provider: codex
-model: gpt-5.3-codex
-modelReasoningEffort: medium    # 'minimal' | 'low' | 'medium' | 'high' | 'xhigh'
-webSearchMode: live             # 'disabled' | 'cached' | 'live'
-additionalDirectories:
-  - /absolute/path/to/other/repo
-  - /path/to/shared/library
-```
+### Interactive Mode
 
-**Model reasoning effort:**
-- `minimal`, `low` - Fast, cheaper
-- `medium` - Balanced (default)
-- `high`, `xhigh` - More thorough, expensive
-
-**Web search mode:**
-- `disabled` - No web access (default)
-- `cached` - Use cached search results
-- `live` - Real-time web search
-
-**Additional directories:**
-- Codex can access files outside the codebase
-- Useful for shared libraries, documentation repos
-- Must be absolute paths
-
-### Web Execution Mode
-
-By default, workflows started from the **Web UI** run in the background — execution is
-dispatched to an internal worker conversation and results appear only in the workflow run
-log, not in the chat window.
-
-Set `interactive: true` to run the workflow in the **foreground** (same as CLI, Slack,
-Telegram, and GitHub): all AI output and approval gate messages stream directly to the
-user's chat window.
+Set `interactive: true` to ensure the workflow pauses for user input at approval gates
+and interactive loop nodes. This is the recommended setting for any workflow containing
+approval or interactive loop nodes.
 
 ```yaml
 name: my-interactive-workflow
-interactive: true   # Web UI: foreground execution (output visible in chat)
+interactive: true   # Ensures approval gates pause for user response
 
 nodes:
   - id: plan
@@ -698,24 +661,15 @@ nodes:
     depends_on: [review-gate]
 ```
 
-**When to use `interactive: true`:**
-- Workflows with **approval nodes** — users must see the AI output and respond inline
-- Workflows with **interactive loop nodes** (`loop.interactive: true`) — the loop gate pause requires foreground execution to deliver the gate message and run ID to the user
-- Multi-turn workflows where the user needs to provide feedback at each step
-- Any workflow where the response must appear in the user's active chat thread
-
-**Platforms:** `interactive` only affects the web platform. CLI, Slack, Telegram, and
-GitHub always run workflows in foreground mode regardless of this setting.
-
 ### Provider Validation
 
 Workflows are validated at load time for **provider identity only**:
-- Both the workflow-level `provider:` and any per-node `provider:` overrides must name a registered provider (`claude`, `codex`, `pi`, `copilot`).
+- Both the workflow-level `provider:` and any per-node `provider:` overrides must name a registered provider (`claude`, `pi`, `copilot`).
 - Validation errors are shown in `/workflow list`.
 
 Example validation error:
 ```
-Unknown provider 'claud'. Registered: claude, codex, pi, copilot
+Unknown provider 'claud'. Registered: claude, pi, copilot
 ```
 
 Model strings are not validated at load time — they're forwarded to the SDK as-is and validated by the upstream API at request time.
@@ -737,10 +691,6 @@ This checks resource resolution beyond what load-time validation covers. Use `--
 assistants:
   claude:
     model: haiku  # Fast model for most tasks
-  codex:
-    model: gpt-5.3-codex
-    modelReasoningEffort: low
-    webSearchMode: disabled
 ```
 
 **Workflow with override:**
@@ -1060,10 +1010,8 @@ When the workflow reaches `review-gate`, it pauses and notifies you. Approve or 
 - **Natural language** (recommended): Just type your response in the conversation — the system detects the paused workflow and auto-resumes
 - **CLI**: `bun run cli workflow approve <run-id>` or `bun run cli workflow reject <run-id>` — auto-resumes
 - **Explicit command**: `/workflow approve <run-id>` or `/workflow reject <run-id>` — auto-resumes when issued in the originating conversation
-- **Web UI**: Click the Approve/Reject buttons on the dashboard card — auto-resumes for Web-UI-dispatched runs; the Reject dialog includes an optional reason field that flows to `$REJECTION_REASON`
-- **API**: `POST /api/workflows/runs/<run-id>/approve` or `/reject`
 
-All four paths auto-resume the workflow from the next node. The user's approval comment is available as `$review-gate.output` in downstream nodes only when `capture_response: true` is set on the approval node. Cross-platform caveat: Web-UI approvals on Slack / Telegram / GitHub-dispatched runs record the decision but do not auto-resume — re-run from the originating platform to continue.
+All paths auto-resume the workflow from the next node. The user's approval comment is available as `$review-gate.output` in downstream nodes only when `capture_response: true` is set on the approval node.
 
 Without `on_reject`: rejecting cancels the workflow.
 With `on_reject`: rejecting triggers an AI rework prompt and re-pauses for re-review.
@@ -1205,7 +1153,7 @@ Before deploying a workflow:
 8. **`allowed_tools` / `denied_tools`** — restrict tools per node (Claude only, SDK-enforced)
 9. **`retry:`** — auto-retries transient errors (default: 2 retries / 3 total attempts, 3 s backoff); customize per node
 10. **`hooks`** — attach SDK hook callbacks to Claude nodes for tool control and context injection
-11. **`mcp:`** — attach per-node MCP servers via JSON config (Codex and Claude)
+11. **`mcp:`** — attach per-node MCP servers via JSON config (Claude)
 12. **`skills:`** — preload skills into Claude nodes for domain expertise
 13. **`agents:`** — inline Claude sub-agent definitions invokable via the `Task` tool
 14. **`effort` / `thinking`** — control reasoning depth and thinking mode per node or workflow (Claude only)

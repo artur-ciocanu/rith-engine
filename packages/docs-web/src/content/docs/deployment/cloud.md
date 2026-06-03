@@ -321,22 +321,10 @@ Use the `with-db` profile when starting services (see Section 7).
 
 ### 4.2 AI Assistant Setup
 
-**Configure at least one AI assistant.**
+**Configure Pi Coding Agent** (Rith Engine's LLM executor).
 
 <details>
-<summary><b>Claude Code</b></summary>
-
-**On your local machine:**
-
-```bash
-# Install Claude Code CLI (if not already installed)
-# Visit: https://docs.claude.com/claude-code/installation
-
-# Generate OAuth token
-claude setup-token
-
-# Copy the token (starts with sk-ant-oat01-...)
-```
+<summary><b>Pi Coding Agent</b></summary>
 
 **On your server:**
 
@@ -344,101 +332,19 @@ claude setup-token
 nano .env
 ```
 
-Add:
+Pi authenticates via interactive login. After starting the container, run:
 
-```ini
-CLAUDE_CODE_OAUTH_TOKEN=sk-ant-oat01-xxxxx
+```bash
+docker compose exec app pi /login
 ```
 
-**Alternative: API Key**
-
-If you prefer pay-per-use:
-
-1. Visit [console.anthropic.com/settings/keys](https://console.anthropic.com/settings/keys)
-2. Create key (starts with `sk-ant-`)
-3. Set in `.env`:
-
-```ini
-CLAUDE_API_KEY=sk-ant-xxxxx
-```
-
-**Set as default (optional):**
-
-```ini
-DEFAULT_AI_ASSISTANT=claude
-```
+Pi credentials are persisted in the `rith_user_home` volume at `~/.pi/agent/auth.json`.
 
 </details>
 
-<details>
-<summary><b>Codex</b></summary>
+### 4.3 GitHub Webhook Setup
 
-**On your local machine:**
-
-```bash
-# Install Codex CLI (if not already installed)
-# Visit: https://docs.codex.com/installation
-
-# Authenticate
-codex login
-
-# Extract credentials
-cat ~/.codex/auth.json
-# On Windows: type %USERPROFILE%\.codex\auth.json
-
-# Copy all four values
-```
-
-**On your server:**
-
-```bash
-nano .env
-```
-
-Add all four credentials:
-
-```ini
-CODEX_ID_TOKEN=eyJhbGc...
-CODEX_ACCESS_TOKEN=eyJhbGc...
-CODEX_REFRESH_TOKEN=rt_...
-CODEX_ACCOUNT_ID=6a6a7ba6-...
-```
-
-**Set as default (optional):**
-
-```ini
-DEFAULT_AI_ASSISTANT=codex
-```
-
-</details>
-
-### 4.3 Platform Adapter Setup
-
-**Configure at least one platform.**
-
-<details>
-<summary><b>Telegram</b></summary>
-
-**Create bot:**
-
-1. Message [@BotFather](https://t.me/BotFather) on Telegram
-2. Send `/newbot` and follow prompts
-3. Copy bot token (format: `123456789:ABCdefGHIjklMNOpqrsTUVwxyz`)
-
-**On your server:**
-
-```bash
-nano .env
-```
-
-Add:
-
-```ini
-TELEGRAM_BOT_TOKEN=123456789:ABCdefGHI...
-TELEGRAM_STREAMING_MODE=stream  # stream (default) | batch
-```
-
-</details>
+**You'll configure this AFTER deployment** (need public URL first).
 
 <details>
 <summary><b>GitHub Webhooks</b></summary>
@@ -594,16 +500,6 @@ Visit `https://rith.yourdomain.com/api/health` in your browser:
 - Should show green padlock
 - Certificate issued by "Let's Encrypt"
 - Auto-redirect from HTTP to HTTPS
-
-### Check Telegram (if configured)
-
-Message your bot on Telegram:
-
-```
-/help
-```
-
-Should receive bot response with available commands.
 
 ---
 

@@ -14,7 +14,7 @@ This page covers Rith Engine's security model: how AI permissions work, how plat
 Rith Engine runs the Claude Code SDK in `bypassPermissions` mode. This means the AI agent can read, write, and execute files without interactive confirmation prompts.
 
 **Why this is used:**
-- Rith Engine is designed for automated, unattended workflows triggered from Slack, Telegram, GitHub, and other platforms where there is no human at a terminal to approve each action.
+- Rith Engine is designed for automated, unattended workflows triggered from the CLI and CI pipelines where there is no human at a terminal to approve each action.
 - Requiring interactive permission prompts would block every workflow and make remote operation impossible.
 
 **What this means in practice:**
@@ -78,18 +78,13 @@ Each platform adapter supports an optional user whitelist via environment variab
 
 | Platform | Whitelist Variable | Format |
 | --- | --- | --- |
-| Slack | `SLACK_ALLOWED_USER_IDS` | Comma-separated Slack user IDs (e.g., `U01ABC,U02DEF`) |
-| Telegram | `TELEGRAM_ALLOWED_USER_IDS` | Comma-separated Telegram user IDs |
-| Discord | `DISCORD_ALLOWED_USER_IDS` | Comma-separated Discord user IDs |
 | GitHub | `GITHUB_ALLOWED_USERS` | Comma-separated GitHub usernames (case-insensitive) |
 | Gitea | `GITEA_ALLOWED_USERS` | Comma-separated Gitea usernames (case-insensitive) |
-
 **Authorization behavior:**
 - Whitelist is parsed once at adapter startup (from the environment variable).
 - Every incoming message or webhook is checked before processing.
 - Unauthorized users are silently rejected -- no error response is sent back.
 - Unauthorized attempts are logged with masked user identifiers for auditing.
-- The Web UI has no built-in user authentication. Use `CADDY_BASIC_AUTH` or form auth when exposing it publicly (see [Docker / Deployment](/reference/configuration/#docker--deployment) variables).
 
 ## Webhook Security
 
@@ -137,10 +132,9 @@ Rith Engine's own env sources (`~/.rith/.env`, dev `.env`) are loaded after the 
 
 **If you need env vars available during workflow execution**, use managed env injection:
 - `.rith/config.yaml` `env:` section (per-repo, checked into version control)
-- Web UI: Settings → Projects → Env Vars (per-codebase, stored in Rith Engine DB)
+- Per-codebase env vars stored in the Rith Engine DB (managed via CLI)
 
 **CORS:**
-- API routes use `WEB_UI_ORIGIN` to restrict CORS. The default is `*` (allow all), which is appropriate for local single-developer use. Set a specific origin when exposing the server publicly.
 
 **Docker deployments:**
 - `CLAUDE_USE_GLOBAL_AUTH=true` does not work in Docker (no local `claude` CLI). Provide `CLAUDE_CODE_OAUTH_TOKEN` or `CLAUDE_API_KEY` explicitly.

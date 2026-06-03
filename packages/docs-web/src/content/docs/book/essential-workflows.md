@@ -57,7 +57,7 @@ The starting point for anything that doesn't fit elsewhere. It runs a single ful
 **When to use it**: Questions about the codebase, debugging sessions, one-off tasks, general help when no other workflow applies.
 
 ```bash
-rith workflow run rith-assist "What does the orchestrator do?"
+rith workflow run rith-assist "What does the workflow engine do?"
 rith workflow run rith-assist "Why are tests failing in the auth module?"
 rith workflow run rith-assist "Explain the isolation system to me"
 ```
@@ -165,7 +165,7 @@ Scans for complexity hotspots (large files, import fan-out, function length), an
 **When to use it**: Periodic codebase health passes. When a specific area has grown unwieldy. When you want principled simplification, not just cleanup.
 
 ```bash
-rith workflow run rith-architect --branch refactor/simplify-orchestrator "Focus on the orchestrator package"
+rith workflow run rith-architect --branch refactor/simplify-engine "Focus on the core engine package"
 ```
 
 **What it produces**: A PR with targeted simplifications, each justified and independently revertable.

@@ -13,7 +13,7 @@ DAG workflow nodes support a `hooks` field that attaches Claude Agent SDK hooks
 to individual nodes. Hooks fire during the node's AI execution and can control
 tool behavior, inject context, modify inputs, and more.
 
-**Claude only** — Codex nodes will warn and ignore hooks.
+**Claude only** — non-Claude providers will warn and ignore hooks.
 
 ## Quick Start
 
@@ -306,9 +306,7 @@ need context injection, input modification, or post-tool-use reactions.
 
 - **Static responses only in YAML** — hooks return the same response every time.
   For conditional logic, use `when:` conditions on downstream nodes or gate execution with upstream bash nodes that emit structured output.
-- **Claude only** — Codex nodes warn and ignore hooks.
-- **No hook event streaming** — hook lifecycle events (`hook_started`, `hook_progress`)
-  are not forwarded to the Web UI.
+- **Claude only** — non-Claude providers warn and ignore hooks.
 
 ## SDK Reference
 

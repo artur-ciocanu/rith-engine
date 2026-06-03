@@ -22,10 +22,9 @@ Local development with SQLite is the recommended default. No database setup is n
 ### Prerequisites
 
 - [Bun](https://bun.sh) 1.0+
-- At least one AI assistant installed and configured (Claude Code or Codex — Rith Engine orchestrates them, it does not bundle them)
+- Pi Coding Agent installed and configured (Rith Engine's LLM executor)
 - A GitHub token for repository cloning (`GH_TOKEN` / `GITHUB_TOKEN`)
 
-> Source installs (`bun run`) auto-resolve Claude Code's `cli.js` via `node_modules`. Compiled Rith Engine binaries require `CLAUDE_BIN_PATH` or `assistants.claude.claudeBinaryPath` — see [AI Assistants → Binary path configuration](/getting-started/ai-assistants/#binary-path-configuration-compiled-binaries-only).
 
 ### Setup
 
@@ -37,21 +36,12 @@ bun install
 
 # 2. Configure environment
 cp .env.example .env
-nano .env  # Add your AI assistant tokens (Claude, Codex, or Pi)
+nano .env  # Add your Pi Coding Agent tokens
 
-# 3. Start server + Web UI (SQLite auto-detected, no database setup needed)
-bun run dev
-
-# 4. Open Web UI
-# http://localhost:5173
+# 3. Run a workflow
+rith workflow run rith-assist "Hello world"
 ```
 
-In development mode, two servers run simultaneously:
-
-| Service    | URL                    | Purpose                          |
-|------------|------------------------|----------------------------------|
-| Web UI     | http://localhost:5173  | React frontend (Vite dev server) |
-| API Server | http://localhost:3090  | Backend API + SSE streaming      |
 
 ### Optional: Use PostgreSQL Instead of SQLite
 
@@ -64,11 +54,12 @@ docker compose --profile with-db up -d postgres
 
 > **Note:** The database schema is created automatically on first container startup via the mounted migration file. No manual `psql` step is needed for fresh installs.
 
-### Production Build (Local)
+### Production (Binary Install)
+
+For binary installs, use `rith serve` to optionally start the web UI:
 
 ```bash
-bun run build    # Build the frontend
-bun run start    # Server serves both API and Web UI on port 3090
+rith serve
 ```
 
 ### Verify It Works
@@ -201,7 +192,6 @@ SQLite stores data at `~/.rith/rith.db` (or `/.rith/rith.db` in Docker). It is a
 
 | Context | Default Port | Notes |
 |---------|-------------|-------|
-| Local dev (`bun run dev`) | 3090 | Default server port |
 | Docker | 3000 | Set via `PORT` in `.env` |
 | Worktrees | 3190-4089 | Auto-allocated, hash-based on path |
 | Override | Any | Set `PORT=4000 bun dev` |

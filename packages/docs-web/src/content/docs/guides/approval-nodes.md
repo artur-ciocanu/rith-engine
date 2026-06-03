@@ -16,14 +16,11 @@ before committing to expensive implementation work.
 
 ## Quick Start
 
-> **Web UI users:** Add `interactive: true` at the workflow level. Without it, the
-> workflow dispatches to a background worker and approval gate messages won't appear
-> in your chat window. See [Web Execution Mode](/guides/authoring-workflows/#web-execution-mode).
 
 ```yaml
 name: plan-approve-implement
 description: Plan, get approval, then implement
-interactive: true   # Required for Web UI: ensures approval gates appear in chat
+interactive: true   # Ensures approval gates pause for user response
 
 nodes:
   - id: plan
@@ -42,8 +39,7 @@ nodes:
 ```
 
 When execution reaches `review-gate`, the workflow pauses and sends a message
-to the user on whatever platform they're using (CLI, Slack, GitHub, etc.). On the
-**Web UI**, `interactive: true` is required for the message to appear in your chat.
+to the user in the CLI terminal.
 
 ## How It Works
 
@@ -54,11 +50,9 @@ to the user on whatever platform they're using (CLI, Slack, GitHub, etc.). On th
 3. **Wait**: The workflow stays paused until the user takes action. Paused runs
    block the worktree path guard (no other workflow can start on the same path).
 4. **Approve**: The user approves, which writes a `node_completed` event for
-   the approval node and transitions the run to resumable. Natural-language
-   messages, the CLI, the Web UI approve button, and the in-thread **Approve**
-   button posted by the Slack adapter all auto-resume the workflow from the
-   paused gate. (The explicit `/workflow approve <run-id>` slash command also
-   auto-resumes when issued in the originating conversation.)
+   the approval node and transitions the run to resumable. The CLI approve
+   command or natural-language approval auto-resumes the workflow from the
+   paused gate.
 5. **Reject**: The user rejects.
    - **Without `on_reject`**: The workflow is cancelled immediately.
    - **With `on_reject`**: The executor runs the `on_reject.prompt` via AI (with
@@ -111,7 +105,7 @@ User: "Looks good, but add error handling for the edge cases"
   (only if capture_response: true is set)
 ```
 
-This works on all platforms (Web, Slack, Telegram, Discord, GitHub).
+This works in the CLI.
 
 To reject instead, use `/workflow reject <run-id>`.
 
@@ -138,22 +132,6 @@ bun run cli workflow reject <run-id> --reason "Plan needs more test coverage"
 /workflow reject <run-id> needs changes
 ```
 
-### Web UI
-
-Paused workflows show an amber pulsing badge on the dashboard. Click **Approve**
-or **Reject** directly on the workflow card. Both actions auto-resume the
-workflow from the paused gate — no follow-up message required.
-
-**Reject with reason**: the Reject dialog includes an optional free-text
-reason field. The trimmed value (empty after trim → omitted) is passed to
-the workflow as `$REJECTION_REASON`, available in the `on_reject.prompt`.
-Rejects on web and chat cards use the same confirmation dialog.
-
-**Cross-platform caveat**: auto-resume via the Web UI only applies when the
-run was originally dispatched from the Web UI (parent conversation is a web
-conversation). If you approve a Slack / Telegram / GitHub-dispatched run
-from the dashboard, the decision is recorded, but the resume flow has to
-happen in the originating platform (re-run the workflow there).
 
 ### REST API
 
@@ -236,7 +214,7 @@ can approve or reject again.
 ## Design Notes
 
 Approval nodes reuse the existing resume infrastructure. When approved, the run
-transitions through `failed` status briefly so the orchestrator's explicit
+transitions through `failed` status briefly so the CLI's explicit
 resume path (via `hydrateResumableRun`) picks it up — this avoids duplicating
 resume logic. The `metadata.approval_response` field distinguishes
 approved-then-resumed from genuinely-failed runs.

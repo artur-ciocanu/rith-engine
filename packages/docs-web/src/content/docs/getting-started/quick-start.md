@@ -10,8 +10,8 @@ sidebar:
 ## Prerequisites
 
 1. [Install Rith Engine](/getting-started/installation/)
-2. [Install Claude Code](/getting-started/ai-assistants/#claude-code) — Rith Engine orchestrates it but does not bundle it
-3. Authenticate with Claude: run `claude /login` (uses your existing Claude Pro/Max subscription)
+2. [Install Pi Coding Agent](/getting-started/ai-assistants/) — Rith Engine uses it as the AI executor
+3. Authenticate with your preferred provider (see [Pi Coding Agent auth](/getting-started/ai-assistants/#authentication))
 4. In compiled Rith Engine binaries, set `CLAUDE_BIN_PATH` (see [Binary path configuration](/getting-started/ai-assistants/#binary-path-configuration-compiled-binaries-only))
 5. Navigate to any git repository
 6. For private repos: set `GH_TOKEN` (GitHub), `GITLAB_TOKEN` (GitLab), or `GITEA_TOKEN` (Gitea/Forgejo) — Rith Engine uses these to authenticate when cloning
@@ -31,7 +31,7 @@ rith workflow run smart-pr-review
 
 ## What's Next?
 
-For the full getting started guide -- installation, authentication, Web UI setup, CLI setup, and troubleshooting -- see the [Overview](/getting-started/overview/).
+For the full getting started guide -- installation, authentication, CLI setup, and troubleshooting -- see the [Overview](/getting-started/overview/).
 
 - [Overview](/getting-started/overview/) — Complete onboarding guide
 - [Core Concepts](/getting-started/concepts/) — Understand workflows, nodes, commands, and isolation

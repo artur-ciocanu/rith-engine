@@ -2,7 +2,7 @@
  * WorkflowEventEmitter - typed event emitter for workflow execution observability.
  *
  * Lives in @rith/workflows so the executor can emit events.
- * The Web adapter in @rith/server subscribes to forward events to SSE streams.
+ * The CLI subscribes to render workflow progress in the terminal.
  *
  * Design:
  * - Singleton pattern via getWorkflowEventEmitter()

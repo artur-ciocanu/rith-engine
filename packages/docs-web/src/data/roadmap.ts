@@ -138,17 +138,16 @@ export const roadmapItems: RoadmapItem[] = [
     issues: [972, 1238, 1333, 1292, 1219, 1208, 1336, 1471, 1391, 1520],
   },
   {
-    slug: 'persistent-orchestrator',
-    title: 'Persistent Project Orchestrator',
+    slug: 'persistent-sessions',
+    title: 'Persistent Project Sessions',
     status: 'planned',
-    description: 'One stateful conversation per codebase that retains context across runs, with project-first navigation and observable subagent activity.',
+    description: 'One stateful session per codebase that retains context across CLI runs, with project memory and observable subagent activity.',
     bullets: [
-      'Persistent orchestrator session bound to each project',
+      'Persistent session bound to each project',
       'Project memory carried across runs and restarts',
-      'Projects-first navigation in the Web UI',
-      'Live SDK lifecycle events (subagent + hook activity) streamed to the UI',
+      'Live SDK lifecycle events (subagent + hook activity) streamed to the CLI',
     ],
-    tags: ['orchestrator', 'web', 'memory'],
+    tags: ['cli', 'memory'],
     issues: [968, 1044, 1038, 1058, 1205, 1179, 1182, 975],
   },
   {

@@ -3,31 +3,14 @@
   "compilerOptions": {
     "noEmit": true,
     "paths": {
-      "@rith/adapters": ["../adapters/src"],
-      "@rith/adapters/*": ["../adapters/src/*"],
       "@rith/core": ["../core/src"],
       "@rith/core/*": ["../core/src/*"],
-      "@rith/server": ["../server/src"],
-      "@rith/server/*": ["../server/src/*"],
       "@rith/workflows": ["../workflows/src"],
       "@rith/workflows/*": ["../workflows/src/*"],
       "@rith/paths": ["../paths/src"],
       "@rith/git": ["../git/src"]
     }
   },
-  "include": [
-    "src/**/*",
-    "../core/src/**/*.ts",
-    "../server/src/**/*.ts",
-    "../adapters/src/**/*.ts",
-    "../workflows/src/defaults/text-imports.d.ts"
-  ],
-  "exclude": [
-    "node_modules",
-    "dist",
-    "**/*.test.ts",
-    "../core/src/**/*.test.ts",
-    "../server/src/**/*.test.ts",
-    "../adapters/src/**/*.test.ts"
-  ]
+  "include": ["src/**/*", "../core/src/**/*.ts", "../workflows/src/defaults/text-imports.d.ts"],
+  "exclude": ["node_modules", "dist", "**/*.test.ts", "../core/src/**/*.test.ts"]
 }

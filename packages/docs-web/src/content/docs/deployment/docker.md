@@ -1,6 +1,6 @@
 ---
 title: Docker Guide
-description: Deploy Rith Engine with Docker, including automatic HTTPS, PostgreSQL, and the Web UI.
+description: Deploy Rith Engine with Docker for isolated CLI workflow execution.
 category: deployment
 area: infra
 audience: [operator]
@@ -9,12 +9,8 @@ sidebar:
   order: 2
 ---
 
-Deploy Rith Engine on a server with Docker. Includes automatic HTTPS, PostgreSQL, and the Web UI.
+Deploy Rith Engine on a server with Docker for isolated CLI workflow execution.
 
-> **Claude Code is pre-installed in the image.** The official `ghcr.io/artur-ciocanu/rith-engine` image
-> ships with Claude Code installed via npm and `CLAUDE_BIN_PATH` pre-set — no extra configuration
-> required. If you build a custom image that omits the npm install, set `CLAUDE_BIN_PATH` yourself
-> to point at a mounted `cli.js` (see [AI Assistants → Binary path configuration](/getting-started/ai-assistants/#binary-path-configuration-compiled-binaries-only)).
 
 ---
 
@@ -52,13 +48,9 @@ cat /opt/rith/SETUP_COMPLETE
 nano /opt/rith/.env
 
 # Set at minimum:
-#   CLAUDE_CODE_OAUTH_TOKEN=sk-ant-oat01-...
 #   DOMAIN=rith.example.com
 #   DATABASE_URL=postgresql://postgres:postgres@postgres:5432/remote_coding_agent
 
-# (Optional) Set up basic auth to protect Web UI:
-# docker run caddy caddy hash-password --plaintext 'YOUR_PASSWORD'
-# Add to .env: CADDY_BASIC_AUTH=basicauth @protected { admin $$2a$$14$$<hash> }
 
 # Start
 cd /opt/rith
@@ -81,7 +73,7 @@ docker compose --profile with-db --profile cloud up -d
 
 ## Local Docker Desktop (Windows / macOS)
 
-Run Rith Engine locally with Docker Desktop — no domain, no VPS required. Uses SQLite and the Web UI only.
+Run Rith Engine locally with Docker Desktop — no domain, no VPS required. Uses SQLite for local development.
 
 ### Quick start
 
@@ -89,11 +81,10 @@ Run Rith Engine locally with Docker Desktop — no domain, no VPS required. Uses
 git clone https://github.com/artur-ciocanu/rith-engine.git
 cd Rith Engine
 cp .env.example .env
-# Edit .env: set CLAUDE_CODE_OAUTH_TOKEN or CLAUDE_API_KEY
+# Edit .env: set GH_TOKEN and GITHUB_TOKEN
 docker compose up -d
 ```
 
-Access the Web UI at **http://localhost:3000**.
 
 ### Windows-specific notes
 
@@ -115,11 +106,9 @@ git reset --hard
 
 | Feature | Status |
 |---------|--------|
-| Web UI | http://localhost:3000 |
 | Database | SQLite (automatic, zero setup) |
 | HTTPS / Caddy | Not needed locally |
 | Auth | None (single-user, localhost only) |
-| Platform adapters | Optional (Telegram, Slack, etc.) |
 
 ### Using PostgreSQL locally (optional)
 
@@ -172,12 +161,6 @@ nano .env
 Set these values in `.env`:
 
 ```ini
-# AI Assistant — at least one is required
-# Option A: Claude OAuth token (run `claude setup-token` on your local machine to get one)
-CLAUDE_CODE_OAUTH_TOKEN=sk-ant-oat01-xxxxx
-# Option B: Claude API key (from console.anthropic.com/settings/keys)
-# CLAUDE_API_KEY=sk-ant-xxxxx
-
 # Domain — your domain or subdomain pointing to this server
 DOMAIN=rith.example.com
 
@@ -185,20 +168,12 @@ DOMAIN=rith.example.com
 # Without this, the app uses SQLite (fine for getting started, but PostgreSQL recommended)
 DATABASE_URL=postgresql://postgres:postgres@postgres:5432/remote_coding_agent
 
-# Basic Auth (optional) — protects Web UI when exposed to the internet
-# Skip if using IP-based firewall rules instead.
-# Generate hash: docker run caddy caddy hash-password --plaintext 'YOUR_PASSWORD'
-# CADDY_BASIC_AUTH=basicauth @protected { admin $$2a$$14$$... }
-
-# Platform tokens (set the ones you use)
-# TELEGRAM_BOT_TOKEN=123456789:ABCdef...
-# SLACK_BOT_TOKEN=xoxb-...
-# SLACK_APP_TOKEN=xapp-...
+# GitHub tokens (set the ones you use)
 # GH_TOKEN=ghp_...
 # GITHUB_TOKEN=ghp_...
 ```
 
-> **Docker does not support `CLAUDE_USE_GLOBAL_AUTH=true`** — there is no local `claude` CLI inside the container. You must provide either `CLAUDE_CODE_OAUTH_TOKEN` or `CLAUDE_API_KEY` explicitly.
+> **AI credentials:** After starting the container, authenticate Pi Coding Agent with `docker compose exec app pi /login`.
 >
 > **If you use `--profile with-db` without setting `DATABASE_URL`**, the app will fall back to SQLite and log a warning. The PostgreSQL container runs but is unused.
 
@@ -228,7 +203,7 @@ docker compose --profile with-db --profile cloud up -d
 ```
 
 This starts three containers:
-- **app** — Rith Engine server + Web UI
+- **app** — Rith Engine CLI runtime
 - **postgres** — PostgreSQL 17 database (auto-initialized)
 - **caddy** — Reverse proxy with automatic HTTPS (Let's Encrypt)
 
@@ -246,7 +221,6 @@ docker compose logs -f caddy
 curl https://rith.example.com/api/health
 ```
 
-Open **https://rith.example.com** in your browser — you should see the Rith Engine Web UI.
 
 ---
 
@@ -290,7 +264,7 @@ Adds a [Caddy](https://caddyserver.com/) reverse proxy with automatic TLS certif
 3. DNS A record pointing to your server's IP
 4. Ports 80 and 443 open
 
-Caddy handles HTTPS certificates, HTTP->HTTPS redirect, HTTP/3, and SSE streaming.
+Caddy handles HTTPS certificates, HTTP->HTTPS redirect, and HTTP/3.
 
 ### Authentication (Optional Basic Auth)
 
@@ -397,34 +371,17 @@ curl http://localhost:3090/api/health
 
 ### AI Credentials (required)
 
-Docker containers cannot use `CLAUDE_USE_GLOBAL_AUTH=true` — there is no local `claude` CLI inside the container. You must set credentials explicitly in `.env`:
+Pi Coding Agent is the LLM executor. Authenticate interactively after starting the container:
 
-**Claude (choose one):**
-
-```ini
-# OAuth token — run `claude setup-token` on your local machine, copy the token
-CLAUDE_CODE_OAUTH_TOKEN=sk-ant-oat01-xxxxx
-
-# Or API key — from console.anthropic.com/settings/keys
-CLAUDE_API_KEY=sk-ant-xxxxx
+```bash
+docker compose exec app pi /login
 ```
 
-**Codex (alternative):**
+Credentials are persisted in the `rith_user_home` volume at `~/.pi/agent/auth.json`.
+
+### GitHub Tokens (optional)
 
 ```ini
-CODEX_ID_TOKEN=eyJhbGc...
-CODEX_ACCESS_TOKEN=eyJhbGc...
-CODEX_REFRESH_TOKEN=rt_...
-CODEX_ACCOUNT_ID=6a6a7ba6-...
-```
-
-### Platform Tokens (optional)
-
-```ini
-TELEGRAM_BOT_TOKEN=123456789:ABCdef...
-SLACK_BOT_TOKEN=xoxb-...
-SLACK_APP_TOKEN=xapp-...
-DISCORD_BOT_TOKEN=...
 GH_TOKEN=ghp_...
 GITHUB_TOKEN=ghp_...
 WEBHOOK_SECRET=...
@@ -471,8 +428,6 @@ The container runs as `appuser` with `$HOME=/home/appuser`. The base compose mou
 
 | Path | What it persists |
 |------|------------------|
-| `~/.claude/` | Claude Code skills, commands, agents, hooks, MCP config, projects (conversation history), memory, OAuth state, keybindings, file-history |
-| `~/.codex/` | Codex auth (`auth.json` from interactive `codex login`; the env-var path via `setup-auth` overwrites this on every container start) |
 | `~/.pi/agent/` | Pi `auth.json` from interactive `pi /login`, plus `models.json`, global settings (`~/.pi/agent/settings.json`), and sessions (Rith Engine's Pi adapter reads `auth.json` and `settings.json` on every request) |
 | `~/.gitconfig` | Author identity, signing config, custom aliases, plus the `safe.directory` entries baked into the image |
 | `~/.bash_history` | Shell history when you `docker compose exec app bash` |
@@ -558,9 +513,9 @@ To layer custom tools on top of the pre-built image, see [Customizing the Image]
 
 The Dockerfile uses three stages:
 
-1. **deps** — Installs all dependencies (including devDependencies for the web build)
-2. **web-build** — Builds the React web UI with Vite
-3. **production** — Production image with only production dependencies + pre-built web assets
+1. **deps** — Installs all dependencies
+2. **build** — Builds the application
+3. **production** — Production image with only production dependencies
 
 ```bash
 docker build -t rith .
@@ -572,8 +527,8 @@ docker run --env-file .env -p 3000:3000 rith
 - **Runtime**: Bun 1.2 (runs TypeScript directly, no compile step)
 - **System deps**: git, curl, gh (GitHub CLI), postgresql-client, Chromium
 - **Browser tooling**: [agent-browser](https://github.com/vercel-labs/agent-browser) (Vercel Labs) — enables E2E testing workflows via CDP. Uses system Chromium (`AGENT_BROWSER_EXECUTABLE_PATH=/usr/bin/chromium`)
-- **App**: All 10 workspace packages (source), pre-built web UI
-- **User**: Non-root `appuser` (UID 1001) — required by Claude Code SDK
+- **App**: All workspace packages (source)
+- **User**: Non-root `appuser` (UID 1001)
 - **Rith Engine dirs**: `/.rith/workspaces`, `/.rith/worktrees`
 
 The multi-stage build keeps the image lean — no devDependencies, test files, docs, or `.git/`.
@@ -651,10 +606,7 @@ docker system df               # Check disk usage
 
 ### App won't start: "no_ai_credentials"
 
-No AI assistant configured. Docker does not support `CLAUDE_USE_GLOBAL_AUTH=true`. Set one of these in `.env`:
-- `CLAUDE_CODE_OAUTH_TOKEN=sk-ant-oat01-...` (run `claude setup-token` locally to get one)
-- `CLAUDE_API_KEY=sk-ant-...` (from console.anthropic.com)
-- Or Codex credentials (`CODEX_ID_TOKEN`, `CODEX_ACCESS_TOKEN`, etc.)
+No AI assistant configured. Run `docker compose exec app pi /login` to authenticate Pi Coding Agent.
 
 ### Caddy fails to start: "not a directory"
 

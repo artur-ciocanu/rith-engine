@@ -56,10 +56,10 @@ rith workflow run assist --cwd /path/to/repo --no-worktree "Quick question"
 
 ### `chat <message>`
 
-Send a message to the orchestrator for a one-off AI interaction.
+Send a message for a one-off AI interaction.
 
 ```bash
-rith chat "What does the orchestrator do?"
+rith chat "What does this function do?"
 ```
 
 ### `setup`
@@ -86,7 +86,7 @@ rith setup --spawn              # open in a new terminal window
 
 ### `doctor`
 
-Verify your Rith Engine setup. Runs a checklist of common failure points: Claude binary spawn, gh CLI auth, Pi auth (when Pi is configured as default), database reachability, workspace writability, bundled defaults, and adapter token pings (Slack/Telegram, best-effort).
+Verify your Rith Engine setup. Runs a checklist of common failure points: Claude binary spawn, gh CLI auth, Pi auth (when Pi is configured as default), database reachability, workspace writability, bundled defaults.
 
 ```bash
 rith doctor
@@ -158,7 +158,7 @@ Progress events (node start/complete/fail/skip, approval gates) are written to s
 
 **Name Matching:**
 
-Workflow names are resolved using a 4-tier fallback hierarchy. This applies consistently across the CLI and all chat platforms (Slack, Telegram, Web, GitHub, Discord):
+Workflow names are resolved using a 4-tier fallback hierarchy:
 1. **Exact match** - `rith-assist` matches `rith-assist`
 2. **Case-insensitive** - `Rith Engine-Assist` matches `rith-assist`
 3. **Suffix match** - `assist` matches `rith-assist` (looks for `-assist` suffix)
@@ -323,8 +323,7 @@ Use this after a PR is merged and you no longer need the worktree or branches. A
 
 ### `serve`
 
-Start the web UI server. On first run, downloads a pre-built web UI tarball from the matching GitHub release, verifies the SHA-256 checksum, and extracts it. Subsequent runs use the cached copy.
-
+Start the optional web dashboard server (binary installs only). On first run, downloads a pre-built web UI tarball from the matching GitHub release, verifies the SHA-256 checksum, and extracts it. Subsequent runs use the cached copy.
 **Binary installs only** — in development, use `bun run dev` instead.
 
 ```bash
@@ -390,7 +389,7 @@ Running from a subdirectory (e.g., `/repo/packages/cli`) automatically resolves 
 
 When using `--branch`, workflows run inside the worktree directory.
 
-> **Commands and workflows are loaded from the working directory at runtime.** The CLI reads directly from disk, so it picks up uncommitted changes immediately. This is different from the server (Telegram/Slack/GitHub), which reads from the workspace clone at `~/.rith/workspaces/` -- that clone only syncs from the remote before worktree creation, so changes must be pushed to take effect there.
+> **Commands and workflows are loaded from the working directory at runtime.** The CLI reads directly from disk, so it picks up uncommitted changes immediately.
 
 ## Environment
 
