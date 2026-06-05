@@ -13,11 +13,14 @@ import {
 import { modelReasoningEffortSchema, webSearchModeSchema } from './schemas/workflow';
 import { z } from '@hono/zod-openapi';
 
-/** Lazy-initialized logger (deferred so test mocks can intercept createLogger) */
-let cachedLog: ReturnType<typeof createLogger> | undefined;
+/**
+ * Logger accessor — `createLogger` is called per use rather than cached so that
+ * (a) test mocks of `createLogger` always apply, even across files in a shared
+ * test process, and (b) runtime log-level changes are reflected. The child is a
+ * cheap `rootLogger.child({ module })` binding, so per-call creation is fine.
+ */
 function getLog(): ReturnType<typeof createLogger> {
-  if (!cachedLog) cachedLog = createLogger('workflow.loader');
-  return cachedLog;
+  return createLogger('workflow.loader');
 }
 
 /**

@@ -2,6 +2,8 @@ import { describe, it, expect, beforeEach, afterEach, mock } from 'bun:test';
 import { mkdir, rm, readFile, chmod } from 'fs/promises';
 import { join } from 'path';
 import { tmpdir } from 'os';
+import * as realPaths from '@rith/paths';
+import { mockModuleScoped } from './test-mock-module';
 
 // Inline mock logger to suppress noisy output during tests
 const mockLogger = {
@@ -18,9 +20,9 @@ const mockLogger = {
   isLevelEnabled: mock(() => true),
   level: 'info',
 };
-mock.module('@rith/paths', () => ({
+mockModuleScoped('@rith/paths', realPaths, {
   createLogger: mock(() => mockLogger),
-}));
+});
 
 import {
   logWorkflowEvent,

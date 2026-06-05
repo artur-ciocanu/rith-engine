@@ -1,4 +1,6 @@
 import { describe, it, expect, mock, beforeEach, spyOn } from 'bun:test';
+import * as realPaths from '@rith/paths';
+import { mockModuleScoped } from './test-mock-module';
 
 // --- Mock logger (MUST come before imports of modules under test) ---
 // event-emitter.ts uses a lazy-initialized logger via getLog(), so we must
@@ -17,9 +19,9 @@ const mockLogger = {
   isLevelEnabled: mock(() => true),
   level: 'info',
 };
-mock.module('@rith/paths', () => ({
+mockModuleScoped('@rith/paths', realPaths, {
   createLogger: mock(() => mockLogger),
-}));
+});
 
 // --- Imports (after mocks) ---
 

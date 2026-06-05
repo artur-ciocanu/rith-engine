@@ -3,6 +3,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import * as realPaths from '@rith/paths';
+import { mockModuleScoped } from './test-mock-module';
 
 // Mock only the logger so test output stays clean. All other @rith/paths
 // exports (findMarkdownFilesRecursive, getHomeCommandsPath, etc.) use real
@@ -21,10 +22,10 @@ const mockLogger = {
   isLevelEnabled: mock(() => true),
   level: 'info',
 };
-mock.module('@rith/paths', () => ({
+mockModuleScoped('@rith/paths', realPaths, {
   ...realPaths,
   createLogger: mock(() => mockLogger),
-}));
+});
 
 import { loadCommandPrompt } from './executor-shared';
 import type { WorkflowDeps } from './deps';

@@ -2,6 +2,8 @@ import { describe, it, expect, beforeEach, afterEach, spyOn, mock, type Mock } f
 import { mkdir, writeFile, rm } from 'fs/promises';
 import { join } from 'path';
 import { tmpdir } from 'os';
+import * as realRithPaths from '@rith/paths';
+import { mockModuleScoped } from './test-mock-module';
 
 const isWindows = process.platform === 'win32';
 
@@ -22,11 +24,10 @@ const mockLogger = {
 };
 
 // Mock @rith/paths: suppress logger + pass through real path utilities
-const realRithPaths = await import('@rith/paths');
-mock.module('@rith/paths', () => ({
+mockModuleScoped('@rith/paths', realRithPaths, {
   ...realRithPaths,
   createLogger: mock(() => mockLogger),
-}));
+});
 
 import { discoverWorkflows, discoverWorkflowsWithConfig } from './workflow-discovery';
 import { isBashNode, isCancelNode, isLoopNode } from './schemas';

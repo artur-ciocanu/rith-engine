@@ -1,4 +1,9 @@
 import { describe, test, expect, mock, beforeEach } from 'bun:test';
+import * as realGit from '@rith/git';
+import * as realPaths from '@rith/paths';
+import * as realBundledDefaults from './defaults/bundled-defaults';
+import * as realCommandValidation from './command-validation';
+import { mockModuleScoped } from './test-mock-module';
 
 // Mock @rith/git before importing the module under test
 const mockExecFileAsync = mock(
@@ -8,12 +13,12 @@ const mockExecFileAsync = mock(
   })
 );
 
-mock.module('@rith/git', () => ({
+mockModuleScoped('@rith/git', realGit, {
   execFileAsync: mockExecFileAsync,
-}));
+});
 
 // Mock @rith/paths logger
-mock.module('@rith/paths', () => ({
+mockModuleScoped('@rith/paths', realPaths, {
   createLogger: mock(() => ({
     fatal: mock(() => undefined),
     error: mock(() => undefined),
@@ -25,17 +30,17 @@ mock.module('@rith/paths', () => ({
   getCommandFolderSearchPaths: mock(() => ['.rith/commands']),
   getDefaultCommandsPath: mock(() => '/defaults/commands'),
   findMarkdownFilesRecursive: mock(async () => []),
-}));
+});
 
 // Mock defaults and command-validation used by validator
-mock.module('./defaults/bundled-defaults', () => ({
+mockModuleScoped('./defaults/bundled-defaults', realBundledDefaults, {
   BUNDLED_COMMANDS: {},
   isBinaryBuild: () => false,
-}));
+});
 
-mock.module('./command-validation', () => ({
+mockModuleScoped('./command-validation', realCommandValidation, {
   isValidCommandName: () => true,
-}));
+});
 
 import { checkRuntimeAvailable, clearRuntimeCache } from './validator';
 

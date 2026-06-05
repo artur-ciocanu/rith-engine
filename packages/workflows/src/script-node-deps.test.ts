@@ -9,6 +9,9 @@ import { describe, it, expect, mock, beforeEach, afterEach } from 'bun:test';
 import { mkdir, rm } from 'fs/promises';
 import { join } from 'path';
 import { tmpdir } from 'os';
+import * as realGit from '@rith/git';
+import * as realPaths from '@rith/paths';
+import { mockModuleScoped } from './test-mock-module';
 
 // --- Mock @rith/git BEFORE any imports that depend on it ---
 
@@ -17,10 +20,10 @@ const mockExecFileAsync = mock(
     ({ stdout: '', stderr: '' }) as { stdout: string; stderr: string }
 );
 
-mock.module('@rith/git', () => ({
+mockModuleScoped('@rith/git', realGit, {
   execFileAsync: mockExecFileAsync,
   mkdirAsync: mock(async () => undefined),
-}));
+});
 
 // --- Mock logger (MUST come before module-under-test imports) ---
 
@@ -34,7 +37,7 @@ const mockLogger = {
   fatal: mockLogFn,
   child: mock(() => mockLogger),
 };
-mock.module('@rith/paths', () => ({
+mockModuleScoped('@rith/paths', realPaths, {
   createLogger: mock(() => mockLogger),
   getCommandFolderSearchPaths: (folder?: string) => {
     const paths = ['.rith/commands'];
@@ -42,7 +45,7 @@ mock.module('@rith/paths', () => ({
     return paths;
   },
   getDefaultCommandsPath: () => '/nonexistent/defaults',
-}));
+});
 
 // --- Imports (after all mock.module calls) ---
 import { executeDagWorkflow } from './dag-executor';
