@@ -4,13 +4,15 @@
 `configuration-and-models.md`. Records what is DONE, the DECISIONS made (and why),
 and what REMAINS — so future sessions continue from here instead of re-deriving.
 
-**Base commit:** `3f5c920` (`main`). Shipped so far: items 1–6 in `d760f2e` (`#9`);
-items 11–13 (architectural-review hardening) in `#10`; item 7 (Pi-only docs) in `#11`.
-**Status as of:** 2026-06-05 — Tracks A (hardening) and B (docs) are merged to `main`.
-DX items 8–10 (`RITH_MODEL` override, `rith doctor`, `rith setup`) are now implemented
-with tests + command-reference docs aligned (this session, on `main` working tree).
-Remaining: deferred refactors 14–15 and a broader web-UI/`serve` doc purge
-(see "New issues identified" below).
+**Base commit:** `349f46f` (`main`). Shipped so far: items 1–6 in `d760f2e` (`#9`);
+items 11–13 (architectural-review hardening) in `#10`; item 7 (Pi-only docs) in `#11`;
+DX items 8–10 (`RITH_MODEL` override, `rith doctor`, `rith setup`) in `#15`; the web-UI /
+`serve` doc purge + a fully-green `bun run validate` (all pre-existing red tests fixed) in `#16`.
+**Status as of:** 2026-06-05 — items 1–13 and DX 8–10 are merged; docs are Pi-only / CLI-only
+and `bun run validate` is green end-to-end on `main` (`check:bundled`, `check:bundled-skill`,
+`type-check` ×7, `lint --max-warnings 0`, `format:check`, full test suite — 0 failures).
+**Remaining:** only the two deferred large refactors, items 14–15 — the next session starts
+there (see "REMAINING → From `architectural-review.md`" below).
 
 ---
 
@@ -293,10 +295,16 @@ drift below).
 
 Items 1–3 (the low-risk hardening trio) are **done** — see DONE above. Remaining:
 
-- **Deferred (large, explicitly NOT low-risk):** extract a `DagExecutionContext` param
-  object and split `dag-executor.ts` (~3150-line god file) into `BashNodeRunner` /
-  `ScriptNodeRunner` / `LoopNodeRunner` / `ApprovalNodeRunner`; discriminate
-  `WorkflowRun.metadata` by status; add an aggregate root for the run lifecycle.
+- **Deferred (large, explicitly NOT low-risk) — the only remaining work; the next session
+  starts here.** Source: `architectural-review.md` items #1/#2 (item 14) and the
+  metadata/aggregate-root notes (item 15). Land both behind the existing green
+  `bun run validate`; they are pure refactors with heavy test surface, so keep each runner's
+  observable behavior identical.
+  - **Item 14** — thread a `DagExecutionContext` param object through the executor and split
+    the `packages/workflows/src/dag-executor.ts` god file (~3150 lines) into focused runners:
+    `BashNodeRunner` / `ScriptNodeRunner` / `LoopNodeRunner` / `ApprovalNodeRunner`.
+  - **Item 15** — discriminate `WorkflowRun.metadata` by run status (replace the loose bag
+    with a tagged union) and introduce an aggregate root for the run lifecycle.
 
 ---
 
@@ -315,52 +323,63 @@ git-check bypass list), and the root `CLAUDE.md` examples. `security.md`'s
 "`rith setup` never writes to `<cwd>/.env`" is now accurate as-built. See the
 "CLI-command drift cleanup" note under DONE.
 
-### Web-UI / `serve` doc purge — REMAINING (broader than the command-reference cleanup)
+### Web-UI / `serve` doc purge — ✅ RESOLVED (#16)
 
-The fork dropped the `web`/`server` packages, so there is **no HTTP server, no port
-binding, and no worktree port allocation** in product code (confirmed: no `listen(`,
-`createServer`, `port-allocation`, or `process.env.PORT` reads). The command-reference
-`serve` doc was removed this session, but web-UI/server prose still lingers in:
-`deployment/local.md` (web UI start instructions), `contributing/dx-quirks.md`
-(`PORT=4000 rith serve`), `reference/rith-directories.md` (`web-dist/` cache entry), and
-the `agent-browser open http://localhost:3090` example in `reference/troubleshooting.md`.
-These are a distinct web-UI-removal doc workstream, not part of the §7 DX tracks — left
-for a follow-up.
+The fork dropped the `web`/`server` packages, so there is **no HTTP server, no port binding,
+and no worktree port allocation** in product code. All lingering web-UI/server prose was
+removed in `#16`: deleted `deployment/{docker,cloud,e2e-testing}.md`; rewrote
+`deployment/{index,local}.md` to CLI-only; stripped server/port/health/REST sections from
+`reference/{rith-directories,configuration,database,troubleshooting}.md`,
+`getting-started/configuration.md`, `guides/approval-nodes.md`, `contributing/dx-quirks.md`,
+and `deployment/windows.md`; removed dead `getWebDistDir` from `packages/paths`. Verified
+absent from the tree: `rith serve`, `web-dist`, `localhost:3090`, `PORT=4000`. Astro build:
+60 pages, no broken links.
 
-### Vestigial Claude env allow-list (cleanup candidate)
+### Claude env allow-list — KEPT (decision, #16)
 
 `packages/paths/src/strip-cwd-env.ts` exempts `CLAUDE_CODE_OAUTH_TOKEN`,
 `CLAUDE_CODE_USE_BEDROCK`, `CLAUDE_CODE_USE_VERTEX` from the nested-session env scrub.
-Holdover from the Claude Agent SDK era — Pi auth reads `~/.pi/agent/auth.json` +
-`ANTHROPIC_API_KEY`/`OPENAI_API_KEY`/`GEMINI_API_KEY` (`provider.ts:119-122`), not
-`CLAUDE_CODE_*`. Only a user bash node shelling out to `claude`/Bedrock/Vertex would
-consume them. Safe to keep; candidate to remove in the Pi-only cleanup.
+**Decision: keep them** — they are load-bearing for user bash nodes that shell out to
+`claude`/Bedrock/Vertex (Pi auth itself reads `~/.pi/agent/auth.json` + the per-provider keys
+in `provider.ts`, not `CLAUDE_CODE_*`). The stale "Agent SDK era" comment was refreshed in
+`#16`; no further action.
 
-### Pi env-var table — clarified via Archon (was "may overclaim")
+### Pi env-var table — ✅ VERIFIED accurate (#16)
 
-`getting-started/ai-assistants.md` lists API-key env mappings for `groq`, `mistral`,
-`cerebras`, `xai`, `openrouter`, `huggingface`. These are **not arbitrary** — they mirror
-Archon's `PI_API_KEY_VARS` (`doctor.ts`) / `PI_BACKENDS` (`setup.ts`): backends Pi
-auth/setup recognizes. Caveat: that's the _auth-detection_ list, distinct from the
-_request-time_ `PI_PROVIDER_ENV_VARS` mapping the explore found in rith
-(`provider.ts:119-122` → anthropic/openai/google only). **Still verify rith's runtime
-`PI_PROVIDER_ENV_VARS`** — the table is defensible as "recognized backends," but confirm
-which keys rith actually injects per request.
+`getting-started/ai-assistants.md` lists API-key env mappings for all 9 backends. Confirmed
+against `packages/providers/src/pi/provider.ts:119-129`: `PI_PROVIDER_ENV_VARS` maps **all
+nine** providers per request — anthropic, openai, google, groq, mistral, cerebras, xai,
+openrouter, huggingface. The earlier "anthropic/openai/google only" worry was **stale**; the
+docs table matches the runtime mapping, no edit needed.
 
-### Possibly-stale troubleshooting refs (not found in product code)
+### Stale troubleshooting refs — ✅ RESOLVED (#16)
 
-`reference/troubleshooting.md` still mentions `RITH_CLAUDE_FIRST_EVENT_TIMEOUT_MS` and
-`rith serve`; neither was located in the codebase. Confirm and remove if dead.
+`reference/troubleshooting.md` previously mentioned `RITH_CLAUDE_FIRST_EVENT_TIMEOUT_MS` and
+`rith serve`; both are absent from the codebase and were removed from the docs in `#16`
+(verified: no matches under `packages/`).
 
-## Pre-existing issues (NOT introduced here — confirmed red on clean `043f823`)
+### Postgres schema bootstrap gap — OPEN (not blocking; noted #16)
 
-Leave unless explicitly scoped in; they block a fully-green `bun run validate`:
+`reference/database.md` references a non-existent `migrations/` dir. The Postgres adapter
+(`packages/core/src/db/adapters/postgres.ts`) does **not** auto-create schema — only SQLite's
+`initSchema()` / `createSchema()` does. So a fresh Postgres backend has no schema bootstrap
+path. This is a real product gap (not a doc bug); it was surfaced, not fixed, in `#16`.
+Decide: either add a Postgres bootstrap/migration path or document Postgres as
+bring-your-own-schema.
 
-- `packages/cli/src/cli.ts:353` — `workflowType` is `string | undefined`, not narrowed to
-  `"issue" | "pr" | "task"` after the validation guard (guard uses `!==` literal checks
-  which don't narrow `string`). One-line cast/narrow fixes it.
-- Prettier drift (untouched files): `packages/providers/src/pi/capabilities.ts`,
-  `options-translator.ts`, `options-translator.test.ts`, `event-bridge.test.ts`.
+## Pre-existing test/lint issues — ✅ RESOLVED (#16)
+
+All pre-existing red tests and lint/format drift that blocked a green `bun run validate` are
+fixed (product code untouched; tests reconciled to current behavior, no weakening):
+
+- `packages/cli/src/cli.ts` — `workflowType` narrowing fixed via a typed local
+  (`validatedWorkflowType: 'issue' | 'pr' | 'task' | undefined`); satisfies tsc **and** eslint.
+- `packages/cli/src/commands/workflow.test.ts` — drained corrupted `...Once` mock queues
+  (`mockReset`); retargeted assertions to real behavior. 99 pass, deterministic.
+- `packages/cli/src/commands/isolation.test.ts` — reconciled the 8 tests asserting the removed
+  `cleanup-service` `removeEnvironment` API to the current `destroy()` + `updateStatus()` flow;
+  18/18 pass.
+- Prettier drift across touched packages normalized via `bun run format`.
 - `packages/core/src/workflows/store-adapter.test.ts` is **excluded** from core's `test`
   script (its `mock.module('@rith/providers', …)` omits `PiProvider`, so it only loads
   inside a batch). The migration's structural assertion there is covered by `tsc`.
@@ -372,52 +391,3 @@ Leave unless explicitly scoped in; they block a fully-green `bun run validate`:
 - Targeted tests: `cd packages/providers && bun run test`;
   `cd packages/core && bun test src/config/`;
   `cd packages/workflows && bun test src/executor.test.ts src/dag-executor.test.ts`.
-
-## Session update — Track A + Track B complete (`bun run validate` fully green)
-
-User selected "A then B". Both done; `bun run validate` now passes end-to-end
-(`check:bundled`, `check:bundled-skill`, `type-check` ×7 packages, `lint --max-warnings 0`,
-`format:check`, full test suite — 0 failures).
-
-### Track A — doc purge + small cleanups (done)
-
-- **`PI_PROVIDER_ENV_VARS` verified accurate** — `packages/providers/src/pi/provider.ts:119-129`
-  maps all 9 providers (anthropic, openai, google, groq, mistral, cerebras, xai, openrouter,
-  huggingface). The earlier "anthropic/openai/google only" worry (above) was **stale**;
-  `getting-started/ai-assistants.md` already matches — no edit needed.
-- **Web-UI / `serve` doc purge** — fork has no server/daemon/Docker/web-UI/port-binding.
-  `git rm` of `deployment/{docker,cloud,e2e-testing}.md`; rewrote `deployment/{index,local}.md`
-  to CLI-only; stripped server/port/health/REST prose from `reference/{rith-directories,
-configuration,database,troubleshooting}.md`, `getting-started/configuration.md`,
-  `guides/approval-nodes.md`, `contributing/dx-quirks.md`, `deployment/windows.md`. Removed
-  dead `getWebDistDir` from `packages/paths/src/rith-paths.ts` (+ index re-export; no callers).
-  Astro build green: 60 pages (was 63), no broken links.
-- **`CLAUDE_CODE_*` allow-list kept** — the 3 auth vars are load-bearing for user bash nodes
-  shelling out to `claude`; only the stale "Agent SDK era" comment was updated.
-- Open finding (not fixed): `reference/database.md` references a non-existent `migrations/`
-  dir; the Postgres adapter does not auto-create schema (only SQLite's `initSchema()` does).
-  Separate bootstrap gap, left as a noted follow-up.
-
-### Track B — pre-existing red tests fixed (done)
-
-All four pre-existing failures resolved; product code untouched (tests reconciled to current
-behavior, no weakening):
-
-- **`cli.ts` `workflowType` narrowing** — resolved a genuine tsc/eslint disagreement by adding
-  a typed local after the guard: `const validatedWorkflowType: 'issue' | 'pr' | 'task' |
-undefined = workflowType;`. Both tsc and eslint pass.
-- **`workflow.test.ts`** — 36 failures from `...Once` mock-queue corruption (`beforeEach`
-  cleared only `mockLogger`; `core.generateAndSetTitle` was deleted so its `.mockClear()`
-  threw, leaking queued mocks). Drained queues via `mockReset()`; retargeted assertions to
-  real behavior (`executeWorkflow` args, `sendSpy` metadata, `conversation_id` threading).
-  99 pass, deterministic.
-- **`isolation.test.ts`** — 8 failures asserting the removed `removeEnvironment` API from
-  `@rith/core/services/cleanup-service`. `isolationCompleteCommand` now does inline safety
-  checks (uncommitted / running-workflow / open-PR / unmerged / unpushed) collecting
-  `blockers[]`, then `getIsolationProvider().destroy(working_path)` + `isolationDb.updateStatus(
-id, 'destroyed')`. Hoisted controllable `mockDestroy`/`mockUpdateStatus`; retargeted the
-  5 still-valid cases to the `destroy`+`updateStatus` flow, and the 3 whose old
-  `skippedReason`/`partial`/`warning-surfacing` semantics no longer exist to distinct
-  currently-uncovered behaviors (lookup-throws → `DB lookup error`; running-workflow-check
-  throws → warn + non-fatal complete; uncommitted-check throws → blocker). 18/18 pass.
-- **Prettier drift** — `bun run format` (10 files, none overlapping product edits).
