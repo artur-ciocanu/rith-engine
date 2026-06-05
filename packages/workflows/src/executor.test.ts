@@ -813,6 +813,51 @@ describe('finally backstop', () => {
   });
 });
 
+describe('finally emitter cleanup', () => {
+  beforeEach(() => {
+    mockEmitter.unregisterRun.mockClear();
+    mockExecuteDagWorkflow.mockImplementation(async (): Promise<string | undefined> => undefined);
+  });
+
+  it('unregisters the run from the emitter when it reached a terminal state', async () => {
+    const store = makeStore({
+      getWorkflowRunStatus: mock(async () => 'completed' as const),
+    });
+    const deps = makeDeps(store);
+
+    await executeWorkflow(
+      deps,
+      makePlatform(),
+      'conv-1',
+      '/tmp',
+      makeWorkflow(),
+      'test',
+      'db-conv-1'
+    );
+
+    expect(mockEmitter.unregisterRun).toHaveBeenCalled();
+  });
+
+  it('keeps the run registered when paused so SSE stays connected for the approval gate', async () => {
+    const store = makeStore({
+      getWorkflowRunStatus: mock(async () => 'paused' as const),
+    });
+    const deps = makeDeps(store);
+
+    await executeWorkflow(
+      deps,
+      makePlatform(),
+      'conv-1',
+      '/tmp',
+      makeWorkflow(),
+      'test',
+      'db-conv-1'
+    );
+
+    expect(mockEmitter.unregisterRun).not.toHaveBeenCalled();
+  });
+});
+
 // ───────────────────────────────────────────────────────────────────────────
 // hydrateResumableRun
 //

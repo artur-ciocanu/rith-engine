@@ -151,8 +151,7 @@ interface WorkflowLevelOptions {
 /** Internal node execution result — extends NodeOutput with cost data for aggregation. */
 type NodeExecutionResult = NodeOutput & { costUsd?: number };
 
-/** Throttle state for cancel checks (reads — no write contention in WAL mode) */
-const lastNodeCancelCheck = new Map<string, number>();
+/** Throttle interval for the during-streaming cancel check (reads — no write contention in WAL mode). */
 const CANCEL_CHECK_INTERVAL_MS = 10_000;
 
 /**
@@ -175,8 +174,7 @@ export function shouldContinueStreamingForStatus(status: string | null): boolean
   return status === 'running' || status === 'paused';
 }
 
-/** Throttle state for activity heartbeat writes (only used for stale/zombie detection) */
-const lastNodeActivityUpdate = new Map<string, number>();
+/** Throttle interval for activity heartbeat writes (only used for stale/zombie detection). */
 const ACTIVITY_HEARTBEAT_INTERVAL_MS = 60_000;
 
 /** Default DAG node retry for TRANSIENT errors */
@@ -626,6 +624,11 @@ async function executeNodeInternal(
   let nodeIdleTimedOut = false;
   const effectiveIdleTimeout = node.idle_timeout ?? STEP_IDLE_TIMEOUT_MS;
   let lastToolStartedAt: { toolName: string; startedAt: number } | null = null;
+  // Throttle timestamps for the during-streaming cancel check and the activity
+  // heartbeat. Function-local (not module-level) so concurrent runs in the same
+  // process never share throttle state.
+  let lastCancelCheckAt = 0;
+  let lastActivityUpdateAt = 0;
 
   try {
     for await (const msg of withIdleTimeout(
@@ -641,7 +644,6 @@ async function executeNodeInternal(
       }
     )) {
       const tickNow = Date.now();
-      const nodeKey = `${workflowRun.id}:${node.id}`;
 
       // Cancel/pause check — read-only, no write contention in WAL mode (every 10s).
       //
@@ -651,8 +653,8 @@ async function executeNodeInternal(
       // paused gate owns workflow progression, not individual node lifecycles.
       // Only truly terminal / unknown states (null, cancelled, failed, completed)
       // abort the in-flight stream.
-      if (tickNow - (lastNodeCancelCheck.get(nodeKey) ?? 0) > CANCEL_CHECK_INTERVAL_MS) {
-        lastNodeCancelCheck.set(nodeKey, tickNow);
+      if (tickNow - lastCancelCheckAt > CANCEL_CHECK_INTERVAL_MS) {
+        lastCancelCheckAt = tickNow;
         try {
           const streamStatus = await deps.store.getWorkflowRunStatus(workflowRun.id);
           if (!shouldContinueStreamingForStatus(streamStatus)) {
@@ -672,8 +674,8 @@ async function executeNodeInternal(
       }
 
       // Activity heartbeat — write, throttled to every 60s (only for stale/zombie detection)
-      if (tickNow - (lastNodeActivityUpdate.get(nodeKey) ?? 0) > ACTIVITY_HEARTBEAT_INTERVAL_MS) {
-        lastNodeActivityUpdate.set(nodeKey, tickNow);
+      if (tickNow - lastActivityUpdateAt > ACTIVITY_HEARTBEAT_INTERVAL_MS) {
+        lastActivityUpdateAt = tickNow;
         try {
           await deps.store.updateWorkflowActivity(workflowRun.id);
         } catch (e) {
@@ -992,10 +994,6 @@ async function executeNodeInternal(
         error: 'Cancelled by user',
       });
 
-      // Clean up throttle entries
-      lastNodeCancelCheck.delete(`${workflowRun.id}:${node.id}`);
-      lastNodeActivityUpdate.delete(`${workflowRun.id}:${node.id}`);
-
       return { state: 'failed', output: nodeOutputText, error: 'Cancelled by user' };
     }
 
@@ -1037,9 +1035,6 @@ async function executeNodeInternal(
         error: creditError,
       });
 
-      lastNodeCancelCheck.delete(`${workflowRun.id}:${node.id}`);
-      lastNodeActivityUpdate.delete(`${workflowRun.id}:${node.id}`);
-
       return { state: 'failed', output: nodeOutputText, error: creditError };
     }
 
@@ -1079,9 +1074,6 @@ async function executeNodeInternal(
         nodeName: node.command ?? node.id,
         error: emptyError,
       });
-
-      lastNodeCancelCheck.delete(`${workflowRun.id}:${node.id}`);
-      lastNodeActivityUpdate.delete(`${workflowRun.id}:${node.id}`);
 
       return { state: 'failed', output: '', error: emptyError };
     }
@@ -1125,10 +1117,6 @@ async function executeNodeInternal(
       ...(nodeNumTurns !== undefined ? { numTurns: nodeNumTurns } : {}),
     });
 
-    // Clean up throttle entries on completion
-    lastNodeCancelCheck.delete(`${workflowRun.id}:${node.id}`);
-    lastNodeActivityUpdate.delete(`${workflowRun.id}:${node.id}`);
-
     return {
       state: 'completed',
       output: nodeOutputText,
@@ -1138,10 +1126,6 @@ async function executeNodeInternal(
     };
   } catch (error) {
     const err = error as Error;
-
-    // Clean up throttle entries on failure
-    lastNodeCancelCheck.delete(`${workflowRun.id}:${node.id}`);
-    lastNodeActivityUpdate.delete(`${workflowRun.id}:${node.id}`);
 
     // If the abort was triggered by user cancel (not idle timeout), classify as cancel
     if (nodeAbortController.signal.aborted && !nodeIdleTimedOut) {

@@ -516,17 +516,26 @@ export async function failWorkflowRun(id: string, error: string): Promise<void> 
 
 export async function cancelWorkflowRun(id: string): Promise<void> {
   const dialect = getDialect();
+  let result: Awaited<ReturnType<IDatabase['query']>>;
   try {
-    await pool.query(
+    // Guard the state machine: only non-terminal runs (pending/running/paused)
+    // may transition to cancelled. Without this, cancelling an already
+    // completed/failed/cancelled run would corrupt its terminal status.
+    result = await pool.query(
       `UPDATE remote_agent_workflow_runs
        SET status = 'cancelled', completed_at = ${dialect.now()}
-       WHERE id = $1`,
+       WHERE id = $1 AND status NOT IN ('completed', 'failed', 'cancelled')`,
       [id]
     );
   } catch (error) {
     const err = error as Error;
     getLog().error({ err }, 'db.workflow_run_cancel_failed');
     throw new Error(`Failed to cancel workflow run: ${err.message}`);
+  }
+  // Idempotent by design: a no-match means the run is already terminal. Cancel is
+  // best-effort (callers log and continue), so warn rather than throw.
+  if (result.rowCount === 0) {
+    getLog().warn({ workflowRunId: id }, 'db.workflow_run_cancel_no_match');
   }
 }
 
