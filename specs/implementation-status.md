@@ -7,12 +7,16 @@ and what REMAINS — so future sessions continue from here instead of re-derivin
 **Base commit:** `349f46f` (`main`). Shipped so far: items 1–6 in `d760f2e` (`#9`);
 items 11–13 (architectural-review hardening) in `#10`; item 7 (Pi-only docs) in `#11`;
 DX items 8–10 (`RITH_MODEL` override, `rith doctor`, `rith setup`) in `#15`; the web-UI /
-`serve` doc purge + a fully-green `bun run validate` (all pre-existing red tests fixed) in `#16`.
-**Status as of:** 2026-06-05 — items 1–13 and DX 8–10 are merged; docs are Pi-only / CLI-only
-and `bun run validate` is green end-to-end on `main` (`check:bundled`, `check:bundled-skill`,
-`type-check` ×7, `lint --max-warnings 0`, `format:check`, full test suite — 0 failures).
+`serve` doc purge + a fully-green `bun run validate` (all pre-existing red tests fixed) in `#16`;
+the workflows single-process mock isolation (item 16) in `#18` (`ea66970`, current `main` HEAD).
+**Status as of:** 2026-06-05 — items 1–13, DX 8–10, and item 16 are merged; docs are Pi-only /
+CLI-only and `bun run validate` is green end-to-end on `main` (`check:bundled`,
+`check:bundled-skill`, `type-check` ×7, `lint --max-warnings 0`, `format:check`, full test
+suite — 0 failures).
 **Remaining:** only the two deferred large refactors, items 14–15 — the next session starts
-there (see "REMAINING → From `architectural-review.md`" below).
+there (see "REMAINING → From `architectural-review.md`" below). Item 16 (`#18`) was an
+unplanned but enabling prerequisite for item 14: the workflows test suite now runs in a single
+`bun test` process, so the dag-executor god-file split won't fight test serialization.
 
 ---
 
@@ -35,6 +39,7 @@ there (see "REMAINING → From `architectural-review.md`" below).
 | 13  | Event-emitter guaranteed `unregisterRun` cleanup      | arch         | ✅ Done (#10)       |
 | 14  | `DagExecutionContext` param object + god-file split   | arch #1/#2   | ⬜ Deferred (large) |
 | 15  | Discriminate `WorkflowRun.metadata`; aggregate root   | arch         | ⬜ Deferred (large) |
+| 16  | Workflows single-process mock isolation               | test infra   | ✅ Done (#18)       |
 
 ## Decisions made (authoritative — do not re-litigate)
 
@@ -263,6 +268,52 @@ clean; cli type-check clean except the pre-existing `cli.ts` `workflowType` narr
 **pre-existing** `workflow.test.ts` drift (asserts the removed `provider` field +
 `/home/test/.rith` env) — confirmed failing with my `cli.ts` stashed.
 
+### Item 16 — workflows single-process mock isolation (#18, this session)
+
+**Problem.** Bun's `mock.module()` is process-global and irreversible: a `mock.module()`
+call persists across every test file that runs later in the same `bun test` process. Every
+workflows test installed _partial_ mocks of shared modules (`@rith/paths`, `./logger`,
+`./event-emitter`, `./dag-executor`, `./defaults/bundled-defaults`, `./command-validation`,
+`fs/promises`) that then leaked into unrelated later files (`bundled-defaults` seen as `{}`,
+`event-emitter` losing `.subscribe`, `logger` writes becoming no-ops, etc.). To stay green,
+`packages/workflows`'s `test` script ran **16 serialized `bun test` invocations**, one file
+per process. Running the whole suite in one process produced **268 failures**.
+
+**Fix (all in `packages/workflows`):**
+
+- **New `src/test-mock-module.ts`** — `mockModuleScoped(specifier, realNamespace, override)`:
+  snapshots the real module (from a same-file `import * as real …` captured _before_ the
+  call), installs `override` **verbatim** (identical to a bare `mock.module(specifier,
+() => override)`, so per-file behavior is unchanged), then reverts `specifier` to the real
+  snapshot in `afterAll`. Bun evaluates test files sequentially, so the revert fully isolates
+  each file. Relative specifiers (`./logger`, etc.) resolve against `src/` for both the helper
+  and every caller, so resolution matches.
+- **12 test files converted** to capture `import * as real…` and route every `mock.module()`
+  through the helper: `condition-evaluator`, `dag-executor`, `event-emitter`,
+  `executor-preamble`, `executor-shared`, `executor`, `load-command-prompt`, `loader`,
+  `logger`, `runtime-check`, `script-discovery`, `script-node-deps` (`.test.ts`).
+- **Logger-cache root cause (last 3 failures).** `loader.ts` and `workflow-discovery.ts`
+  cached `createLogger()` in a process-global `let cachedLog`; an earlier file warmed the
+  cache, so `loader.test.ts`'s per-file logger mock never received calls. Replaced the cache
+  with a per-call `getLog()` that calls `createLogger()` each time — a cheap
+  `rootLogger.child({ module })`; it also now reflects runtime log-level changes (a child
+  caches the root level at creation time, so per-call creation is strictly more correct). These
+  are the **only product-code changes** in the PR.
+- **`packages/workflows/package.json`** — `test` collapsed from the 16-invocation chain to a
+  single `bun test`.
+
+**Verification:** `cd packages/workflows && bun test` → **906 pass / 0 fail** in one process
+(~2.7s), down from 268 failures. Full `bun run validate` green end-to-end.
+
+**Scope note / gotcha for next session:** this isolates mocks _within_ the workflows package.
+The root `test` script still runs each package in its own process (`bun --filter '*' --parallel
+test`), which remains correct — a repo-root single-process `bun test` across all 69 files still
+fails on **cross-package** `mock.module` leakage (e.g. `PiProvider` not exported from
+`@rith/providers`, `codebaseDb.*`/`workflowDb.*`/`isolationDb.*` undefined in core/cli). That is
+the same class of leak, one level up, and is **out of scope** for #18. If a future change wants a
+true single-process repo run, apply the same `mockModuleScoped` pattern to the offending
+core/cli/providers tests.
+
 ---
 
 ## REMAINING
@@ -303,6 +354,10 @@ Items 1–3 (the low-risk hardening trio) are **done** — see DONE above. Remai
   - **Item 14** — thread a `DagExecutionContext` param object through the executor and split
     the `packages/workflows/src/dag-executor.ts` god file (~3150 lines) into focused runners:
     `BashNodeRunner` / `ScriptNodeRunner` / `LoopNodeRunner` / `ApprovalNodeRunner`.
+    **Test surface is now friendlier** (item 16 / `#18`): `packages/workflows`'s suite runs in a
+    single `bun test` process with `mockModuleScoped` isolation, so new per-runner test files can
+    coexist without re-introducing serialized invocations. When adding runner modules, mock any
+    shared dep through `src/test-mock-module.ts`, never a bare `mock.module`.
   - **Item 15** — discriminate `WorkflowRun.metadata` by run status (replace the loose bag
     with a tagged union) and introduce an aggregate root for the run lifecycle.
 
@@ -366,6 +421,17 @@ docs table matches the runtime mapping, no edit needed.
 path. This is a real product gap (not a doc bug); it was surfaced, not fixed, in `#16`.
 Decide: either add a Postgres bootstrap/migration path or document Postgres as
 bring-your-own-schema.
+
+### Cross-package `mock.module` leakage — OPEN (not blocking; surfaced #18)
+
+Item 16 fixed the leak _within_ `packages/workflows`. The same class of leak still exists
+_across_ packages: a repo-root single-process `bun test` (all ~69 files) fails (~87 failures)
+because partial `mock.module` mocks in core/cli/providers tests leak (`PiProvider` missing from
+`@rith/providers`, `codebaseDb.*`/`workflowDb.*`/`isolationDb.*`/`adapter.*` undefined, etc.).
+**Not a regression and not currently exercised** — the root `test` script runs each package in
+its own process (`bun --filter '*' --parallel`), so this only bites a deliberate single-process
+repo run. Fix (if ever wanted): apply the `mockModuleScoped` pattern from
+`packages/workflows/src/test-mock-module.ts` to the offending core/cli/providers test files.
 
 ## Pre-existing test/lint issues — ✅ RESOLVED (#16)
 
