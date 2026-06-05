@@ -7,7 +7,9 @@ and what REMAINS — so future sessions continue from here instead of re-derivin
 **Base commit:** `3f5c920` (`main`). Shipped so far: items 1–6 in `d760f2e` (`#9`);
 items 11–13 (architectural-review hardening) in `#10`; item 7 (Pi-only docs) in `#11`.
 **Status as of:** 2026-06-05 — Tracks A (hardening) and B (docs) are merged to `main`.
-Remaining: DX items 8–10 and deferred refactors 14–15, plus newly-identified issues
+DX items 8–10 (`RITH_MODEL` override, `rith doctor`, `rith setup`) are now implemented
+with tests + command-reference docs aligned (this session, on `main` working tree).
+Remaining: deferred refactors 14–15 and a broader web-UI/`serve` doc purge
 (see "New issues identified" below).
 
 ---
@@ -23,9 +25,9 @@ Remaining: DX items 8–10 and deferred refactors 14–15, plus newly-identified
 | 5   | Extension `notify()` forwarding (kept, unconditional) | user         | ✅ Done             |
 | 6   | Dead `w.provider` CLI display removed                 | arch/cleanup | ✅ Done             |
 | 7   | Pi-only docs alignment (`docs-web`, 23 files)         | config §6    | ✅ Done (#11)       |
-| 8   | `RITH_MODEL` env override (`applyEnvOverrides`)       | config §7    | ⬜ Not started      |
-| 9   | `rith doctor` — does NOT exist yet; must be built     | config §7    | ⬜ Not started      |
-| 10  | `rith setup` — does NOT exist yet; must be built      | config §7    | ⬜ Not started      |
+| 8   | `RITH_MODEL` env override (`applyEnvOverrides`)       | config §7    | ✅ Done             |
+| 9   | `rith doctor` (Pi-only port)                          | config §7    | ✅ Done             |
+| 10  | `rith setup` (Pi-trimmed port)                        | config §7    | ✅ Done             |
 | 11  | State-machine `cancelWorkflowRun` guard               | arch #3      | ✅ Done (#10)       |
 | 12  | Per-run throttle maps (de-globalize)                  | arch #4      | ✅ Done (#10)       |
 | 13  | Event-emitter guaranteed `unregisterRun` cleanup      | arch         | ✅ Done (#10)       |
@@ -205,6 +207,60 @@ provider). **23 files**, +279/−1414; `astro build` clean (63 pages), Prettier 
   `DefaultResourceLoader({ systemPrompt })`, `provider.ts:314-318`) — a subagent had
   wrongly marked it unsupported; fixed before merge.
 
+### DX items 8–10 — `RITH_MODEL`, `rith doctor`, `rith setup` (this session)
+
+**#8 `RITH_MODEL` override.** `packages/core/src/config/config-loader.ts` —
+`applyEnvOverrides` (was a no-op) now sets `config.pi.model` from a trimmed `RITH_MODEL`
+env var (blank ignored), applied last in `loadConfig` so it beats global+repo config.
+Tests: 3 cases in `config-loader.test.ts` (override, set-when-absent, blank-ignored);
+`RITH_MODEL` added to the suite's managed-env list. Documented in
+`reference/configuration.md` (Pi env table).
+
+**#9 `rith doctor` (Pi-only port).** New `packages/cli/src/commands/doctor.ts`.
+Kept checks: `checkPi` (un-gated — probes `~/.pi/agent/auth.json` then the 9 mapped
+API-key env vars), `checkGhAuth`, `checkDatabase`, `checkWorkspaceWritable`,
+`checkBundledDefaults`, `checkTelemetry`. **Dropped** `checkClaudeBinary`/`checkSlack`/
+`checkTelegram`. Deviations from the old REMAINING notes:
+
+- **No `getTelemetryStatus` shim added.** `checkTelemetry` uses the existing
+  `isTelemetryDisabled()` and re-derives the reason inline (`RITH_TELEMETRY_DISABLED`/
+  `DO_NOT_TRACK`/no-key) — minimal, faithful to rith's actual disable logic.
+- **`checkDatabase` uses a static `{ pool, getDatabaseType }` default with DI** (no
+  `await import`), per the no-dynamic-import rule; the module-load-failure branch was
+  dropped (`@rith/core` is already statically loaded by `cli.ts`).
+  Wired into `cli.ts`: import, usage line, `noGitCommands`, `case 'doctor': return await
+doctorCommand()`. Tests: `doctor.test.ts` (23 pass). Smoke: `bun run cli doctor` → exit 0.
+
+**#10 `rith setup` (Pi-trimmed port).** New `packages/cli/src/commands/setup.ts` (~480
+lines vs Archon's 2248). Reused `PI_BACKENDS`/`PI_DEFAULT_MODELS`/`collectPiConfig`/
+`serializeEnv`/`writeScopedEnv`/`resolveScopedEnvPath`/`checkExistingConfig`/
+`writeHomePiModelConfig`; **dropped** claude/codex auth, all bot platforms, `--spawn`
+terminal spawning, skill install + project-config/docs-path bootstrap, and `checkPiModule`
+(redundant + would need a dynamic import). Flow: pick Pi backend + optional key →
+optional `GITHUB_TOKEN` → merge-write the rith-owned `.env` (home/project scope) →
+write `pi.model` to `~/.rith/config.yaml` (top-level `pi:` block, not `assistants.pi`) →
+offer `rith doctor`. Wired into `cli.ts` with `--scope home|project` validation + `--force`.
+Tests: `setup.test.ts` (19 pass) cover serialize/generate/resolve/write-merge-force/
+existing-detection/model-config-idempotency. Documented in `reference/cli.md`.
+
+**CLI-command drift cleanup (this session).** Removed the `chat`/`serve`/`skill install`
+sections + the stale Claude-auth boot step from `reference/cli.md`; aligned its `setup`/
+`doctor` sections to the as-built commands; fixed `contributing/cli-internals.md` (file
+tree + git-check bypass list); removed the dead `RITH_CLAUDE_FIRST_EVENT_TIMEOUT_MS` block
+and the whole server-only "Port Conflicts"/"Stale Processes" region from
+`reference/troubleshooting.md`; dropped dead `PORT`/`BOT_DISPLAY_NAME`/
+`MAX_CONCURRENT_CONVERSATIONS`/`SESSION_RETENTION_DAYS` rows from
+`reference/configuration.md` (all confirmed absent from product code); fixed the root
+`CLAUDE.md` command examples (`skill install`→`setup`; Pi-only doctor description).
+`security.md`'s "`rith setup` never writes to `<cwd>/.env`" is now accurate as-built.
+
+**Verification:** doctor 23 + setup 19 + config-loader 32 tests pass; core type-check
+clean; cli type-check clean except the pre-existing `cli.ts` `workflowType` narrowing
+(now line ~376, shifted from :353); eslint clean; prettier clean; `astro build` green
+(63 pages, no broken links). `cli`'s `bun run test` aggregate is still red due to the
+**pre-existing** `workflow.test.ts` drift (asserts the removed `provider` field +
+`/home/test/.rith` env) — confirmed failing with my `cli.ts` stashed.
+
 ---
 
 ## REMAINING
@@ -212,26 +268,8 @@ provider). **23 files**, +279/−1414; `astro build` clean (63 pages), Prettier 
 ### From `configuration-and-models.md`
 
 - **§6 docs — ✅ DONE (#11).** See the "Pi-only docs alignment" subsection above.
-- **§7 Priority 3 DX (not started):**
-  - **#8** Wire `applyEnvOverrides()` (currently a no-op in `config-loader.ts`) to support
-    a `RITH_MODEL` env override of `pi.model`.
-  - **#9 `rith doctor` — port from upstream Archon** (dropped in the fork; docs still
-    describe it). Reference: `Archon/packages/cli/src/commands/doctor.ts`. Pi-only port:
-    keep `checkPi` (un-gated — Pi is the sole provider; probe `~/.pi/agent/auth.json`,
-    then API-key env vars), `checkGhAuth`, `checkDatabase`, `checkWorkspaceWritable`,
-    `checkBundledDefaults`, `checkTelemetry`; **drop** `checkClaudeBinary`, `checkSlack`,
-    `checkTelegram`. Wire into `cli.ts` (add to `noGitCommands` + `case 'doctor': return
-await doctorCommand()`). Small, contained — **do this first.** Deps: `@rith/paths`
-    `BUNDLED_IS_BINARY`/`getRithHome` and `@rith/git` `execFileAsync` exist (fork rename),
-    but `getTelemetryStatus`/`resetTelemetryId` do **NOT** — rith telemetry exposes only
-    `isTelemetryDisabled`/`getOrCreateTelemetryId`. Add a small `getTelemetryStatus` shim to
-    `@rith/paths/telemetry` as part of this port (or drop `checkTelemetry` to stay minimal).
-  - **#10 `rith setup` — port a heavily trimmed Pi-only subset** of
-    `Archon/packages/cli/src/commands/setup.ts` (~2248 lines; multi-provider +
-    Slack/Telegram/GitHub-bot). Reuse the Pi pieces — `collectPiConfig` / `checkPiModule` /
-    `writeHomePiModelConfig` / `PI_BACKENDS` / `PI_DEFAULT_MODELS`; drop claude/codex and
-    the bot platforms. Larger — separate follow-up after #9.
-  - Building #9/#10 also clears the CLI-command drift below.
+- **§7 Priority 3 DX — ✅ DONE (this session).** See the "DX items 8–10" subsection under
+  DONE below for the as-built shape (which deviates from the notes that were here).
 
 ### Upstream port reference — Archon
 
@@ -267,29 +305,27 @@ Items 1–3 (the low-risk hardening trio) are **done** — see DONE above. Remai
 Discovered during the docs alignment and code grounding. None block the merged work,
 but they should be addressed.
 
-### CLI-command drift — docs document commands that do not exist
+### CLI-command drift — ✅ RESOLVED (this session)
 
-`packages/cli/src/cli.ts` only dispatches `version`, `help`, `workflow`, `isolation`,
-`validate`, `complete` (plus pre-switch `workflow search`). The docs still document
-**non-existent** commands: `rith setup`, `rith doctor`, `rith chat`, `rith serve`,
-`rith skill install`. Stale references remain in:
+The fork's `cli.ts` now dispatches `doctor` and `setup` (built this session); `chat`,
+`serve`, `auth`, and `skill install` remain un-ported (no fork use case). All stale doc
+references were reconciled: `reference/cli.md` (`chat`/`serve`/`skill install` sections
+removed, `setup`/`doctor` aligned), `contributing/cli-internals.md` (file tree +
+git-check bypass list), and the root `CLAUDE.md` examples. `security.md`'s
+"`rith setup` never writes to `<cwd>/.env`" is now accurate as-built. See the
+"CLI-command drift cleanup" note under DONE.
 
-- `docs-web/.../reference/cli.md` — full `setup` + `doctor` sections, a `skill install`
-  example, a `chat`/`serve` mention; the `doctor` text also says "Claude binary spawn".
-- `docs-web/.../contributing/cli-internals.md` — `setup`/`chat` in the git-check bypass list.
-- `docs-web/.../reference/security.md` — "`rith setup` never writes to `<cwd>/.env`".
+### Web-UI / `serve` doc purge — REMAINING (broader than the command-reference cleanup)
 
-These are real **upstream Archon** commands the fork dropped but left documented.
-**Decided (2026-06-05):** port `doctor`/`setup` (#9/#10); for `chat`/`serve`/`auth`/`skill`
-**delete the doc references** (no port). Building `doctor`/`setup` replaces their doc
-sections; the `chat`/`serve`/`auth`/`skill` references in `reference/cli.md` (+
-`cli-internals.md`, `security.md`) should be removed.
-
-### Root `CLAUDE.md` staleness (Pi-only)
-
-Lines ~228 (`bun run cli skill install`) and ~231–232 ("Verify your Rith Engine setup
-(Claude binary…)", `bun run cli doctor`) reference commands that don't exist and a
-"Claude binary" Pi-only no longer uses.
+The fork dropped the `web`/`server` packages, so there is **no HTTP server, no port
+binding, and no worktree port allocation** in product code (confirmed: no `listen(`,
+`createServer`, `port-allocation`, or `process.env.PORT` reads). The command-reference
+`serve` doc was removed this session, but web-UI/server prose still lingers in:
+`deployment/local.md` (web UI start instructions), `contributing/dx-quirks.md`
+(`PORT=4000 rith serve`), `reference/rith-directories.md` (`web-dist/` cache entry), and
+the `agent-browser open http://localhost:3090` example in `reference/troubleshooting.md`.
+These are a distinct web-UI-removal doc workstream, not part of the §7 DX tracks — left
+for a follow-up.
 
 ### Vestigial Claude env allow-list (cleanup candidate)
 

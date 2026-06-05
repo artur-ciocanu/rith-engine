@@ -47,6 +47,8 @@ import {
   isolationCompleteCommand,
 } from './commands/isolation';
 import { validateWorkflowsCommand, validateCommandsCommand } from './commands/validate';
+import { doctorCommand } from './commands/doctor';
+import { setupCommand } from './commands/setup';
 import { closeDatabase } from '@rith/core';
 import { setLogLevel, createLogger, shutdownTelemetry } from '@rith/paths';
 import * as git from '@rith/git';
@@ -81,6 +83,8 @@ Commands:
   validate workflows [name]  Validate workflow definitions and their references
   validate commands [name]   Validate command files
   version, --version, -V     Show version info (also -v when used alone)
+  doctor                     Verify your Rith Engine setup (auth, db, workspace)
+  setup                      Interactive wizard: configure Pi auth + default model
   help                       Show this help message
 
 Options:
@@ -92,7 +96,8 @@ Options:
   --quiet, -q                Reduce log verbosity to warnings and errors only
   --verbose, -v              Show debug-level output
   --json                     Output machine-readable JSON result to stdout
-  --force                    Overwrite existing file (for workflow install)
+  --force                    Overwrite existing file (for workflow install / setup)
+  --scope <home|project>     Setup target: ~/.rith/.env (home, default) or <repo>/.rith/.env (project)
   --issue-context <json|@file> Issue/PR context (JSON string or @filepath) for $ISSUE_CONTEXT variable
   --workflow-type <type>     Workflow type: pr, issue, or task (sets isolation hints)
   --pr-sha <sha>             PR head commit SHA (metadata for PR-aware workflows)
@@ -188,6 +193,7 @@ async function main(): Promise<number> {
         'workflow-type': { type: 'string' },
         'pr-sha': { type: 'string' },
         'pr-branch': { type: 'string' },
+        scope: { type: 'string' },
       },
       allowPositionals: true,
       strict: false, // Allow unknown flags to pass through
@@ -222,7 +228,7 @@ async function main(): Promise<number> {
   const command = positionals[0];
   const subcommand = positionals[1];
 
-  const noGitCommands = ['version', 'help'];
+  const noGitCommands = ['version', 'help', 'doctor', 'setup'];
   const requiresGitRepo = !noGitCommands.includes(command ?? '');
 
   try {
@@ -277,6 +283,23 @@ async function main(): Promise<number> {
       case 'help':
         printUsage();
         break;
+
+      case 'doctor':
+        return await doctorCommand();
+
+      case 'setup': {
+        const scopeValue = values.scope as string | undefined;
+        if (scopeValue !== undefined && scopeValue !== 'home' && scopeValue !== 'project') {
+          console.error(`Error: --scope must be 'home' or 'project' (got '${scopeValue}')`);
+          return 1;
+        }
+        await setupCommand({
+          repoPath: effectiveCwd,
+          scope: scopeValue,
+          force: values.force as boolean | undefined,
+        });
+        break;
+      }
 
       case 'workflow':
         switch (subcommand) {

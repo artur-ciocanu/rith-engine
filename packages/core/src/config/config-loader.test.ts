@@ -37,7 +37,7 @@ import {
 
 describe('config-loader', () => {
   const originalEnv: Record<string, string | undefined> = {};
-  const envVars = ['WORKSPACE_PATH', 'WORKTREE_BASE', 'RITH_HOME'];
+  const envVars = ['WORKSPACE_PATH', 'WORKTREE_BASE', 'RITH_HOME', 'RITH_MODEL'];
 
   beforeEach(() => {
     clearConfigCache();
@@ -258,6 +258,32 @@ pi:
       const config = await loadConfig('/test/repo');
       expect(config.pi.model).toBe('opus');
       expect(config.pi.enableExtensions).toBe(true);
+    });
+
+    test('RITH_MODEL env var overrides pi.model (highest precedence)', async () => {
+      process.env.RITH_MODEL = 'anthropic/claude-opus-4-5';
+      mockFsReadFile.mockImplementation(async () => 'pi:\n  model: google/gemini-2.5-pro');
+
+      const config = await loadConfig('/test/repo');
+      expect(config.pi.model).toBe('anthropic/claude-opus-4-5');
+    });
+
+    test('RITH_MODEL sets pi.model when no config file provides one', async () => {
+      process.env.RITH_MODEL = 'anthropic/claude-haiku-4-5';
+      const error = new Error('ENOENT') as NodeJS.ErrnoException;
+      error.code = 'ENOENT';
+      mockFsReadFile.mockRejectedValue(error);
+
+      const config = await loadConfig('/test/repo');
+      expect(config.pi.model).toBe('anthropic/claude-haiku-4-5');
+    });
+
+    test('blank RITH_MODEL is ignored (does not clobber configured model)', async () => {
+      process.env.RITH_MODEL = '   ';
+      mockFsReadFile.mockImplementation(async () => 'pi:\n  model: google/gemini-2.5-pro');
+
+      const config = await loadConfig('/test/repo');
+      expect(config.pi.model).toBe('google/gemini-2.5-pro');
     });
 
     test('propagates baseBranch from repo worktree config', async () => {

@@ -224,11 +224,11 @@ bun run cli complete <branch-name>
 bun run cli complete <branch-name> --force  # Skip uncommitted-changes check
 
 
-# Install the bundled Rith Engine skill into a project
-bun run cli skill install
-bun run cli skill install /path/to/project
+# Configure Pi auth + default model (interactive wizard)
+bun run cli setup
+bun run cli setup --scope project   # write <repo>/.rith/.env instead of ~/.rith/.env
 
-# Verify your Rith Engine setup (Claude binary, gh auth, DB, adapters)
+# Verify your Rith Engine setup (Pi auth, gh auth, DB, workspace, bundled defaults, telemetry)
 bun run cli doctor
 
 # Show version

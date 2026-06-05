@@ -31,7 +31,7 @@ docker compose ps
 
 Local:
 ```bash
-# Check application logs via Docker or rith serve output
+# Check application logs (run with --verbose for debug-level output)
 ```
 
 Docker:
@@ -130,64 +130,6 @@ Docker:
 ```bash
 docker compose logs -f app | grep GitHub
 ```
-
-## Port Conflicts
-
-**Check if port 3090 is already in use:**
-
-macOS/Linux:
-```bash
-lsof -i :3090
-```
-
-Windows:
-```bash
-netstat -ano | findstr :3090
-```
-
-You can override the port with the `PORT` environment variable:
-```bash
-PORT=4000 rith serve
-```
-
-When running in a git worktree, Rith Engine automatically allocates a unique port (3190-4089 range) so you don't need to worry about conflicts with the main instance.
-
-### Stale Processes (Windows)
-
-**Symptom:** The CLI or `rith serve` is unresponsive, and the terminal shows no activity — even though you've started the process.
-
-**Cause:** A previous `bun`, `rith`, or `node` process is still holding the port. This is common on Windows when the terminal is closed without stopping the process.
-
-**Diagnose:**
-
-```powershell
-netstat -ano | findstr :3090
-```
-
-Note the PID in the last column, then verify which process it is:
-
-```powershell
-tasklist | findstr 12345
-```
-
-(Replace `12345` with the actual PID.)
-
-**Fix — kill by PID** (preferred):
-
-```powershell
-taskkill /F /PID 12345
-```
-
-If multiple stale processes are present:
-
-```powershell
-taskkill /F /IM bun.exe
-taskkill /F /IM node.exe
-taskkill /F /IM rith.exe
-```
-
-See also: [Windows Setup](/deployment/windows/) for more Windows-specific guidance.
-
 
 ## E2E Testing / agent-browser
 
@@ -304,12 +246,6 @@ pi:
 
 ```bash
 RITH_SUPPRESS_NESTED_CLAUDE_WARNING=1 rith workflow run ...
-```
-
-**Adjust the timeout:** If your environment is slow and hitting the 60-second first-event timeout:
-
-```bash
-RITH_CLAUDE_FIRST_EVENT_TIMEOUT_MS=120000 rith workflow run ...
 ```
 
 ## Worktree Belongs to a Different Clone

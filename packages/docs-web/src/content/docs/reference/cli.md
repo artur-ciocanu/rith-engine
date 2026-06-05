@@ -50,28 +50,25 @@ rith workflow run plan --cwd /path/to/repo --branch feature-auth "Add OAuth supp
 rith workflow run assist --cwd /path/to/repo --no-worktree "Quick question"
 ```
 
-**Note:** Workflow and isolation commands require running from within a git repository. Running from subdirectories automatically resolves to the repo root. The `version`, `help`, `chat`, `setup`, `serve`, and `doctor` commands work anywhere.
+**Note:** Workflow and isolation commands require running from within a git repository. Running from subdirectories automatically resolves to the repo root. The `version`, `help`, `setup`, and `doctor` commands work anywhere.
 
 ## Commands
 
-### `chat <message>`
-
-Send a message for a one-off AI interaction.
-
-```bash
-rith chat "What does this function do?"
-```
-
 ### `setup`
 
-Interactive setup wizard for credentials and configuration.
+Interactive wizard that configures Pi authentication and the default model.
 
 ```bash
 rith setup                      # writes ~/.rith/.env (home scope, default)
 rith setup --scope project      # writes <cwd>/.rith/.env instead
 rith setup --force              # overwrite instead of merging (backup still written)
-rith setup --spawn              # open in a new terminal window
 ```
+
+The wizard prompts for a default Pi backend (Anthropic, OpenAI, Google, OpenRouter,
+Groq, Mistral, xAI, Cerebras, or Hugging Face) and an optional API key, plus an
+optional `GITHUB_TOKEN` for `gh`-driven workflows. The chosen model ref is written
+to `~/.rith/config.yaml` under the `pi:` block; secrets go to the rith-owned `.env`.
+You can skip the API-key prompt and authenticate with `pi /login` instead.
 
 **Flags:**
 
@@ -80,19 +77,21 @@ rith setup --spawn              # open in a new terminal window
 | `--scope home` | Write to `~/.rith/.env` (default). Applies to every project. |
 | `--scope project` | Write to `<cwd>/.rith/.env`. Overrides user scope for this repo only. |
 | `--force` | Overwrite the target file wholesale instead of merging. A timestamped backup is still written. |
-| `--spawn` | Open setup wizard in a new terminal window. |
 
 **Write safety**: `rith setup` never writes to `<cwd>/.env` — that file belongs to you. The wizard always targets one rith-owned file chosen by `--scope`, merges into existing content (so user-added keys survive), and writes a timestamped backup before every rewrite (e.g. `~/.rith/.env.rith-backup-2026-04-20T09-28-11-000Z`).
 
 ### `doctor`
 
-Verify your Rith Engine setup. Runs a checklist of common failure points: Claude binary spawn, gh CLI auth, Pi auth (when Pi is configured as default), database reachability, workspace writability, bundled defaults.
+Verify your Rith Engine setup. Runs a checklist of common failure points: Pi auth
+(`~/.pi/agent/auth.json` or an API-key env var), gh CLI auth (when a GitHub token is
+set), database reachability, workspace writability, bundled defaults, and telemetry status.
 
 ```bash
 rith doctor
 ```
 
-Exit code 0 if all checks pass or are skipped; 1 if any critical check fails. Adapter pings degrade to `skip` on network errors — a flaky connection does not flip the result red.
+Exit code 0 if all checks pass or are skipped; 1 if any check fails. Checks that
+do not apply (e.g. gh auth with no token configured) degrade to `skip` rather than fail.
 
 Also runs automatically at the end of `rith setup` (optional).
 
@@ -321,45 +320,6 @@ rith complete feature-auth --force  # bypass uncommitted-changes check
 
 Use this after a PR is merged and you no longer need the worktree or branches. Accepts multiple branch names in one call.
 
-### `serve`
-
-Start the optional web dashboard server (binary installs only). On first run, downloads a pre-built web UI tarball from the matching GitHub release, verifies the SHA-256 checksum, and extracts it. Subsequent runs use the cached copy.
-**Binary installs only** — in development, use `bun run dev` instead.
-
-```bash
-# Start web UI server (downloads on first run)
-rith serve
-
-# Override the default port
-rith serve --port 4000
-
-# Download the web UI without starting the server
-rith serve --download-only
-```
-
-**Flags:**
-
-| Flag | Effect |
-|------|--------|
-| `--port <port>` | Override server port (default: 3090, range: 1–65535) |
-| `--download-only` | Download and cache the web UI, then exit without starting the server |
-
-The cached web UI is stored at `~/.rith/web-dist/<version>/`. Each version is cached independently, so upgrading the binary automatically downloads the matching web UI.
-
-### `skill install [path]`
-
-Install the bundled Rith Engine skill files into a project's `.claude/skills/rith/` directory. Always overwrites existing files to ensure the latest version shipped with the current Rith Engine binary is installed.
-
-```bash
-# Install into the current directory
-rith skill install
-
-# Install into a specific project
-rith skill install /path/to/project
-```
-
-The Rith Engine skill teaches Claude Code how to work with Rith Engine workflows, commands, and project conventions. It is also installed automatically during `rith setup`.
-
 ### `version`
 
 Show version, build type, and database info.
@@ -399,7 +359,6 @@ On startup, the CLI:
 1. Strips `<cwd>/.env*` keys + `CLAUDECODE` markers from `process.env` (via `stripCwdEnv`). Emits `[rith] stripped N keys from <cwd> (...)` when N > 0.
 2. Loads `~/.rith/.env` (user scope). Emits `[rith] loaded N keys …` when N > 0 **and** `RITH_VERBOSE_BOOT=1` or `LOG_LEVEL=debug/trace` is set.
 3. Loads `<cwd>/.rith/.env` (project scope, overrides user scope). Same verbosity gate as step 2.
-4. Auto-enables global Claude auth if no explicit tokens are set.
 
 `<cwd>/.env` is never loaded — it belongs to the target project. See [Configuration Reference: `.env` File Locations](/reference/configuration/#env-file-locations) for the full three-path model.
 
@@ -413,9 +372,6 @@ Both work transparently. Most users never need to configure a database.
 ## Examples
 
 ```bash
-# One-off AI chat
-rith chat "How does error handling work in this codebase?"
-
 # Interactive setup wizard
 rith setup
 

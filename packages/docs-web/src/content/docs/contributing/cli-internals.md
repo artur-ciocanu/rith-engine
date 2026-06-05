@@ -21,7 +21,7 @@ packages/cli/
 │   │   ├── workflow.ts     # workflow list/run (approve/reject/status/resume/abandon delegate to @rith/core/operations)
 │   │   ├── isolation.ts    # isolation list/cleanup (list/merged-cleanup delegate to @rith/core/operations)
 │   │   ├── setup.ts        # setup command implementation
-│   │   ├── chat.ts         # chat command implementation
+│   │   ├── doctor.ts       # doctor command implementation
 │   │   ├── validate.ts     # validate command implementation
 │   │   └── version.ts      # version command
 │   └── adapters/
@@ -62,8 +62,8 @@ packages/cli/
                                   ▼
 ┌─────────────────────────────────────────────────────────────────┐
 │ cli.ts  Git repository check                                    │
-│                 Skip for version/help, validate and resolve to  │
-│                 repo root for workflow/isolation commands       │
+│                 Skip for version/help/doctor/setup; resolve to  │
+│                 repo root for workflow/isolation/validate cmds  │
 └─────────────────────────────────┬───────────────────────────────┘
                                   │
                                   ▼
@@ -81,8 +81,8 @@ packages/cli/
 **Code:** `packages/cli/src/cli.ts`
 
 **Git repository check:**
-- Commands `workflow`, `isolation`, and `complete` require running from a git repository
-- Commands `version`, `help`, `setup`, and `chat` bypass this check
+- Commands `workflow`, `isolation`, `validate`, and `complete` require running from a git repository
+- Commands `version`, `help`, `doctor`, and `setup` bypass this check
 - When in a subdirectory, automatically resolves to repository root
 - Exit code 1 if not in a git repository
 
