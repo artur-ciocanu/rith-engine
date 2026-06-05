@@ -165,11 +165,20 @@ function getDefaults(): MergedConfig {
 }
 
 /**
- * Apply environment variable overrides
+ * Apply environment variable overrides (highest precedence).
+ *
+ * `RITH_MODEL` overrides `pi.model` so a one-off run can target a different
+ * model without editing config files (e.g. `RITH_MODEL=anthropic/claude-opus-4-5
+ * rith workflow run …`). Blank/whitespace values are ignored.
  */
 function applyEnvOverrides(config: MergedConfig): MergedConfig {
-  // Path overrides (these come from rith-paths.ts which already checks env vars)
-  // No need to re-apply here since getDefaults() uses those functions
+  // Path overrides come from rith-paths.ts which already checks env vars, so
+  // getDefaults() has them applied — nothing to re-apply here.
+
+  const envModel = process.env.RITH_MODEL?.trim();
+  if (envModel) {
+    config.pi = { ...config.pi, model: envModel };
+  }
 
   return config;
 }

@@ -171,11 +171,7 @@ Environment variables override all other configuration. They are organized by ca
 | Variable | Description | Default |
 | --- | --- | --- |
 | `RITH_HOME` | Base directory for all Rith Engine-managed files. **Ignored in Docker** — the container always uses `/.rith`. | `~/.rith` |
-| `PORT` | HTTP server listen port | `3090` (auto-allocated in worktrees) |
 | `LOG_LEVEL` | Logging verbosity (`fatal`, `error`, `warn`, `info`, `debug`, `trace`) | `info` |
-| `BOT_DISPLAY_NAME` | Bot name shown in batch-mode "starting" messages | `Rith Engine` |
-| `MAX_CONCURRENT_CONVERSATIONS` | Maximum concurrent AI conversations | `10` |
-| `SESSION_RETENTION_DAYS` | Delete inactive sessions older than N days | `30` |
 | `RITH_SUPPRESS_NESTED_CLAUDE_WARNING` | When set to `1`, suppresses the stderr warning emitted when `rith` is run inside a Claude Code session | -- |
 | `RITH_VERBOSE_BOOT` | When set to `1`, prints `[rith] loaded N keys from …` lines to stderr at boot. Also enabled by `LOG_LEVEL=debug` or `LOG_LEVEL=trace`. Silent by default to avoid interleaving with interactive command output. | -- |
 
@@ -188,6 +184,7 @@ Pi Coding Agent is the sole AI provider and is bundled with Rith Engine — ther
 | `ANTHROPIC_API_KEY` | API key for Anthropic models (Pi provider id `anthropic`) | -- |
 | `OPENAI_API_KEY` | API key for OpenAI models (Pi provider id `openai`) | -- |
 | `GEMINI_API_KEY` | API key for Google models (Pi provider id `google`) | -- |
+| `RITH_MODEL` | Overrides `pi.model` for a single run — set to a `<provider-id>/<model-id>` ref (e.g. `anthropic/claude-opus-4-5`). Highest precedence; blank values are ignored. | `pi.model` from config |
 
 Run `pi /login` (OAuth) to write `~/.pi/agent/auth.json`, which Rith Engine picks up automatically. API keys in the environment override `auth.json`. Local backends (LM Studio, ollama) need no credentials — register them in `~/.pi/agent/models.json`. Baseline Pi settings live in `~/.pi/agent/settings.json` (plus `<repo>/.pi/settings.json`).
 
