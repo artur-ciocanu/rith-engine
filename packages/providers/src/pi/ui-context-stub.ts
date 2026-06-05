@@ -6,7 +6,7 @@ import type {
   Theme,
 } from '@mariozechner/pi-coding-agent';
 
-import type { MessageChunk } from '../types'
+import type { MessageChunk } from '../types';
 
 /** Pushes UI notifications into Rith Engine's event stream. Set/cleared by bridgeSession. */
 export interface RithUIBridge {

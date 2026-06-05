@@ -8,7 +8,7 @@ export type {
   MessageChunk,
   TokenUsage,
   SystemPromptInput,
-  ProviderDefaults,
+  PiDefaults,
 } from './types';
 
 // Pi provider

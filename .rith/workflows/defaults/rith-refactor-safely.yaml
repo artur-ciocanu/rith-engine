@@ -206,7 +206,7 @@ nodes:
   # ═══════════════════════════════════════════════════════════════
 
   - id: execute-refactor
-    model: opus[1m]
+    model: anthropic/claude-opus-4-5
     prompt: |
       You are executing a refactoring plan with strict safety guardrails.
 

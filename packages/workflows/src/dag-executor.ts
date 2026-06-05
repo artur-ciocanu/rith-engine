@@ -344,7 +344,7 @@ async function resolveNodeModelAndOptions(
   model: string | undefined;
   options: SendQueryOptions | undefined;
 }> {
-  const providerAssistantConfig = config.provider;
+  const providerAssistantConfig = config.pi;
   const model: string | undefined = node.model ?? workflowModel ?? providerAssistantConfig?.model;
 
   // Surface agents + skills ID collision — user-defined 'dag-node-skills'
@@ -390,7 +390,7 @@ async function resolveNodeModelAndOptions(
   };
 
   // Pass assistantConfig from config — provider parses internally
-  const assistantConfig = config.provider ?? {};
+  const assistantConfig = config.pi ?? {};
 
   const options: SendQueryOptions = {
     ...baseOptions,
@@ -1652,7 +1652,7 @@ function buildLoopNodeOptions(
   if (config.envVars && Object.keys(config.envVars).length > 0) {
     options.env = config.envVars;
   }
-  options.assistantConfig = config.provider ?? {};
+  options.assistantConfig = config.pi ?? {};
   // Pass workflow-level options as nodeConfig so providers can apply them
   if (workflowLevelOptions) {
     options.nodeConfig = {
@@ -2729,7 +2729,7 @@ export async function executeDagWorkflow(
           // 3b. Loop node dispatch — manages its own AI sessions and iteration
           if (isLoopNode(node)) {
             // Resolve per-node model overrides for loop node.
-            const loopAssistantConfig = config.provider;
+            const loopAssistantConfig = config.pi;
             const loopModel: string | undefined =
               node.model ?? workflowModel ?? loopAssistantConfig?.model;
 

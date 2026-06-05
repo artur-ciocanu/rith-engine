@@ -256,8 +256,8 @@ export async function executeWorkflow(
 
   const docsDir = config.docsPath ?? 'docs/';
 
-  // Model resolution: node.model > workflow.model > config.provider.model
-  const resolvedModel = workflow.model ?? config.provider?.model;
+  // Model resolution: node.model > workflow.model > config.pi.model
+  const resolvedModel = workflow.model ?? config.pi?.model;
 
   getLog().info(
     {

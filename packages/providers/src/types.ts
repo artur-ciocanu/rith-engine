@@ -2,14 +2,15 @@
 // @rith/workflows and @rith/core import from this subpath (@rith/providers/types).
 // HARD RULE: This file must never import SDK packages or other @rith/* packages.
 
-// ─── Provider Config Defaults ──────────────────────────────────────────────
-// Canonical definitions — @rith/core/config/config-types.ts imports from here.
-// Single source of truth for provider-specific config shapes.
+// ─── Pi Config Defaults ────────────────────────────────────────────────────
+// Canonical definition — @rith/core/config/config-types.ts imports from here.
+// Single source of truth for the Pi provider's `pi:` config block.
 /**
- * Community provider defaults for Pi (@mariozechner/pi-coding-agent).
- * v1 minimal shape; extend as capabilities are wired in.
+ * Rith's `pi:` config block (~/.rith/config.yaml + .rith/config.yaml).
+ * Holds the default model plus Rith→Pi execution policy that Pi cannot
+ * self-manage from ~/.pi (concurrency cap, extension trust gate, extension flags).
  */
-export interface ProviderDefaults {
+export interface PiDefaults {
   [key: string]: unknown;
   /** Default model ref in '<pi-provider-id>/<model-id>' format, e.g. 'google/gemini-2.5-pro' */
   model?: string;
@@ -20,19 +21,12 @@ export interface ProviderDefaults {
    * packages, AND the workflow's cwd (`<cwd>/.pi/extensions/`,
    * `<cwd>/.pi/settings.json`). The cwd scope is the risky one — a workflow
    * running against an untrusted repo can auto-load whatever extension code
-   * that repo ships. Disabled by default to preserve the "Rith Engine is source of
-   * truth" trust boundary. Flip to true only on hosts whose workflows run
-   * against repos you trust.
-   * @default false
+   * that repo ships. Rith suppresses Pi's native discovery by default; this is
+   * the trust gate that re-enables it. Flip to false on hosts whose workflows
+   * run against repos you don't trust.
+   * @default true
    */
   enableExtensions?: boolean;
-  /**
-   * Bind an `ExtensionUIContext` so extensions see `ctx.hasUI === true` and
-   * `ctx.ui.notify()` forwards into the chunk stream. Ignored unless
-   * `enableExtensions` is true.
-   * @default false
-   */
-  interactive?: boolean;
   /**
    * Flag values passed to Pi's ExtensionRunner before `session_start`,
    * equivalent to `pi --<name>` / `pi --<name>=<value>` on the CLI.
@@ -41,25 +35,12 @@ export interface ProviderDefaults {
    */
   extensionFlags?: Record<string, boolean | string>;
   /**
-   * Environment variables injected into `process.env` at session start so
-   * in-process extensions (which read `process.env` directly) pick them up.
-   * Existing `process.env` entries are NOT overridden — shell env wins over
-   * config. Use for extension-config vars like `PLANNOTATOR_REMOTE=1` that
-   * must be present before the extension's `session_start` hook runs.
-   *
-   * Note: this differs from `requestOptions.env` (codebase-scoped env vars),
-   * which is per-request and only injected into bash subprocesses. Use
-   * codebase env vars for secrets that vary per project; use `assistants.pi.env`
-   * for extension wiring that's global to the Pi provider.
-   * @default undefined
-   */
-  env?: Record<string, string>;
-  /**
    * Maximum number of concurrent Pi `session.prompt()` calls allowed.
    * When this limit is reached, additional calls queue and wait rather than
-   * fail. Pi/Minimax does not throttle concurrent requests at the SDK layer
-   * (unlike some provider SDKs), so this prevents cascading 429/rate-limit failures
-   * when many parallel workflow nodes invoke Pi simultaneously.
+   * fail. Pi does not throttle concurrent requests at the SDK layer, so this
+   * prevents cascading 429/rate-limit failures when many parallel workflow
+   * nodes invoke Pi simultaneously. This is a Rith orchestration concern Pi
+   * cannot manage — it has no notion of the DAG's parallel layers.
    *
    * Set to a positive integer matching your Pi API tier's concurrency limit.
    * Omit for unlimited (not recommended for production batches).

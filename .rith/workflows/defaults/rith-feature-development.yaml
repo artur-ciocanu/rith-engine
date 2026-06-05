@@ -8,7 +8,7 @@ description: |
 nodes:
   - id: implement
     command: rith-implement
-    model: opus[1m]
+    model: anthropic/claude-opus-4-5
 
   - id: create-pr
     command: rith-create-pr

@@ -173,7 +173,7 @@ nodes:
   # ═══════════════════════════════════════════════════════════════
 
   - id: create-plan
-    model: sonnet
+    model: anthropic/claude-sonnet-4-5
     depends_on: [explore]
     context: fresh
     prompt: |
@@ -410,7 +410,7 @@ nodes:
   - id: implement
     depends_on: [implement-setup]
     idle_timeout: 600000
-    model: claude-opus-4-6[1m]
+    model: anthropic/claude-opus-4-5
     loop:
       prompt: |
         # PIV Loop — Implementation Agent
@@ -540,7 +540,7 @@ nodes:
   # ═══════════════════════════════════════════════════════════════
 
   - id: code-review
-    model: sonnet
+    model: anthropic/claude-sonnet-4-5
     depends_on: [implement]
     context: fresh
     prompt: |
@@ -700,7 +700,7 @@ nodes:
   # ═══════════════════════════════════════════════════════════════
 
   - id: finalize
-    model: sonnet
+    model: anthropic/claude-sonnet-4-5
     depends_on: [fix-feedback]
     context: fresh
     prompt: |
