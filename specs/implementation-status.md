@@ -4,10 +4,11 @@
 `configuration-and-models.md`. Records what is DONE, the DECISIONS made (and why),
 and what REMAINS — so future sessions continue from here instead of re-deriving.
 
-**Base commit:** `d760f2e` (`fix(config): repair bundled workflow models and migrate to pi config block (#9)`)
-— items 1–6 below shipped in that commit.
-**Status as of:** 2026-06-05 — architectural-review hardening (items 11–13) is in the
-working tree (not yet committed); see the new DONE subsection.
+**Base commit:** `3f5c920` (`main`). Shipped so far: items 1–6 in `d760f2e` (`#9`);
+items 11–13 (architectural-review hardening) in `#10`; item 7 (Pi-only docs) in `#11`.
+**Status as of:** 2026-06-05 — Tracks A (hardening) and B (docs) are merged to `main`.
+Remaining: DX items 8–10 and deferred refactors 14–15, plus newly-identified issues
+(see "New issues identified" below).
 
 ---
 
@@ -21,13 +22,13 @@ working tree (not yet committed); see the new DONE subsection.
 | 4   | Drop `env` + `interactive` config knobs               | user         | ✅ Done             |
 | 5   | Extension `notify()` forwarding (kept, unconditional) | user         | ✅ Done             |
 | 6   | Dead `w.provider` CLI display removed                 | arch/cleanup | ✅ Done             |
-| 7   | Config docs rewrite (`ai-assistants.md`, etc.)        | config §6    | ⬜ Not started      |
+| 7   | Pi-only docs alignment (`docs-web`, 23 files)         | config §6    | ✅ Done (#11)       |
 | 8   | `RITH_MODEL` env override (`applyEnvOverrides`)       | config §7    | ⬜ Not started      |
-| 9   | `rith doctor` config→Pi validation                    | config §7    | ⬜ Not started      |
-| 10  | `rith setup` auth.json detection                      | config §7    | ⬜ Not started      |
-| 11  | State-machine `cancelWorkflowRun` guard               | arch #3      | ✅ Done             |
-| 12  | Per-run throttle maps (de-globalize)                  | arch #4      | ✅ Done             |
-| 13  | Event-emitter guaranteed `unregisterRun` cleanup      | arch         | ✅ Done             |
+| 9   | `rith doctor` — does NOT exist yet; must be built     | config §7    | ⬜ Not started      |
+| 10  | `rith setup` — does NOT exist yet; must be built      | config §7    | ⬜ Not started      |
+| 11  | State-machine `cancelWorkflowRun` guard               | arch #3      | ✅ Done (#10)       |
+| 12  | Per-run throttle maps (de-globalize)                  | arch #4      | ✅ Done (#10)       |
+| 13  | Event-emitter guaranteed `unregisterRun` cleanup      | arch         | ✅ Done (#10)       |
 | 14  | `DagExecutionContext` param object + god-file split   | arch #1/#2   | ⬜ Deferred (large) |
 | 15  | Discriminate `WorkflowRun.metadata`; aggregate root   | arch         | ⬜ Deferred (large) |
 
@@ -183,24 +184,43 @@ Tests added: `cancelWorkflowRun` guard + idempotent no-throw (`core/src/db/workf
 Verification: core `src/db/` 189 pass, full workflows suite 0 fail (dag-executor 234,
 executor 33); type-check / eslint / prettier clean on edited files.
 
+### Pi-only docs alignment (item 7) — #11
+
+`packages/docs-web` realigned to the Pi-only build (Pi Coding Agent is the sole AI
+provider). **23 files**, +279/−1414; `astro build` clean (63 pages), Prettier clean.
+
+- Config: all `assistants.{claude,codex,copilot}` blocks → the `pi:` block; dropped the
+  removed `interactive` knob and the `inherit` model alias.
+- Models: bare names → Pi `<provider-id>/<model-id>` refs.
+- `provider` field + registered-provider / `defaultAssistant` / "Unknown provider" prose
+  removed everywhere.
+- Auth/env: `pi /login` (`~/.pi/agent/auth.json`) or `ANTHROPIC_API_KEY`/`OPENAI_API_KEY`/
+  `GEMINI_API_KEY`; removed `CLAUDE_*`/`CODEX_*`/`COPILOT_*`, `CLAUDE_BIN_PATH`,
+  `claudeBinaryPath`, `settingSources`.
+- Capabilities (per `PI_CAPABILITIES`): kept `effort`/`thinking`(string)/`allowed_tools`/
+  `denied_tools`/`skills`/`output_format`(best-effort)/`systemPrompt` as supported on Pi;
+  marked `mcp`/`agents`/`hooks`/`sandbox`/`fallbackModel`/`betas`/`maxBudgetUsd` as
+  ignored. Stubbed the `hooks` and `mcp-servers` guides (kept in nav + inbound links).
+- Mid-flight correction: `systemPrompt` is **supported** (Pi forwards it to
+  `DefaultResourceLoader({ systemPrompt })`, `provider.ts:314-318`) — a subagent had
+  wrongly marked it unsupported; fixed before merge.
+
 ---
 
 ## REMAINING
 
 ### From `configuration-and-models.md`
 
-- **§6 docs (not started):** `packages/docs-web/src/content/docs/` still describes the
-  old world. Known stale refs:
-  - `getting-started/ai-assistants.md` — `assistants.pi.*`, `~/.pi/agent/settings.json` precedence.
-  - `getting-started/configuration.md` — `claude: { model: sonnet ... }` block.
-  - `reference/configuration.md` and `guides/authoring-workflows.md` — `provider:`, bare
-    model names, `opus[1m]`, `assistants.claude.model`.
-    Update to the `pi:` block + Pi-format refs.
+- **§6 docs — ✅ DONE (#11).** See the "Pi-only docs alignment" subsection above.
 - **§7 Priority 3 DX (not started):**
-  - Wire `applyEnvOverrides()` (currently a no-op in `config-loader.ts`) to support a
-    `RITH_MODEL` env override of `pi.model`.
-  - `rith doctor`: validate config → parse model ref → check Pi catalog/credentials.
-  - `rith setup`: detect `~/.pi/agent/auth.json` and guide the user.
+  - **#8** Wire `applyEnvOverrides()` (currently a no-op in `config-loader.ts`) to support
+    a `RITH_MODEL` env override of `pi.model`.
+  - **#9 `rith doctor` — the command does NOT exist yet** (`cli.ts` has no `doctor` case;
+    the docs describe one). Build it: validate config → parse model ref → check Pi
+    catalog/credentials (`~/.pi/agent/auth.json`).
+  - **#10 `rith setup` — the command does NOT exist yet** (same situation). Build it:
+    detect `~/.pi/agent/auth.json` and guide the user.
+  - Building #9/#10 also clears the CLI-command drift below.
 
 ### From `architectural-review.md`
 
@@ -212,6 +232,53 @@ Items 1–3 (the low-risk hardening trio) are **done** — see DONE above. Remai
   `WorkflowRun.metadata` by status; add an aggregate root for the run lifecycle.
 
 ---
+
+## New issues identified (2026-06-05 — surfaced while shipping Tracks A & B)
+
+Discovered during the docs alignment and code grounding. None block the merged work,
+but they should be addressed.
+
+### CLI-command drift — docs document commands that do not exist
+
+`packages/cli/src/cli.ts` only dispatches `version`, `help`, `workflow`, `isolation`,
+`validate`, `complete` (plus pre-switch `workflow search`). The docs still document
+**non-existent** commands: `rith setup`, `rith doctor`, `rith chat`, `rith serve`,
+`rith skill install`. Stale references remain in:
+
+- `docs-web/.../reference/cli.md` — full `setup` + `doctor` sections, a `skill install`
+  example, a `chat`/`serve` mention; the `doctor` text also says "Claude binary spawn".
+- `docs-web/.../contributing/cli-internals.md` — `setup`/`chat` in the git-check bypass list.
+- `docs-web/.../reference/security.md` — "`rith setup` never writes to `<cwd>/.env`".
+
+This overlaps DX items #9/#10: **either build `rith doctor`/`rith setup` (closes the DX
+gap AND the drift) or trim the command docs.** Decide before doing either.
+
+### Root `CLAUDE.md` staleness (Pi-only)
+
+Lines ~228 (`bun run cli skill install`) and ~231–232 ("Verify your Rith Engine setup
+(Claude binary…)", `bun run cli doctor`) reference commands that don't exist and a
+"Claude binary" Pi-only no longer uses.
+
+### Vestigial Claude env allow-list (cleanup candidate)
+
+`packages/paths/src/strip-cwd-env.ts` exempts `CLAUDE_CODE_OAUTH_TOKEN`,
+`CLAUDE_CODE_USE_BEDROCK`, `CLAUDE_CODE_USE_VERTEX` from the nested-session env scrub.
+Holdover from the Claude Agent SDK era — Pi auth reads `~/.pi/agent/auth.json` +
+`ANTHROPIC_API_KEY`/`OPENAI_API_KEY`/`GEMINI_API_KEY` (`provider.ts:119-122`), not
+`CLAUDE_CODE_*`. Only a user bash node shelling out to `claude`/Bedrock/Vertex would
+consume them. Safe to keep; candidate to remove in the Pi-only cleanup.
+
+### UNVERIFIED — Pi env-var table may overclaim
+
+`getting-started/ai-assistants.md` lists API-key env mappings for `groq`, `mistral`,
+`cerebras`, `xai`, `openrouter`, `huggingface`. The explore reported `PI_PROVIDER_ENV_VARS`
+(`provider.ts:119-122`) maps only `anthropic`/`openai`/`google`. **Verify the full map
+before trusting the extra rows** — if Rith doesn't wire them, they mislead.
+
+### Possibly-stale troubleshooting refs (not found in product code)
+
+`reference/troubleshooting.md` still mentions `RITH_CLAUDE_FIRST_EVENT_TIMEOUT_MS` and
+`rith serve`; neither was located in the codebase. Confirm and remove if dead.
 
 ## Pre-existing issues (NOT introduced here — confirmed red on clean `043f823`)
 
