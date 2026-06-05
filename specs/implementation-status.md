@@ -221,9 +221,11 @@ provider). **23 files**, +279/−1414; `astro build` clean (63 pages), Prettier 
     then API-key env vars), `checkGhAuth`, `checkDatabase`, `checkWorkspaceWritable`,
     `checkBundledDefaults`, `checkTelemetry`; **drop** `checkClaudeBinary`, `checkSlack`,
     `checkTelegram`. Wire into `cli.ts` (add to `noGitCommands` + `case 'doctor': return
-await doctorCommand()`). Small, contained — **do this first.** Needs rith equivalents
-    of `@rith/paths` (`BUNDLED_IS_BINARY`, `getRithHome`, `getTelemetryStatus`) and
-    `@rith/git` `execFileAsync` (all present — the fork is a `@archon`→`@rith` rename).
+await doctorCommand()`). Small, contained — **do this first.** Deps: `@rith/paths`
+    `BUNDLED_IS_BINARY`/`getRithHome` and `@rith/git` `execFileAsync` exist (fork rename),
+    but `getTelemetryStatus`/`resetTelemetryId` do **NOT** — rith telemetry exposes only
+    `isTelemetryDisabled`/`getOrCreateTelemetryId`. Add a small `getTelemetryStatus` shim to
+    `@rith/paths/telemetry` as part of this port (or drop `checkTelemetry` to stay minimal).
   - **#10 `rith setup` — port a heavily trimmed Pi-only subset** of
     `Archon/packages/cli/src/commands/setup.ts` (~2248 lines; multi-provider +
     Slack/Telegram/GitHub-bot). Reuse the Pi pieces — `collectPiConfig` / `checkPiModule` /
@@ -240,7 +242,14 @@ Slack/Telegram/GitHub-bot platforms that the fork dropped. The CLI commands the 
 reference but `cli.ts` no longer dispatches — `doctor`, `setup`, `chat`, `serve`, `skill`,
 `auth`, `continue` — all exist upstream under `Archon/packages/cli/src/commands/`. Archon
 already supports Pi (`checkPi`, `PI_BACKENDS`, `PI_API_KEY_VARS`), so its Pi paths transfer
-directly. Strategy: port (Pi-trimmed) the commands we want back; trim the docs for the rest.
+directly.
+
+**Decision (2026-06-05):** port ONLY `doctor` (#9) and `setup` (#10), Pi-trimmed. **Skip**
+`chat` (needs the dropped orchestrator `handleMessage`), `serve` (dropped `web`/`server`),
+`auth github` (multi-user GitHub App; rith is solo `GITHUB_TOKEN`), and `skill install`
+(Claude Code-app glue — installs into `.claude/skills/`; no Pi use case in a Pi-only
+engine). For the skipped four, **delete their docs** rather than port (see CLI-command
+drift below).
 
 ### From `architectural-review.md`
 
@@ -270,9 +279,11 @@ but they should be addressed.
 - `docs-web/.../contributing/cli-internals.md` — `setup`/`chat` in the git-check bypass list.
 - `docs-web/.../reference/security.md` — "`rith setup` never writes to `<cwd>/.env`".
 
-This overlaps DX items #9/#10: these are real **upstream Archon** commands the fork dropped
-but left documented. **Either port `rith doctor`/`rith setup` back (Pi-trimmed — see §7 DX
-and the Archon port reference above) or trim the command docs.** Decide before doing either.
+These are real **upstream Archon** commands the fork dropped but left documented.
+**Decided (2026-06-05):** port `doctor`/`setup` (#9/#10); for `chat`/`serve`/`auth`/`skill`
+**delete the doc references** (no port). Building `doctor`/`setup` replaces their doc
+sections; the `chat`/`serve`/`auth`/`skill` references in `reference/cli.md` (+
+`cli-internals.md`, `security.md`) should be removed.
 
 ### Root `CLAUDE.md` staleness (Pi-only)
 
