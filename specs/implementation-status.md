@@ -215,12 +215,32 @@ provider). **23 files**, +279/−1414; `astro build` clean (63 pages), Prettier 
 - **§7 Priority 3 DX (not started):**
   - **#8** Wire `applyEnvOverrides()` (currently a no-op in `config-loader.ts`) to support
     a `RITH_MODEL` env override of `pi.model`.
-  - **#9 `rith doctor` — the command does NOT exist yet** (`cli.ts` has no `doctor` case;
-    the docs describe one). Build it: validate config → parse model ref → check Pi
-    catalog/credentials (`~/.pi/agent/auth.json`).
-  - **#10 `rith setup` — the command does NOT exist yet** (same situation). Build it:
-    detect `~/.pi/agent/auth.json` and guide the user.
+  - **#9 `rith doctor` — port from upstream Archon** (dropped in the fork; docs still
+    describe it). Reference: `Archon/packages/cli/src/commands/doctor.ts`. Pi-only port:
+    keep `checkPi` (un-gated — Pi is the sole provider; probe `~/.pi/agent/auth.json`,
+    then API-key env vars), `checkGhAuth`, `checkDatabase`, `checkWorkspaceWritable`,
+    `checkBundledDefaults`, `checkTelemetry`; **drop** `checkClaudeBinary`, `checkSlack`,
+    `checkTelegram`. Wire into `cli.ts` (add to `noGitCommands` + `case 'doctor': return
+await doctorCommand()`). Small, contained — **do this first.** Needs rith equivalents
+    of `@rith/paths` (`BUNDLED_IS_BINARY`, `getRithHome`, `getTelemetryStatus`) and
+    `@rith/git` `execFileAsync` (all present — the fork is a `@archon`→`@rith` rename).
+  - **#10 `rith setup` — port a heavily trimmed Pi-only subset** of
+    `Archon/packages/cli/src/commands/setup.ts` (~2248 lines; multi-provider +
+    Slack/Telegram/GitHub-bot). Reuse the Pi pieces — `collectPiConfig` / `checkPiModule` /
+    `writeHomePiModelConfig` / `PI_BACKENDS` / `PI_DEFAULT_MODELS`; drop claude/codex and
+    the bot platforms. Larger — separate follow-up after #9.
   - Building #9/#10 also clears the CLI-command drift below.
+
+### Upstream port reference — Archon
+
+This repo is a **Pi-only, CLI-only fork of Archon** (`@archon/*` → `@rith/*` rename).
+Local checkout (if present): `/Users/ciocanu/personal/code/Archon`. Archon retains
+multi-provider (claude/codex/pi), the `web`/`server`/`adapters` packages, and
+Slack/Telegram/GitHub-bot platforms that the fork dropped. The CLI commands the rith docs
+reference but `cli.ts` no longer dispatches — `doctor`, `setup`, `chat`, `serve`, `skill`,
+`auth`, `continue` — all exist upstream under `Archon/packages/cli/src/commands/`. Archon
+already supports Pi (`checkPi`, `PI_BACKENDS`, `PI_API_KEY_VARS`), so its Pi paths transfer
+directly. Strategy: port (Pi-trimmed) the commands we want back; trim the docs for the rest.
 
 ### From `architectural-review.md`
 
@@ -250,8 +270,9 @@ but they should be addressed.
 - `docs-web/.../contributing/cli-internals.md` — `setup`/`chat` in the git-check bypass list.
 - `docs-web/.../reference/security.md` — "`rith setup` never writes to `<cwd>/.env`".
 
-This overlaps DX items #9/#10: **either build `rith doctor`/`rith setup` (closes the DX
-gap AND the drift) or trim the command docs.** Decide before doing either.
+This overlaps DX items #9/#10: these are real **upstream Archon** commands the fork dropped
+but left documented. **Either port `rith doctor`/`rith setup` back (Pi-trimmed — see §7 DX
+and the Archon port reference above) or trim the command docs.** Decide before doing either.
 
 ### Root `CLAUDE.md` staleness (Pi-only)
 
@@ -268,12 +289,16 @@ Holdover from the Claude Agent SDK era — Pi auth reads `~/.pi/agent/auth.json`
 `CLAUDE_CODE_*`. Only a user bash node shelling out to `claude`/Bedrock/Vertex would
 consume them. Safe to keep; candidate to remove in the Pi-only cleanup.
 
-### UNVERIFIED — Pi env-var table may overclaim
+### Pi env-var table — clarified via Archon (was "may overclaim")
 
 `getting-started/ai-assistants.md` lists API-key env mappings for `groq`, `mistral`,
-`cerebras`, `xai`, `openrouter`, `huggingface`. The explore reported `PI_PROVIDER_ENV_VARS`
-(`provider.ts:119-122`) maps only `anthropic`/`openai`/`google`. **Verify the full map
-before trusting the extra rows** — if Rith doesn't wire them, they mislead.
+`cerebras`, `xai`, `openrouter`, `huggingface`. These are **not arbitrary** — they mirror
+Archon's `PI_API_KEY_VARS` (`doctor.ts`) / `PI_BACKENDS` (`setup.ts`): backends Pi
+auth/setup recognizes. Caveat: that's the _auth-detection_ list, distinct from the
+_request-time_ `PI_PROVIDER_ENV_VARS` mapping the explore found in rith
+(`provider.ts:119-122` → anthropic/openai/google only). **Still verify rith's runtime
+`PI_PROVIDER_ENV_VARS`** — the table is defensible as "recognized backends," but confirm
+which keys rith actually injects per request.
 
 ### Possibly-stale troubleshooting refs (not found in product code)
 
