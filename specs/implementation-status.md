@@ -372,3 +372,52 @@ Leave unless explicitly scoped in; they block a fully-green `bun run validate`:
 - Targeted tests: `cd packages/providers && bun run test`;
   `cd packages/core && bun test src/config/`;
   `cd packages/workflows && bun test src/executor.test.ts src/dag-executor.test.ts`.
+
+## Session update — Track A + Track B complete (`bun run validate` fully green)
+
+User selected "A then B". Both done; `bun run validate` now passes end-to-end
+(`check:bundled`, `check:bundled-skill`, `type-check` ×7 packages, `lint --max-warnings 0`,
+`format:check`, full test suite — 0 failures).
+
+### Track A — doc purge + small cleanups (done)
+
+- **`PI_PROVIDER_ENV_VARS` verified accurate** — `packages/providers/src/pi/provider.ts:119-129`
+  maps all 9 providers (anthropic, openai, google, groq, mistral, cerebras, xai, openrouter,
+  huggingface). The earlier "anthropic/openai/google only" worry (above) was **stale**;
+  `getting-started/ai-assistants.md` already matches — no edit needed.
+- **Web-UI / `serve` doc purge** — fork has no server/daemon/Docker/web-UI/port-binding.
+  `git rm` of `deployment/{docker,cloud,e2e-testing}.md`; rewrote `deployment/{index,local}.md`
+  to CLI-only; stripped server/port/health/REST prose from `reference/{rith-directories,
+configuration,database,troubleshooting}.md`, `getting-started/configuration.md`,
+  `guides/approval-nodes.md`, `contributing/dx-quirks.md`, `deployment/windows.md`. Removed
+  dead `getWebDistDir` from `packages/paths/src/rith-paths.ts` (+ index re-export; no callers).
+  Astro build green: 60 pages (was 63), no broken links.
+- **`CLAUDE_CODE_*` allow-list kept** — the 3 auth vars are load-bearing for user bash nodes
+  shelling out to `claude`; only the stale "Agent SDK era" comment was updated.
+- Open finding (not fixed): `reference/database.md` references a non-existent `migrations/`
+  dir; the Postgres adapter does not auto-create schema (only SQLite's `initSchema()` does).
+  Separate bootstrap gap, left as a noted follow-up.
+
+### Track B — pre-existing red tests fixed (done)
+
+All four pre-existing failures resolved; product code untouched (tests reconciled to current
+behavior, no weakening):
+
+- **`cli.ts` `workflowType` narrowing** — resolved a genuine tsc/eslint disagreement by adding
+  a typed local after the guard: `const validatedWorkflowType: 'issue' | 'pr' | 'task' |
+undefined = workflowType;`. Both tsc and eslint pass.
+- **`workflow.test.ts`** — 36 failures from `...Once` mock-queue corruption (`beforeEach`
+  cleared only `mockLogger`; `core.generateAndSetTitle` was deleted so its `.mockClear()`
+  threw, leaking queued mocks). Drained queues via `mockReset()`; retargeted assertions to
+  real behavior (`executeWorkflow` args, `sendSpy` metadata, `conversation_id` threading).
+  99 pass, deterministic.
+- **`isolation.test.ts`** — 8 failures asserting the removed `removeEnvironment` API from
+  `@rith/core/services/cleanup-service`. `isolationCompleteCommand` now does inline safety
+  checks (uncommitted / running-workflow / open-PR / unmerged / unpushed) collecting
+  `blockers[]`, then `getIsolationProvider().destroy(working_path)` + `isolationDb.updateStatus(
+id, 'destroyed')`. Hoisted controllable `mockDestroy`/`mockUpdateStatus`; retargeted the
+  5 still-valid cases to the `destroy`+`updateStatus` flow, and the 3 whose old
+  `skippedReason`/`partial`/`warning-surfacing` semantics no longer exist to distinct
+  currently-uncovered behaviors (lookup-throws → `DB lookup error`; running-workflow-check
+  throws → warn + non-fatal complete; uncommitted-check throws → blocker). 18/18 pass.
+- **Prettier drift** — `bun run format` (10 files, none overlapping product edits).

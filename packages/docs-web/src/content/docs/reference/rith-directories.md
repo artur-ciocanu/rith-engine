@@ -31,7 +31,6 @@ Rith Engine provides a unified directory and configuration system with:
 │           ├── source/       # Clone or symlink -> local path
 │           └── worktrees/    # Git worktrees for this project
 ├── worktrees/                # Legacy global worktrees (for repos not in workspaces/)
-├── web-dist/<version>/       # Cached web UI dist (rith serve, binary only)
 ├── update-check.json         # Update check cache (binary builds only, 24h TTL)
 └── config.yaml               # Global user configuration
 ```
@@ -91,10 +90,6 @@ getRithWorktreesPath(): string
 // Get global config path
 getRithConfigPath(): string
 // Returns: ${RITH_HOME}/config.yaml
-
-// Get cached web UI distribution directory for a given version
-getWebDistDir(version: string): string
-// Returns: ${RITH_HOME}/web-dist/${version}
 
 // Get command folder search paths (priority order)
 getCommandFolderSearchPaths(configuredFolder?: string): string[]

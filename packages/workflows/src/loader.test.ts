@@ -1534,7 +1534,6 @@ nodes:
       const node = wf.nodes[0];
       expect(isBashNode(node)).toBe(true);
     });
-
   });
 
   describe('DAG output ref validation', () => {
@@ -2371,7 +2370,6 @@ nodes:
       expect(result.errors.length).toBeGreaterThan(0);
       expect(result.errors[0].error).toContain('mutually exclusive');
     });
-
   });
 
   describe('discoverWorkflows with null cwd (no project context)', () => {

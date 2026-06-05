@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 
-import type { MessageChunk } from '../types'
+import type { MessageChunk } from '../types';
 
 import { createRithUIBridge, createRithUIContext } from './ui-context-stub';
 

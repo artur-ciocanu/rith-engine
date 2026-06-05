@@ -1,6 +1,6 @@
 ---
 title: Troubleshooting
-description: Common issues and solutions when running Rith Engine locally or in Docker.
+description: Common issues and solutions when running Rith Engine locally.
 category: reference
 audience: [user, operator]
 status: current
@@ -10,48 +10,7 @@ sidebar:
 
 Common issues and their solutions when running Rith Engine.
 
-## Bot Not Responding
-
-**Check if the application is running:**
-
-If running locally:
-```bash
-# Check the server process
-curl http://localhost:3090/health
-# Expected: {"status":"ok"}
-```
-
-If running via Docker:
-```bash
-docker compose ps
-# Should show 'app' with state 'Up'
-```
-
-**Check application logs:**
-
-Local:
-```bash
-# Check application logs (run with --verbose for debug-level output)
-```
-
-Docker:
-```bash
-docker compose logs -f app
-```
-
-**Test with health check:**
-```bash
-curl http://localhost:3090/health
-# Expected: {"status":"ok"}
-```
-
 ## Database Connection Errors
-
-**Check database health:**
-```bash
-curl http://localhost:3090/health/db
-# Expected: {"status":"ok","database":"connected"}
-```
 
 **For SQLite (default):**
 
@@ -91,127 +50,11 @@ curl -H "Authorization: token $GH_TOKEN" https://api.github.com/user
 
 **Check workspace permissions:**
 
-The workspace directory is `~/.rith/workspaces/` by default (or `/.rith/workspaces/` in Docker). Make sure it exists and is writable.
+The workspace directory is `~/.rith/workspaces/` by default. Make sure it exists and is writable.
 
 **Try manual clone:**
 ```bash
 git clone https://github.com/user/repo ~/.rith/workspaces/test-repo
-```
-
-## GitHub Webhook Not Triggering
-
-**Verify webhook delivery:**
-1. Go to your webhook settings in GitHub
-2. Click on the webhook
-3. Check "Recent Deliveries" tab
-4. Look for successful deliveries (green checkmark)
-
-**Check webhook secret:**
-```bash
-cat .env | grep WEBHOOK_SECRET
-# Must match exactly what you entered in GitHub
-```
-
-**Verify ngrok is running (local dev):**
-```bash
-# Check ngrok status
-curl http://localhost:4040/api/tunnels
-# Or visit http://localhost:4040 in browser
-```
-
-**Check application logs for webhook processing:**
-
-Local:
-```bash
-# Look for GitHub-related log lines in server output
-```
-
-Docker:
-```bash
-docker compose logs -f app | grep GitHub
-```
-
-## E2E Testing / agent-browser
-
-**`agent-browser: command not found`:**
-
-`agent-browser` is an optional external dependency -- see the [E2E Testing Guide](/deployment/e2e-testing/) for installation.
-
-```bash
-npm install -g agent-browser
-agent-browser install
-```
-
-**agent-browser daemon fails to start (Windows):**
-
-agent-browser has a [known Windows bug](https://github.com/vercel-labs/agent-browser/issues/56). Use WSL as a workaround -- see [E2E Testing on WSL](/deployment/e2e-testing-wsl/).
-
-**agent-browser daemon fails to start (macOS/Linux):**
-
-Kill stale daemons and retry:
-```bash
-pkill -f daemon.js
-agent-browser open http://localhost:3090
-```
-
-## Docker
-
-These issues are specific to running Rith Engine inside Docker containers.
-
-### Container Won't Start
-
-**Check logs for specific errors:**
-```bash
-docker compose logs app
-```
-
-**Verify environment variables:**
-```bash
-# Check if .env is properly formatted
-docker compose config
-```
-
-**Rebuild without cache:**
-```bash
-docker compose build --no-cache
-docker compose up -d
-```
-
-If using the `with-db` profile, add `--profile with-db` to the above commands.
-
-### Docker Database Issues
-
-**For local PostgreSQL (`with-db` profile):**
-```bash
-# Check if postgres container is running
-docker compose --profile with-db ps postgres
-
-# Check postgres logs
-docker compose logs -f postgres
-
-# Test direct connection
-docker compose exec postgres psql -U postgres -c "SELECT 1"
-```
-
-**Verify tables exist (Docker PostgreSQL):**
-```bash
-docker compose exec postgres psql -U postgres -d remote_coding_agent -c "\dt"
-
-# Should show: remote_agent_codebases, remote_agent_conversations, remote_agent_sessions,
-# remote_agent_isolation_environments, remote_agent_workflow_runs, remote_agent_workflow_events,
-# remote_agent_messages
-```
-
-### Docker Clone Issues
-
-**Check workspace permissions inside the container:**
-```bash
-docker compose exec app ls -la /.rith/workspaces
-```
-
-**Try manual clone inside the container:**
-```bash
-docker compose exec app git clone https://github.com/user/repo /.rith/workspaces/test-repo
 ```
 
 ## Pi Provider Errors

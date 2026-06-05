@@ -43,14 +43,6 @@ Bun's `mock.module()` is process-global and irreversible — `mock.restore()` do
 - Never `mock.module()` a module path that another test file also `mock.module()`s with a different implementation
 - When adding a new test file with `mock.module()`, ensure its package.json test script runs it in a separate `bun test` invocation from any conflicting files
 
-## Worktree Port Allocation
-
-Worktrees auto-allocate ports (3190–4089 range, hash-based on path). Same worktree always gets same port.
-
-- Default port: 3090
-- Override: `PORT=4000 rith serve`
-- Same worktree always gets same port (deterministic)
-
 ## `bun run test` vs `bun test`
 
 **NEVER run `bun test` from the repo root** — it discovers all test files across all packages and runs them in one process, causing ~135 mock pollution failures.

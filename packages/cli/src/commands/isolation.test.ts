@@ -19,6 +19,8 @@ mock.module('@rith/paths', () => ({
 }));
 
 const mockFindActiveByBranchName = mock(() => Promise.resolve(null));
+const mockUpdateStatus = mock(() => Promise.resolve());
+const mockDestroy = mock(() => Promise.resolve({ warnings: [] }));
 
 mock.module('@rith/core/db/isolation-environments', () => ({
   findActiveByBranchName: mockFindActiveByBranchName,
@@ -27,7 +29,7 @@ mock.module('@rith/core/db/isolation-environments', () => ({
   listByCodebaseWithAge: mock(() => Promise.resolve([])),
   findStaleEnvironments: mock(() => Promise.resolve([])),
   create: mock(() => Promise.resolve({ id: 'iso-123' })),
-  updateStatus: mock(() => Promise.resolve()),
+  updateStatus: mockUpdateStatus,
 }));
 
 const mockGetActiveWorkflowRunByPath = mock(() => Promise.resolve(null));
@@ -87,7 +89,7 @@ mock.module('@rith/git', () => ({
 
 mock.module('@rith/isolation', () => ({
   getIsolationProvider: mock(() => ({
-    destroy: mock(() => Promise.resolve({ warnings: [] })),
+    destroy: mockDestroy,
   })),
 }));
 
@@ -116,7 +118,10 @@ describe('isolationCompleteCommand', () => {
     consoleErrorSpy = spyOn(console, 'error').mockImplementation(() => {});
     consoleWarnSpy = spyOn(console, 'warn').mockImplementation(() => {});
     mockFindActiveByBranchName.mockReset();
-    mockRemoveEnvironment.mockReset();
+    mockUpdateStatus.mockReset();
+    mockUpdateStatus.mockResolvedValue(undefined);
+    mockDestroy.mockReset();
+    mockDestroy.mockResolvedValue({ warnings: [] });
     mockHasUncommittedChanges.mockReset();
     mockHasUncommittedChanges.mockResolvedValue(false);
     mockGetActiveWorkflowRunByPath.mockReset();
@@ -138,18 +143,11 @@ describe('isolationCompleteCommand', () => {
 
   it('completes a branch when env is found and all checks pass', async () => {
     mockFindActiveByBranchName.mockResolvedValueOnce(mockEnv);
-    mockRemoveEnvironment.mockResolvedValueOnce({
-      worktreeRemoved: true,
-      branchDeleted: true,
-      warnings: [],
-    });
 
     await isolationCompleteCommand(['feature-branch'], { force: false, deleteRemote: true });
 
-    expect(mockRemoveEnvironment).toHaveBeenCalledWith('env-123', {
-      force: false,
-      deleteRemoteBranch: true,
-    });
+    expect(mockDestroy).toHaveBeenCalledWith('/test/worktree');
+    expect(mockUpdateStatus).toHaveBeenCalledWith('env-123', 'destroyed');
     expect(consoleLogSpy).toHaveBeenCalledWith('  Completed: feature-branch');
     expect(consoleLogSpy).toHaveBeenCalledWith('\nComplete: 1 completed, 0 failed, 0 not found');
   });
@@ -315,11 +313,6 @@ describe('isolationCompleteCommand', () => {
 
   it('skips PR check with warning when gh CLI is not available', async () => {
     mockFindActiveByBranchName.mockResolvedValueOnce(mockEnv);
-    mockRemoveEnvironment.mockResolvedValueOnce({
-      worktreeRemoved: true,
-      branchDeleted: true,
-      warnings: [],
-    });
     mockExecFileAsync.mockImplementation((cmd: string) => {
       if (cmd === 'gh') {
         const err = Object.assign(new Error('spawn gh ENOENT'), { code: 'ENOENT' });
@@ -333,8 +326,8 @@ describe('isolationCompleteCommand', () => {
     expect(consoleWarnSpy).toHaveBeenCalledWith(
       '  Warning: gh CLI not available — skipping open PR check'
     );
-    // Should still complete since gh check is non-fatal
-    expect(mockRemoveEnvironment).toHaveBeenCalled();
+    // gh failure is non-fatal, so the branch still completes
+    expect(mockDestroy).toHaveBeenCalledWith('/test/worktree');
     expect(consoleLogSpy).toHaveBeenCalledWith('  Completed: feature-branch');
   });
 
@@ -345,11 +338,6 @@ describe('isolationCompleteCommand', () => {
       id: 'run-abc',
       workflow_name: 'implement',
     });
-    mockRemoveEnvironment.mockResolvedValueOnce({
-      worktreeRemoved: true,
-      branchDeleted: true,
-      warnings: [],
-    });
 
     await isolationCompleteCommand(['dirty-branch'], { force: true, deleteRemote: true });
 
@@ -357,16 +345,14 @@ describe('isolationCompleteCommand', () => {
     expect(mockHasUncommittedChanges).not.toHaveBeenCalled();
     expect(mockGetActiveWorkflowRunByPath).not.toHaveBeenCalled();
     expect(mockExecFileAsync).not.toHaveBeenCalled();
-    expect(mockRemoveEnvironment).toHaveBeenCalledWith('env-123', {
-      force: true,
-      deleteRemoteBranch: true,
-    });
+    expect(mockDestroy).toHaveBeenCalledWith('/test/worktree');
+    expect(mockUpdateStatus).toHaveBeenCalledWith('env-123', 'destroyed');
     expect(consoleLogSpy).toHaveBeenCalledWith('  Completed: dirty-branch');
   });
 
-  it('counts failed when removeEnvironment throws', async () => {
+  it('counts failed when worktree removal throws', async () => {
     mockFindActiveByBranchName.mockResolvedValueOnce(mockEnv);
-    mockRemoveEnvironment.mockRejectedValueOnce(new Error('git error: cannot remove worktree'));
+    mockDestroy.mockRejectedValueOnce(new Error('git error: cannot remove worktree'));
 
     await isolationCompleteCommand(['bad-branch'], { force: false, deleteRemote: true });
 
@@ -381,8 +367,8 @@ describe('isolationCompleteCommand', () => {
       .mockResolvedValueOnce(mockEnv) // found: branch-1
       .mockResolvedValueOnce(null) // not found: branch-2
       .mockResolvedValueOnce(mockEnv); // found: branch-3 (will fail)
-    mockRemoveEnvironment
-      .mockResolvedValueOnce({ worktreeRemoved: true, branchDeleted: true, warnings: [] }) // branch-1 succeeds
+    mockDestroy
+      .mockResolvedValueOnce({ warnings: [] }) // branch-1 succeeds
       .mockRejectedValueOnce(new Error('some error')); // branch-3 fails
 
     await isolationCompleteCommand(['branch-1', 'branch-2', 'branch-3'], {
@@ -392,58 +378,47 @@ describe('isolationCompleteCommand', () => {
 
     expect(consoleLogSpy).toHaveBeenCalledWith('\nComplete: 1 completed, 1 failed, 1 not found');
   });
-  it('counts as failed when removeEnvironment returns skippedReason (ghost worktree)', async () => {
-    mockFindActiveByBranchName.mockResolvedValueOnce(mockEnv);
-    mockRemoveEnvironment.mockResolvedValueOnce({
-      worktreeRemoved: false,
-      branchDeleted: false,
-      skippedReason: 'has uncommitted changes',
-      warnings: [],
-    });
 
-    await isolationCompleteCommand(['ghost-branch'], { force: true, deleteRemote: true });
+  it('counts failed when the environment lookup throws', async () => {
+    mockFindActiveByBranchName.mockRejectedValueOnce(new Error('connection lost'));
+
+    await isolationCompleteCommand(['lookup-fail-branch'], { force: false, deleteRemote: true });
 
     expect(consoleErrorSpy).toHaveBeenCalledWith(
-      '  Blocked: ghost-branch — has uncommitted changes'
+      '  Failed: lookup-fail-branch — DB lookup error: connection lost'
     );
-    expect(consoleErrorSpy).toHaveBeenCalledWith('    Use --force to override.');
+    expect(mockDestroy).not.toHaveBeenCalled();
     expect(consoleLogSpy).toHaveBeenCalledWith('\nComplete: 0 completed, 1 failed, 0 not found');
   });
 
-  it('counts as failed when removeEnvironment returns partial (worktree not removed, branch deleted)', async () => {
+  it('warns and still completes when the running-workflow check throws', async () => {
     mockFindActiveByBranchName.mockResolvedValueOnce(mockEnv);
-    mockRemoveEnvironment.mockResolvedValueOnce({
-      worktreeRemoved: false,
-      branchDeleted: true,
-      warnings: ['Some warning'],
-      skippedReason: undefined,
-    });
+    mockGetActiveWorkflowRunByPath.mockRejectedValueOnce(new Error('workflow db unavailable'));
 
-    await isolationCompleteCommand(['partial-branch'], { force: true, deleteRemote: true });
+    await isolationCompleteCommand(['feature-branch'], { force: false, deleteRemote: true });
 
-    expect(consoleErrorSpy).toHaveBeenCalledWith(
-      '  Partial: partial-branch — worktree was not removed from disk (branch deleted, DB updated)'
-    );
-    expect(consoleErrorSpy).toHaveBeenCalledWith('    ⚠ Some warning');
-    expect(consoleLogSpy).toHaveBeenCalledWith('\nComplete: 0 completed, 1 failed, 0 not found');
-  });
-
-  it('surfaces warnings from removeEnvironment result', async () => {
-    mockFindActiveByBranchName.mockResolvedValueOnce(mockEnv);
-    mockRemoveEnvironment.mockResolvedValueOnce({
-      worktreeRemoved: true,
-      branchDeleted: false,
-      warnings: ["Cannot delete branch 'feature-branch': checked out elsewhere"],
-    });
-
-    await isolationCompleteCommand(['feature-branch'], { force: true, deleteRemote: true });
-
+    // The workflow check failure is non-fatal: warn, then continue with removal.
     expect(consoleWarnSpy).toHaveBeenCalledWith(
-      "  Warning: Cannot delete branch 'feature-branch': checked out elsewhere"
+      '  Warning: could not check for running workflows — skipping workflow check'
     );
-    // Should still count as completed since worktree was removed
+    expect(mockDestroy).toHaveBeenCalledWith('/test/worktree');
     expect(consoleLogSpy).toHaveBeenCalledWith('  Completed: feature-branch');
     expect(consoleLogSpy).toHaveBeenCalledWith('\nComplete: 1 completed, 0 failed, 0 not found');
+  });
+
+  it('blocks when the uncommitted-changes check itself fails', async () => {
+    mockFindActiveByBranchName.mockResolvedValueOnce(mockEnv);
+    mockHasUncommittedChanges.mockRejectedValueOnce(new Error('worktree path missing'));
+
+    await isolationCompleteCommand(['feature-branch'], { force: false, deleteRemote: true });
+
+    expect(consoleErrorSpy).toHaveBeenCalledWith('  Blocked: feature-branch');
+    expect(consoleErrorSpy).toHaveBeenCalledWith(
+      '    ✗ could not verify uncommitted changes (worktree path may be missing)'
+    );
+    expect(consoleErrorSpy).toHaveBeenCalledWith('  Use --force to override.');
+    expect(mockDestroy).not.toHaveBeenCalled();
+    expect(consoleLogSpy).toHaveBeenCalledWith('\nComplete: 0 completed, 1 failed, 0 not found');
   });
 });
 

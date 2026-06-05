@@ -9,241 +9,60 @@ sidebar:
   order: 1
 ---
 
-This guide covers how to run the Rith Engine server locally, with Docker, and in production. For VPS deployment with automatic HTTPS, see the [Cloud Deployment Guide](/deployment/cloud/).
-
-**Quick links:** [Local Development](#local-development) | [Docker with Remote DB](#docker-with-remote-postgresql) | [Docker with Local PostgreSQL](#docker-with-local-postgresql) | [Production](#production-deployment)
-
----
+This guide covers running Rith Engine on your own machine. Rith is a CLI — there is no server to start, no port to bind, and no web UI. You install the `rith` binary (or run from source) and invoke `rith workflow run`.
 
 ## Local Development
 
-Local development with SQLite is the recommended default. No database setup is needed.
+SQLite is the default store, so no database setup is needed.
 
 ### Prerequisites
 
-- [Bun](https://bun.sh) 1.0+
-- Pi Coding Agent installed and configured (Rith Engine's LLM executor)
+- [Bun](https://bun.sh) 1.0+ (only needed to run from source)
+- Pi Coding Agent authenticated (Rith Engine's LLM executor) — see [AI Assistants](/getting-started/ai-assistants/)
 - A GitHub token for repository cloning (`GH_TOKEN` / `GITHUB_TOKEN`)
 
-
-### Setup
+### From source
 
 ```bash
 # 1. Clone and install
 git clone https://github.com/artur-ciocanu/rith-engine
-cd Rith Engine
+cd rith-engine
 bun install
 
 # 2. Configure environment
 cp .env.example .env
-nano .env  # Add your Pi Coding Agent tokens
+nano .env  # Add your Pi credentials / API keys and GitHub token
 
 # 3. Run a workflow
 rith workflow run rith-assist "Hello world"
 ```
 
+### From a binary install
 
-### Optional: Use PostgreSQL Instead of SQLite
-
-If you prefer PostgreSQL for local development:
-
-```bash
-docker compose --profile with-db up -d postgres
-# Set DATABASE_URL=postgresql://postgres:postgres@localhost:5432/remote_coding_agent in .env
-```
-
-> **Note:** The database schema is created automatically on first container startup via the mounted migration file. No manual `psql` step is needed for fresh installs.
-
-### Production (Binary Install)
-
-For binary installs, use `rith serve` to optionally start the web UI:
+Install the binary, then run workflows directly — no clone required:
 
 ```bash
-rith serve
+curl -fsSL https://raw.githubusercontent.com/artur-ciocanu/rith-engine/main/scripts/install.sh | bash
+rith workflow run rith-assist "Hello world"
 ```
 
-### Verify It Works
+Run `rith doctor` to verify your environment (Pi auth, GitHub auth, database, workspace).
+
+## Using PostgreSQL Instead of SQLite
+
+SQLite is fine for single-user CLI use. To use PostgreSQL instead, point `DATABASE_URL` at any Postgres instance in your `.env`:
 
 ```bash
-curl http://localhost:3090/health
-# Expected: {"status":"ok"}
+DATABASE_URL=postgresql://user:password@host:5432/rith
 ```
 
----
-
-## Docker with Remote PostgreSQL
-
-Use this option when your database is hosted externally (Supabase, Neon, AWS RDS, etc.). This starts only the app container.
-
-### Prerequisites
-
-- Docker & Docker Compose
-- A remote PostgreSQL database with `DATABASE_URL` set in `.env`
-- AI assistant tokens configured in `.env`
-
-### Setup
-
-The app container runs without any profile when using an external database. There is no `external-db` profile — the base `app` service always starts.
-
-```bash
-# 1. Get the deployment files
-mkdir rith && cd rith
-curl -fsSL https://raw.githubusercontent.com/artur-ciocanu/rith-engine/main/deploy/docker-compose.yml -o docker-compose.yml
-curl -fsSL https://raw.githubusercontent.com/artur-ciocanu/rith-engine/main/deploy/.env.example -o .env
-
-# 2. Configure (edit .env with your tokens and DATABASE_URL)
-nano .env
-
-# 3. Start app container (no profile needed for external DB)
-docker compose up -d
-
-# 4. View logs
-docker compose logs -f app
-
-# 5. Verify
-curl http://localhost:3000/api/health
-```
-
-:::note
-Docker defaults to port **3000** (set via `PORT` in `.env`). Local development defaults to port **3090**. The health endpoint in Docker is `/api/health`, while in local dev mode `/health` also works.
-:::
-
-### Database Migration (First Time)
-
-For fresh installations, run the combined migration:
-
-```bash
-psql $DATABASE_URL < migrations/000_combined.sql
-```
-
-### Stop
-
-```bash
-docker compose down
-```
-
----
-
-## Docker with Local PostgreSQL
-
-Use this option to run both the app and PostgreSQL in Docker containers. The database schema is created automatically on first startup.
-
-### Setup
-
-```bash
-# 1. Configure .env
-# Set: DATABASE_URL=postgresql://postgres:postgres@postgres:5432/remote_coding_agent
-
-# 2. Start both containers
-docker compose --profile with-db up -d --build
-
-# 3. Wait for startup (watch logs)
-docker compose logs -f app
-
-# 4. Verify
-curl http://localhost:3000/api/health
-```
-
-> **Note:** Database tables are created automatically via the init script on first startup. No manual migration step is needed.
-
-### Updating an Existing Installation
-
-When new migrations are added, apply them manually:
-
-```bash
-# Connect to the running postgres container
-docker compose exec postgres psql -U postgres -d remote_coding_agent
-
-# For a fresh install, run the combined migration (idempotent, creates all 7 tables):
-\i /migrations/000_combined.sql
-
-# Or apply individual migrations you haven't applied yet.
-# Check the migrations/ directory for the full list (currently 001 through 019).
-\q
-```
-
-### Stop
-
-```bash
-docker compose --profile with-db down
-```
-
----
-
-## Production Deployment
-
-For deploying to a VPS (DigitalOcean, Linode, AWS EC2, etc.) with automatic HTTPS via Caddy, see the [Cloud Deployment Guide](/deployment/cloud/).
-
----
+The schema is created automatically on first run.
 
 ## Database Options Summary
 
 | Option | Setup | Best For |
 |--------|-------|----------|
 | **SQLite** (default) | Zero config, just omit `DATABASE_URL` | Single-user, CLI usage, local development |
-| **Remote PostgreSQL** | Set `DATABASE_URL` to hosted DB | Cloud deployments, shared access |
-| **Local PostgreSQL** | Docker `--profile with-db` | Self-hosted, Docker-based setups |
+| **PostgreSQL** | Set `DATABASE_URL` to any Postgres instance | Shared state, larger run history |
 
-SQLite stores data at `~/.rith/rith.db` (or `/.rith/rith.db` in Docker). It is auto-initialized on first run.
-
----
-
-## Port Configuration
-
-| Context | Default Port | Notes |
-|---------|-------------|-------|
-| Docker | 3000 | Set via `PORT` in `.env` |
-| Worktrees | 3190-4089 | Auto-allocated, hash-based on path |
-| Override | Any | Set `PORT=4000 bun dev` |
-
-:::tip
-The port difference between local dev (3090) and Docker (3000) is intentional. Override with the `PORT` environment variable in either context.
-:::
-
----
-
-## Health Endpoints
-
-| Context | Endpoint | Notes |
-|---------|----------|-------|
-| Docker / production | `/api/health` | Used by Docker healthcheck |
-| Local dev | `/health` | Convenience alias (also supports `/api/health`) |
-
-```bash
-# Docker
-curl http://localhost:3000/api/health
-
-# Local dev
-curl http://localhost:3090/health
-
-# Additional checks (both contexts)
-curl http://localhost:3090/health/db           # Database connectivity
-curl http://localhost:3090/health/concurrency  # Concurrency status
-```
-
----
-
-## Troubleshooting
-
-### Container Won't Start
-
-```bash
-# Check logs
-docker compose logs app          # default (SQLite or external DB)
-docker compose logs app          # --profile with-db
-
-# Verify environment
-docker compose config
-
-# Rebuild without cache
-docker compose build --no-cache
-docker compose up -d
-```
-
-### Port Conflicts
-
-```bash
-# Check if port is in use
-lsof -i :3090        # macOS/Linux
-netstat -ano | findstr :3090  # Windows
-```
+SQLite stores data at `~/.rith/rith.db`. It is auto-initialized on first run.

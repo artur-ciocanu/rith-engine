@@ -69,44 +69,6 @@ rith workflow run assist --cwd /mnt/c/Users/YourName/Projects/my-repo "What does
 
 For best performance, keep projects inside the WSL2 file system (`~/projects/`) rather than `/mnt/c/`.
 
-## Stale Processes (Native Windows Only)
-
-:::note
-This section applies to native Windows usage. If you're using WSL2, use `pkill -f rith` instead.
-:::
-
-**Symptom:** You see `EADDRINUSE` errors on startup, or the `rith` CLI hangs when trying to start.
-
-**Cause:** A previous `rith` or `bun` process is still holding the port, typically because the terminal was closed without stopping the process.
-
-**Diagnose:**
-
-```powershell
-netstat -ano | findstr :3090
-```
-
-Note the PID in the last column, then confirm which process it is:
-
-```powershell
-tasklist | findstr 12345
-```
-
-(Replace `12345` with the actual PID from `netstat`.)
-
-**Fix — kill by PID** (preferred):
-
-```powershell
-taskkill /F /PID 12345
-```
-
-If there are multiple stale processes:
-
-```powershell
-taskkill /F /IM bun.exe
-```
-
-See also: [Port Conflicts](/reference/troubleshooting/#port-conflicts) in the troubleshooting guide.
-
 ## Tips
 
 - **VS Code Integration**: Install the "Remote - WSL" extension to edit WSL2 files from VS Code

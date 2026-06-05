@@ -291,7 +291,6 @@ export async function checkRuntimeAvailable(runtime: ScriptRuntime): Promise<boo
 // Workflow resource validation (Level 3)
 // =============================================================================
 
-
 /**
  * Validate a workflow's external resource references (Level 3).
  *
@@ -307,7 +306,6 @@ export async function validateWorkflowResources(
   const availableCommands = await discoverAvailableCommands(cwd, config);
 
   for (const node of workflow.nodes) {
-
     // --- Command nodes: check file exists ---
     if ('command' in node && typeof node.command === 'string') {
       if (!isValidCommandName(node.command)) {
@@ -376,7 +374,6 @@ export async function validateWorkflowResources(
           });
         }
       }
-
     }
 
     // --- Skills nodes: check skill directories exist ---

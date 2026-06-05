@@ -360,6 +360,8 @@ async function main(): Promise<number> {
               );
               return 1;
             }
+            // Guard above returns on invalid input, so this is the narrowed union.
+            const validatedWorkflowType: 'issue' | 'pr' | 'task' | undefined = workflowType;
             const options = {
               branchName,
               fromBranch,
@@ -368,7 +370,7 @@ async function main(): Promise<number> {
               quiet: values.quiet as boolean | undefined,
               verbose: values.verbose as boolean | undefined,
               issueContext: resolvedIssueContext,
-              workflowType: workflowType,
+              workflowType: validatedWorkflowType,
               prSha,
               prBranch,
               json: jsonFlag,

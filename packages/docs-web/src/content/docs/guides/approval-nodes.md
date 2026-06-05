@@ -132,21 +132,6 @@ bun run cli workflow reject <run-id> --reason "Plan needs more test coverage"
 /workflow reject <run-id> needs changes
 ```
 
-
-### REST API
-
-```bash
-# Approve
-curl -X POST http://localhost:3090/api/workflows/runs/<run-id>/approve \
-  -H "Content-Type: application/json" \
-  -d '{"comment": "Approved"}'
-
-# Reject
-curl -X POST http://localhost:3090/api/workflows/runs/<run-id>/reject \
-  -H "Content-Type: application/json" \
-  -d '{"reason": "Needs revision"}'
-```
-
 ## Downstream Output
 
 By default, the user's approval comment is **not** available downstream —

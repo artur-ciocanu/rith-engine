@@ -32,7 +32,6 @@ export {
   ensureProjectStructure,
   createProjectSourceSymlink,
   findMarkdownFilesRecursive,
-  getWebDistDir,
 } from './rith-paths';
 
 // Env loader

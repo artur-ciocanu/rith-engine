@@ -13,12 +13,12 @@
  *
  * 2. Nested Claude Code session markers: When rith is launched from inside a
  *    Claude Code terminal, the parent shell exports CLAUDECODE=1 and several
- *    CLAUDE_CODE_* markers. The Claude Agent SDK leaks process.env into the
- *    spawned child regardless of the explicit `env` option
- *    (see artur-ciocanu/rith-engine#1097), so the only way to prevent the nested-session
- *    deadlock is to delete the markers from process.env at the entry point.
- *    Auth vars (CLAUDE_CODE_OAUTH_TOKEN, CLAUDE_CODE_USE_BEDROCK,
- *    CLAUDE_CODE_USE_VERTEX) are kept.
+ *    CLAUDE_CODE_* markers. Child processes that probe these markers can
+ *    deadlock waiting on a nested session (see artur-ciocanu/rith-engine#1097),
+ *    so we delete them from process.env at the entry point. The auth vars
+ *    (CLAUDE_CODE_OAUTH_TOKEN, CLAUDE_CODE_USE_BEDROCK, CLAUDE_CODE_USE_VERTEX)
+ *    are kept so a workflow bash node that shells out to `claude` / Bedrock /
+ *    Vertex still authenticates — Rith's own executor (Pi) never reads them.
  */
 import { config } from 'dotenv';
 import { resolve } from 'path';
@@ -26,7 +26,7 @@ import { resolve } from 'path';
 /** The four filenames Bun auto-loads from CWD (in loading order). */
 const BUN_AUTO_LOADED_ENV_FILES = ['.env', '.env.local', '.env.development', '.env.production'];
 
-/** CLAUDE_CODE_* vars that are auth-related and must be kept in process.env. */
+/** CLAUDE_CODE_* auth vars kept for user bash nodes that invoke `claude`; Pi itself never reads them. */
 const CLAUDE_CODE_AUTH_VARS = new Set([
   'CLAUDE_CODE_OAUTH_TOKEN',
   'CLAUDE_CODE_USE_BEDROCK',
