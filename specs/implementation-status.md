@@ -4,8 +4,10 @@
 `configuration-and-models.md`. Records what is DONE, the DECISIONS made (and why),
 and what REMAINS — so future sessions continue from here instead of re-deriving.
 
-**Base commit:** `043f823` (`refactor: remove provider field from workflow and node schemas (#8)`)
-**Status as of:** 2026-06-04 — changes below are in the working tree (not yet committed).
+**Base commit:** `d760f2e` (`fix(config): repair bundled workflow models and migrate to pi config block (#9)`)
+— items 1–6 below shipped in that commit.
+**Status as of:** 2026-06-05 — architectural-review hardening (items 11–13) is in the
+working tree (not yet committed); see the new DONE subsection.
 
 ---
 
@@ -23,9 +25,9 @@ and what REMAINS — so future sessions continue from here instead of re-derivin
 | 8   | `RITH_MODEL` env override (`applyEnvOverrides`)       | config §7    | ⬜ Not started      |
 | 9   | `rith doctor` config→Pi validation                    | config §7    | ⬜ Not started      |
 | 10  | `rith setup` auth.json detection                      | config §7    | ⬜ Not started      |
-| 11  | State-machine `WHERE status='running'` guards         | arch #3      | ⬜ Not started      |
-| 12  | Per-run throttle maps (de-globalize)                  | arch #4      | ⬜ Not started      |
-| 13  | Event-emitter `try/finally` cleanup                   | arch         | ⬜ Not started      |
+| 11  | State-machine `cancelWorkflowRun` guard               | arch #3      | ✅ Done             |
+| 12  | Per-run throttle maps (de-globalize)                  | arch #4      | ✅ Done             |
+| 13  | Event-emitter guaranteed `unregisterRun` cleanup      | arch         | ✅ Done             |
 | 14  | `DagExecutionContext` param object + god-file split   | arch #1/#2   | ⬜ Deferred (large) |
 | 15  | Discriminate `WorkflowRun.metadata`; aggregate root   | arch         | ⬜ Deferred (large) |
 
@@ -154,6 +156,33 @@ Only `anthropic/claude-haiku-4-5` is test-verified; others assume catalog presen
   workflows executor+dag-executor+bundled 318.
 - ESLint + Prettier clean on all edited files.
 
+### Architectural-review hardening (items 11–13)
+
+- **#11 `cancelWorkflowRun` state-machine guard** — `packages/core/src/db/workflows.ts`.
+  `pauseWorkflowRun` / `completeWorkflowRun` / `failWorkflowRun` already carried
+  `AND status = 'running'`; only `cancelWorkflowRun` was unguarded. Added
+  `WHERE id = $1 AND status NOT IN ('completed', 'failed', 'cancelled')` — cancel is valid
+  from `pending`/`running`/`paused` (callers cancel paused approval gates), so the guard
+  blocks only terminal→cancelled corruption. Kept idempotent: a no-match warns
+  (`db.workflow_run_cancel_no_match`) rather than throwing, since callers treat cancel as
+  best-effort (abandon/reject).
+- **#12 per-run throttle de-globalization** — `packages/workflows/src/dag-executor.ts`.
+  Removed module-level `lastNodeCancelCheck` / `lastNodeActivityUpdate` Maps. The throttle
+  is only read/written inside `executeNodeInternal`'s streaming loop, so replaced them with
+  two function-local `lastCancelCheckAt` / `lastActivityUpdateAt` timestamps (tighter than
+  per-run; no cross-run contamination, no `nodeKey` plumbing, no `.delete()` cleanup).
+- **#13 guaranteed emitter cleanup** — `packages/workflows/src/executor.ts`. `registerRun`
+  lives in the executor, so the unregister now does too: the existing `finally` backstop
+  reuses its single `getWorkflowRunStatus` read to `unregisterRun(runId)` on every exit
+  path (normal/throw/backstop) **except `paused`** (keeps SSE connected for the approval
+  gate). Dropped the now-redundant catch-path unregister. In-band terminal unregisters in
+  `dag-executor.ts` remain as prompt-release (idempotent with the finally net).
+
+Tests added: `cancelWorkflowRun` guard + idempotent no-throw (`core/src/db/workflows.test.ts`);
+`finally emitter cleanup` paused-vs-terminal (`workflows/src/executor.test.ts`).
+Verification: core `src/db/` 189 pass, full workflows suite 0 fail (dag-executor 234,
+executor 33); type-check / eslint / prettier clean on edited files.
+
 ---
 
 ## REMAINING
@@ -173,19 +202,14 @@ Only `anthropic/claude-haiku-4-5` is test-verified; others assume catalog presen
   - `rith doctor`: validate config → parse model ref → check Pi catalog/credentials.
   - `rith setup`: detect `~/.pi/agent/auth.json` and guide the user.
 
-### From `architectural-review.md` (none started)
+### From `architectural-review.md`
 
-Recommended next, low-risk/high-value first:
+Items 1–3 (the low-risk hardening trio) are **done** — see DONE above. Remaining:
 
-1. **State-machine guards** — add `WHERE status = 'running'` to `pauseWorkflowRun`,
-   `cancelWorkflowRun`, `completeWorkflowRun` in `packages/core/src/db/workflows.ts`.
-2. **Per-run throttle maps** — move module-level `lastNodeCancelCheck` /
-   `lastNodeActivityUpdate` (`dag-executor.ts`) into the `executeDagWorkflow` closure.
-3. **Event-emitter cleanup** — `try/finally` (or `AbortSignal`) around `unregisterRun`.
-   Large/deferred (explicitly NOT low-risk): extract `DagExecutionContext` param object and
-   split `dag-executor.ts` (3170-line god file) into `BashNodeRunner`/`ScriptNodeRunner`/
-   `LoopNodeRunner`/`ApprovalNodeRunner`; discriminate `WorkflowRun.metadata` by status;
-   add aggregate root for the run lifecycle.
+- **Deferred (large, explicitly NOT low-risk):** extract a `DagExecutionContext` param
+  object and split `dag-executor.ts` (~3150-line god file) into `BashNodeRunner` /
+  `ScriptNodeRunner` / `LoopNodeRunner` / `ApprovalNodeRunner`; discriminate
+  `WorkflowRun.metadata` by status; add an aggregate root for the run lifecycle.
 
 ---
 

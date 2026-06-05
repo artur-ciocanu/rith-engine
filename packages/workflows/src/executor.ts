@@ -655,7 +655,6 @@ export async function executeWorkflow(
           'workflow_event_persist_failed'
         );
       });
-    emitter.unregisterRun(workflowRun.id);
 
     // Notify user about the failure
     const delivered = await sendCriticalMessage(
@@ -688,6 +687,14 @@ export async function executeWorkflow(
           .catch((err: unknown) => {
             getLog().error({ err, workflowRunId: runId }, 'executor.backstop_fail_failed');
           });
+      }
+      // Guaranteed emitter cleanup: release the run's SSE subscription mapping on
+      // every exit path (normal completion, thrown error, or backstop). Paused runs
+      // are the sole exception — they keep the mapping so SSE stays connected while
+      // the approval gate awaits the user. Idempotent with the in-band unregister
+      // calls on the terminal paths in executeDagWorkflow.
+      if (backstopStatus !== 'paused') {
+        getWorkflowEventEmitter().unregisterRun(runId);
       }
     }
   }

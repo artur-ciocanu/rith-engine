@@ -22,6 +22,7 @@ import {
   updateWorkflowRun,
   completeWorkflowRun,
   failWorkflowRun,
+  cancelWorkflowRun,
   updateWorkflowActivity,
   findResumableRun,
   resumeWorkflowRun,
@@ -337,6 +338,33 @@ describe('workflows database', () => {
 
       await expect(failWorkflowRun('workflow-run-123', 'some error')).rejects.toThrow(
         'not found or not in running state'
+      );
+    });
+  });
+
+  describe('cancelWorkflowRun', () => {
+    test('cancels a non-terminal run with a state-machine guard', async () => {
+      mockQuery.mockResolvedValueOnce(createQueryResult([], 1));
+
+      await cancelWorkflowRun('workflow-run-123');
+
+      const [query, params] = mockQuery.mock.calls[0] as [string, unknown[]];
+      expect(query).toContain("status = 'cancelled'");
+      expect(query).toContain("status NOT IN ('completed', 'failed', 'cancelled')");
+      expect(params).toEqual(['workflow-run-123']);
+    });
+
+    test('is idempotent: a no-match (already-terminal run) does not throw', async () => {
+      mockQuery.mockResolvedValueOnce(createQueryResult([], 0));
+
+      await expect(cancelWorkflowRun('workflow-run-123')).resolves.toBeUndefined();
+    });
+
+    test('throws on database error', async () => {
+      mockQuery.mockRejectedValueOnce(new Error('Connection refused'));
+
+      await expect(cancelWorkflowRun('workflow-run-123')).rejects.toThrow(
+        'Failed to cancel workflow run'
       );
     });
   });
