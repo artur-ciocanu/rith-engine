@@ -63,7 +63,6 @@ mock.module('@rith/core', () => ({
     })
   ),
   loadConfig: mock(() => Promise.resolve({ defaults: {} })),
-  generateAndSetTitle: mock(() => Promise.resolve()),
   loadRepoConfig: mock(() => Promise.resolve(null)),
   createWorkflowStore: mock(() => ({
     createWorkflowEvent: mock(() => Promise.resolve()),
@@ -119,6 +118,7 @@ mock.module('@rith/core/db/codebases', () => ({
 
 mock.module('@rith/core/db/isolation-environments', () => ({
   findActiveByWorkflow: mock(() => Promise.resolve(null)),
+  listByCodebase: mock(() => Promise.resolve([])),
   create: mock(() => Promise.resolve({ id: 'iso-123' })),
 }));
 
@@ -142,6 +142,111 @@ mock.module('@rith/core/db/workflow-events', () => ({
   listWorkflowEvents: mock(() => Promise.resolve([])),
   createWorkflowEvent: mock(() => Promise.resolve()),
 }));
+
+// ---------------------------------------------------------------------------
+// Per-test mock isolation.
+//
+// bun's mock(...) keeps a FIFO queue for mockResolvedValueOnce / mockRejectedValueOnce
+// / mockImplementationOnce; only mockReset() drains that queue. When a test queues a
+// `...Once` value but short-circuits before the product consumes it (an early throw, or
+// a control-flow path that no longer reaches the mock), the leftover value leaks into
+// the next test and corrupts it ("Available workflows: - <wrong-list>", stray
+// rejections, etc.). Reset every queueable module mock back to its default before each
+// test so the suite is order-independent and fully isolated.
+// ---------------------------------------------------------------------------
+const queueableMockDefaults: Record<string, Record<string, (...args: unknown[]) => unknown>> = {
+  '@rith/workflows/workflow-discovery': {
+    discoverWorkflowsWithConfig: () => Promise.resolve({ workflows: [], errors: [] }),
+  },
+  '@rith/workflows/executor': {
+    executeWorkflow: () => Promise.resolve({ success: true, workflowRunId: 'test-run-id' }),
+    hydrateResumableRun: () => Promise.resolve(null),
+  },
+  '@rith/core': {
+    registerRepository: () =>
+      Promise.resolve({
+        codebaseId: 'cb-auto',
+        name: 'test/repo',
+        repositoryUrl: null,
+        defaultCwd: '/test/path',
+        commandCount: 0,
+        alreadyExisted: false,
+      }),
+    loadConfig: () => Promise.resolve({ defaults: {} }),
+    loadRepoConfig: () => Promise.resolve(null),
+    createWorkflowStore: () => ({ createWorkflowEvent: mock(() => Promise.resolve()) }),
+  },
+  '@rith/git': {
+    findRepoRoot: () => Promise.resolve(null),
+    getRemoteUrl: () => Promise.resolve(null),
+    checkout: () => Promise.resolve(),
+    toRepoPath: (...a: unknown[]) => a[0],
+    toWorktreePath: (...a: unknown[]) => a[0],
+    toBranchName: (...a: unknown[]) => a[0],
+    getDefaultBranch: () => Promise.resolve('dev'),
+    isAncestorOf: () => Promise.resolve(true),
+  },
+  '@rith/core/db/conversations': {
+    getOrCreateConversation: () =>
+      Promise.resolve({
+        id: 'conv-123',
+        platform_type: 'cli',
+        platform_conversation_id: 'cli-123',
+      }),
+    getConversationById: () => Promise.resolve(null),
+    updateConversation: () => Promise.resolve(),
+  },
+  '@rith/core/db/codebases': {
+    findCodebaseByDefaultCwd: () => Promise.resolve(null),
+    getCodebase: () => Promise.resolve(null),
+  },
+  '@rith/core/db/isolation-environments': {
+    findActiveByWorkflow: () => Promise.resolve(null),
+    listByCodebase: () => Promise.resolve([]),
+    create: () => Promise.resolve({ id: 'iso-123' }),
+  },
+  '@rith/core/db/messages': {
+    addMessage: () => Promise.resolve(),
+  },
+  '@rith/core/db/workflows': {
+    getActiveWorkflowRun: () => Promise.resolve(null),
+    failWorkflowRun: () => Promise.resolve(),
+    cancelWorkflowRun: () => Promise.resolve(),
+    findResumableRun: () => Promise.resolve(null),
+    resumeWorkflowRun: () => Promise.resolve(null),
+    getWorkflowRun: () => Promise.resolve(null),
+    updateWorkflowRun: () => Promise.resolve(),
+    listWorkflowRuns: () => Promise.resolve([]),
+    deleteOldWorkflowRuns: () => Promise.resolve({ count: 0 }),
+  },
+  '@rith/core/db/workflow-events': {
+    listWorkflowEvents: () => Promise.resolve([]),
+    createWorkflowEvent: () => Promise.resolve(),
+  },
+};
+
+async function resetQueueableMocks(): Promise<void> {
+  for (const [moduleName, methods] of Object.entries(queueableMockDefaults)) {
+    const mod = (await import(moduleName)) as Record<string, ReturnType<typeof mock>>;
+    for (const [method, defaultImpl] of Object.entries(methods)) {
+      const fn = mod[method];
+      if (fn && typeof fn.mockReset === 'function') {
+        fn.mockReset();
+        fn.mockImplementation(defaultImpl);
+      }
+    }
+  }
+}
+
+beforeEach(async () => {
+  await resetQueueableMocks();
+  mockLogger.fatal.mockClear();
+  mockLogger.error.mockClear();
+  mockLogger.warn.mockClear();
+  mockLogger.info.mockClear();
+  mockLogger.debug.mockClear();
+  mockLogger.trace.mockClear();
+});
 
 describe('workflowListCommand', () => {
   let consoleSpy: ReturnType<typeof spyOn>;
@@ -175,7 +280,6 @@ describe('workflowListCommand', () => {
         makeTestWorkflowWithSource({
           name: 'plan',
           description: 'Create implementation plan',
-          provider: 'claude',
         }),
       ],
       errors: [],
@@ -188,7 +292,6 @@ describe('workflowListCommand', () => {
     expect(consoleSpy).toHaveBeenCalledWith('    General assistance workflow');
     expect(consoleSpy).toHaveBeenCalledWith('  plan');
     expect(consoleSpy).toHaveBeenCalledWith('    Create implementation plan');
-    expect(consoleSpy).toHaveBeenCalledWith('    Provider: claude');
   });
 
   it('should output JSON when json flag is true', async () => {
@@ -199,7 +302,6 @@ describe('workflowListCommand', () => {
         makeTestWorkflowWithSource({
           name: 'plan',
           description: 'Create implementation plan',
-          provider: 'claude',
         }),
       ],
       errors: [],
@@ -219,7 +321,6 @@ describe('workflowListCommand', () => {
     expect(parsed.workflows[1]).toEqual({
       name: 'plan',
       description: 'Create implementation plan',
-      provider: 'claude',
     });
   });
 
@@ -270,7 +371,6 @@ describe('workflowListCommand', () => {
         makeTestWorkflowWithSource({
           name: 'plan',
           description: 'Planning workflow',
-          provider: 'codex',
           model: 'gpt-5.3-codex',
           modelReasoningEffort: 'high',
           webSearchMode: 'live',
@@ -289,7 +389,6 @@ describe('workflowListCommand', () => {
     expect(parsed.workflows[0]).toEqual({
       name: 'plan',
       description: 'Planning workflow',
-      provider: 'codex',
       model: 'gpt-5.3-codex',
       modelReasoningEffort: 'high',
       webSearchMode: 'live',
@@ -563,21 +662,22 @@ describe('workflowRunCommand', () => {
     );
   });
 
-  it('should throw error when database access fails', async () => {
+  it('should throw when database access fails on --resume', async () => {
     const { discoverWorkflowsWithConfig } = await import('@rith/workflows/workflow-discovery');
-    const conversationDb = await import('@rith/core/db/conversations');
+    const codebaseDb = await import('@rith/core/db/codebases');
 
     (discoverWorkflowsWithConfig as ReturnType<typeof mock>).mockResolvedValueOnce({
       workflows: [makeTestWorkflowWithSource({ name: 'assist', description: 'Help' })],
       errors: [],
     });
-    (conversationDb.getOrCreateConversation as ReturnType<typeof mock>).mockRejectedValueOnce(
+    // The codebase lookup is the first DB access; a connection failure here aborts --resume.
+    (codebaseDb.findCodebaseByDefaultCwd as ReturnType<typeof mock>).mockRejectedValueOnce(
       new Error('Connection refused')
     );
 
-    await expect(workflowRunCommand('/test/path', 'assist', 'hello')).rejects.toThrow(
-      'Failed to access database: Connection refused'
-    );
+    await expect(
+      workflowRunCommand('/test/path', 'assist', 'hello', { resume: true })
+    ).rejects.toThrow('Cannot resume: Database lookup failed');
   });
 
   it('should throw when codebase lookup fails (isolation is default)', async () => {
@@ -658,89 +758,62 @@ describe('workflowRunCommand', () => {
     ).rejects.toThrow('Workflow failed: Step failed: assist');
   });
 
-  it('should call generateAndSetTitle with workflow name and user message', async () => {
+  it('executes the resolved workflow with the user message and codebase', async () => {
     const { discoverWorkflowsWithConfig } = await import('@rith/workflows/workflow-discovery');
     const { executeWorkflow } = await import('@rith/workflows/executor');
-    const conversationDb = await import('@rith/core/db/conversations');
     const codebaseDb = await import('@rith/core/db/codebases');
-    const core = await import('@rith/core');
 
     (discoverWorkflowsWithConfig as ReturnType<typeof mock>).mockResolvedValueOnce({
       workflows: [makeTestWorkflowWithSource({ name: 'assist', description: 'Help' })],
       errors: [],
-    });
-    (conversationDb.getOrCreateConversation as ReturnType<typeof mock>).mockResolvedValueOnce({
-      id: 'conv-123',
-      ai_assistant_type: 'claude',
     });
     // Return a codebase so isolation can proceed (default behavior requires isolation)
     (codebaseDb.findCodebaseByDefaultCwd as ReturnType<typeof mock>).mockResolvedValueOnce({
       id: 'cb-123',
       default_cwd: '/test/path',
     });
-    (conversationDb.updateConversation as ReturnType<typeof mock>).mockResolvedValueOnce(undefined);
     (executeWorkflow as ReturnType<typeof mock>).mockResolvedValueOnce({
       success: true,
       workflowRunId: 'run-123',
     });
-    (core.generateAndSetTitle as ReturnType<typeof mock>).mockClear();
 
     await workflowRunCommand('/test/path', 'assist', 'hello world');
 
-    expect(core.generateAndSetTitle).toHaveBeenCalledWith(
-      'conv-123',
-      'hello world',
-      'claude',
-      '/test/path',
-      'assist',
-      {}
-    );
+    // executeWorkflow(deps, adapter, conversationId, workingCwd, workflow, userMessage, dbConversationId, opts)
+    // The run command threads the resolved workflow, user message, and codebase into the executor.
+    const lastCall = (executeWorkflow as ReturnType<typeof mock>).mock.calls.at(-1);
+    expect(lastCall?.[4]).toEqual(expect.objectContaining({ name: 'assist' }));
+    expect(lastCall?.[5]).toBe('hello world');
+    expect(lastCall?.[7]).toEqual(expect.objectContaining({ codebaseId: 'cb-123' }));
   });
 
-  it('uses the workflow provider for title generation', async () => {
+  it('runs the resolved workflow in the live checkout with --no-worktree', async () => {
     const { discoverWorkflowsWithConfig } = await import('@rith/workflows/workflow-discovery');
     const { executeWorkflow } = await import('@rith/workflows/executor');
-    const conversationDb = await import('@rith/core/db/conversations');
     const codebaseDb = await import('@rith/core/db/codebases');
-    const core = await import('@rith/core');
 
     (discoverWorkflowsWithConfig as ReturnType<typeof mock>).mockResolvedValueOnce({
       workflows: [
         makeTestWorkflowWithSource({
           name: 'figma-mcp-smoke',
           description: 'Smoke test Figma MCP',
-          provider: 'codex',
         }),
       ],
       errors: [],
     });
-    (conversationDb.getOrCreateConversation as ReturnType<typeof mock>).mockResolvedValueOnce({
-      id: 'conv-123',
-      ai_assistant_type: 'claude',
-    });
-    (core.loadConfig as ReturnType<typeof mock>).mockResolvedValueOnce({
-      assistant: 'claude',
-      assistants: { codex: { model: 'gpt-5.4' } },
-      defaults: {},
-    });
     (codebaseDb.findCodebaseByDefaultCwd as ReturnType<typeof mock>).mockResolvedValueOnce(null);
-    (conversationDb.updateConversation as ReturnType<typeof mock>).mockResolvedValueOnce(undefined);
     (executeWorkflow as ReturnType<typeof mock>).mockResolvedValueOnce({
       success: true,
       workflowRunId: 'run-123',
     });
-    (core.generateAndSetTitle as ReturnType<typeof mock>).mockClear();
 
     await workflowRunCommand('/test/path', 'figma-mcp-smoke', 'check figma', { noWorktree: true });
 
-    expect(core.generateAndSetTitle).toHaveBeenCalledWith(
-      'conv-123',
-      'check figma',
-      'codex',
-      '/test/path',
-      'figma-mcp-smoke',
-      { model: 'gpt-5.4' }
-    );
+    // --no-worktree runs in the original cwd; the executor still receives the resolved workflow + message.
+    const lastCall = (executeWorkflow as ReturnType<typeof mock>).mock.calls.at(-1);
+    expect(lastCall?.[3]).toBe('/test/path');
+    expect(lastCall?.[4]).toEqual(expect.objectContaining({ name: 'figma-mcp-smoke' }));
+    expect(lastCall?.[5]).toBe('check figma');
   });
 
   it('passes fromBranch into isolation task request', async () => {
@@ -1273,27 +1346,20 @@ describe('workflowRunCommand', () => {
   it('sends dispatch message before executeWorkflow with correct metadata', async () => {
     const { discoverWorkflowsWithConfig } = await import('@rith/workflows/workflow-discovery');
     const { executeWorkflow } = await import('@rith/workflows/executor');
-    const conversationDb = await import('@rith/core/db/conversations');
     const codebaseDb = await import('@rith/core/db/codebases');
-    const messagesDb = await import('@rith/core/db/messages');
+    const { CLIAdapter } = await import('../adapters/cli-adapter');
 
     (discoverWorkflowsWithConfig as ReturnType<typeof mock>).mockResolvedValueOnce({
       workflows: [makeTestWorkflowWithSource({ name: 'assist', description: 'Help' })],
       errors: [],
     });
-    (conversationDb.getOrCreateConversation as ReturnType<typeof mock>).mockResolvedValueOnce({
-      id: 'conv-123',
-    });
     (codebaseDb.findCodebaseByDefaultCwd as ReturnType<typeof mock>).mockResolvedValueOnce(null);
-    (conversationDb.updateConversation as ReturnType<typeof mock>).mockResolvedValueOnce(undefined);
 
-    // Track call order for assistant messages only (user message is added first via addMessage directly)
+    // The CLI surfaces dispatch/result to the Web UI via adapter.sendMessage (console-backed in CLI mode).
     const callOrder: string[] = [];
-    (messagesDb.addMessage as ReturnType<typeof mock>).mockImplementation(
-      async (_dbId: unknown, role: unknown, content: unknown) => {
-        if (role === 'assistant') {
-          callOrder.push(`addMessage:${String(content)}`);
-        }
+    const sendSpy = spyOn(CLIAdapter.prototype, 'sendMessage').mockImplementation(
+      async (_conversationId: string, content: string) => {
+        callOrder.push(`send:${content}`);
       }
     );
     (executeWorkflow as ReturnType<typeof mock>).mockImplementation(async () => {
@@ -1301,61 +1367,62 @@ describe('workflowRunCommand', () => {
       return { success: true, workflowRunId: 'run-1' };
     });
 
-    await workflowRunCommand('/test/path', 'assist', 'hello', { noWorktree: true });
+    try {
+      await workflowRunCommand('/test/path', 'assist', 'hello', { noWorktree: true });
 
-    // Dispatch assistant message fires before executeWorkflow
-    expect(callOrder[0]).toContain('Dispatching workflow');
-    expect(callOrder[1]).toBe('executeWorkflow');
+      // Dispatch message fires before executeWorkflow
+      expect(callOrder[0]).toContain('Dispatching workflow');
+      expect(callOrder[1]).toBe('executeWorkflow');
 
-    // Correct metadata shape
-    expect(messagesDb.addMessage).toHaveBeenCalledWith(
-      expect.any(String),
-      'assistant',
-      'Dispatching workflow: **assist**',
-      expect.objectContaining({
-        category: 'workflow_dispatch_status',
-        workflowDispatch: expect.objectContaining({
-          workflowName: 'assist',
-          workerConversationId: expect.stringMatching(/^cli-/),
-        }),
-      })
-    );
+      // Correct conversationId + metadata shape
+      expect(sendSpy).toHaveBeenCalledWith(
+        expect.stringMatching(/^cli-/),
+        'Dispatching workflow: **assist**',
+        expect.objectContaining({
+          category: 'workflow_dispatch_status',
+          workflowDispatch: expect.objectContaining({
+            workflowName: 'assist',
+            workerConversationId: expect.stringMatching(/^cli-/),
+          }),
+        })
+      );
+    } finally {
+      sendSpy.mockRestore();
+    }
   });
 
   it('sends result card when executeWorkflow returns a summary', async () => {
     const { discoverWorkflowsWithConfig } = await import('@rith/workflows/workflow-discovery');
     const { executeWorkflow } = await import('@rith/workflows/executor');
-    const conversationDb = await import('@rith/core/db/conversations');
     const codebaseDb = await import('@rith/core/db/codebases');
-    const messagesDb = await import('@rith/core/db/messages');
+    const { CLIAdapter } = await import('../adapters/cli-adapter');
 
     (discoverWorkflowsWithConfig as ReturnType<typeof mock>).mockResolvedValueOnce({
       workflows: [makeTestWorkflowWithSource({ name: 'assist', description: 'Help' })],
       errors: [],
     });
-    (conversationDb.getOrCreateConversation as ReturnType<typeof mock>).mockResolvedValueOnce({
-      id: 'conv-123',
-    });
     (codebaseDb.findCodebaseByDefaultCwd as ReturnType<typeof mock>).mockResolvedValueOnce(null);
-    (conversationDb.updateConversation as ReturnType<typeof mock>).mockResolvedValueOnce(undefined);
     (executeWorkflow as ReturnType<typeof mock>).mockResolvedValueOnce({
       success: true,
       workflowRunId: 'run-42',
       summary: 'All steps completed. Branch pushed.',
     });
-    (messagesDb.addMessage as ReturnType<typeof mock>).mockClear();
 
-    await workflowRunCommand('/test/path', 'assist', 'hello', { noWorktree: true });
+    const sendSpy = spyOn(CLIAdapter.prototype, 'sendMessage').mockImplementation(async () => {});
+    try {
+      await workflowRunCommand('/test/path', 'assist', 'hello', { noWorktree: true });
 
-    expect(messagesDb.addMessage).toHaveBeenCalledWith(
-      expect.any(String),
-      'assistant',
-      'All steps completed. Branch pushed.',
-      expect.objectContaining({
-        category: 'workflow_result',
-        workflowResult: { workflowName: 'assist', runId: 'run-42' },
-      })
-    );
+      expect(sendSpy).toHaveBeenCalledWith(
+        expect.any(String),
+        'All steps completed. Branch pushed.',
+        expect.objectContaining({
+          category: 'workflow_result',
+          workflowResult: { workflowName: 'assist', runId: 'run-42' },
+        })
+      );
+    } finally {
+      sendSpy.mockRestore();
+    }
   });
 
   it('does not send result card when executeWorkflow has no summary', async () => {
@@ -1393,45 +1460,41 @@ describe('workflowRunCommand', () => {
     expect(resultCalls).toHaveLength(0);
   });
 
-  it('does not throw and logs warn when result message DB persist fails', async () => {
+  it('does not throw and logs warn when result message surface fails', async () => {
     const { discoverWorkflowsWithConfig } = await import('@rith/workflows/workflow-discovery');
     const { executeWorkflow } = await import('@rith/workflows/executor');
-    const conversationDb = await import('@rith/core/db/conversations');
     const codebaseDb = await import('@rith/core/db/codebases');
-    const messagesDb = await import('@rith/core/db/messages');
+    const { CLIAdapter } = await import('../adapters/cli-adapter');
 
     (discoverWorkflowsWithConfig as ReturnType<typeof mock>).mockResolvedValueOnce({
       workflows: [makeTestWorkflowWithSource({ name: 'assist', description: 'Help' })],
       errors: [],
     });
-    (conversationDb.getOrCreateConversation as ReturnType<typeof mock>).mockResolvedValueOnce({
-      id: 'conv-123',
-    });
     (codebaseDb.findCodebaseByDefaultCwd as ReturnType<typeof mock>).mockResolvedValueOnce(null);
-    (conversationDb.updateConversation as ReturnType<typeof mock>).mockResolvedValueOnce(undefined);
     (executeWorkflow as ReturnType<typeof mock>).mockResolvedValueOnce({
       success: true,
       workflowRunId: 'run-1',
       summary: 'Done.',
     });
-    // addMessage is called three times: user message persist, dispatch, result
-    // CLIAdapter internally catches DB errors — it logs 'cli_message_persist_failed' and does not throw.
-    // Verify workflowRunCommand does not throw even when the result DB write fails.
-    (messagesDb.addMessage as ReturnType<typeof mock>)
-      .mockResolvedValueOnce(undefined) // user message persist succeeds
-      .mockResolvedValueOnce(undefined) // dispatch succeeds
-      .mockRejectedValueOnce(new Error('DB gone')); // result fails (caught inside CLIAdapter)
-
-    // Should not throw — the CLIAdapter swallows the DB error and logs a warn
-    await expect(
-      workflowRunCommand('/test/path', 'assist', 'hello', { noWorktree: true })
-    ).resolves.toBeUndefined();
-
-    // CLIAdapter logs 'cli_message_persist_failed' when addMessage throws internally
-    expect(mockLogger.warn).toHaveBeenCalledWith(
-      expect.objectContaining({ err: expect.any(Error) }),
-      'cli_message_persist_failed'
+    // The result-card surface (adapter.sendMessage) fails; the run command catches it,
+    // logs 'cli.workflow_result_surface_failed', and still completes successfully.
+    const sendSpy = spyOn(CLIAdapter.prototype, 'sendMessage').mockImplementation(
+      async (_conversationId: string, content: string) => {
+        if (content === 'Done.') throw new Error('surface gone');
+      }
     );
+    try {
+      await expect(
+        workflowRunCommand('/test/path', 'assist', 'hello', { noWorktree: true })
+      ).resolves.toBeUndefined();
+
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        expect.objectContaining({ err: expect.any(Error) }),
+        'cli.workflow_result_surface_failed'
+      );
+    } finally {
+      sendSpy.mockRestore();
+    }
   });
 
   it('does not throw and continues to executeWorkflow when dispatch sendMessage fails', async () => {
@@ -1960,7 +2023,7 @@ describe('workflowApproveCommand', () => {
       user_message: 'add auth',
       working_path: '/tmp/test-worktree',
       codebase_id: 'cb-existing',
-      metadata: { approval: { nodeId: 'review-node' } },
+      metadata: { approval: { nodeId: 'review-node', message: 'Approve?' } },
     });
 
     (core.createWorkflowStore as ReturnType<typeof mock>).mockReturnValueOnce({
@@ -1992,9 +2055,8 @@ describe('workflowApproveCommand', () => {
   it('should pass original platform conversation ID through to workflowRunCommand', async () => {
     const workflowDb = await import('@rith/core/db/workflows');
     const codebaseDb = await import('@rith/core/db/codebases');
-    const conversationsDb = await import('@rith/core/db/conversations');
     const workflowDiscovery = await import('@rith/workflows/workflow-discovery');
-    const core = await import('@rith/core');
+    const { executeWorkflow, hydrateResumableRun } = await import('@rith/workflows/executor');
 
     (workflowDb.getWorkflowRun as ReturnType<typeof mock>).mockResolvedValueOnce({
       id: 'run-approve-conv',
@@ -2007,13 +2069,6 @@ describe('workflowApproveCommand', () => {
       metadata: { approval: { nodeId: 'review-node', message: 'Approve?' } },
     });
 
-    // Return a conversation with the original platform ID
-    (conversationsDb.getConversationById as ReturnType<typeof mock>).mockResolvedValueOnce({
-      id: 'db-uuid-original',
-      platform_type: 'cli',
-      platform_conversation_id: 'cli-original-123',
-    });
-
     (
       workflowDiscovery.discoverWorkflowsWithConfig as ReturnType<typeof mock>
     ).mockResolvedValueOnce({
@@ -2021,24 +2076,29 @@ describe('workflowApproveCommand', () => {
       errors: [],
     });
 
-    (codebaseDb.getCodebase as ReturnType<typeof mock>).mockResolvedValueOnce({
+    // The run's codebase is resolved both for discovery (approve) and for the resumed run.
+    (codebaseDb.getCodebase as ReturnType<typeof mock>).mockResolvedValue({
       id: 'cb-existing',
       name: 'owner/repo',
       default_cwd: '/path/to/main-checkout',
     });
 
-    // Clear call history before our test so we can assert precisely
-    (conversationsDb.getOrCreateConversation as ReturnType<typeof mock>).mockClear();
+    // Drive the --resume path far enough to reach executeWorkflow so we can inspect the
+    // conversationId it receives. In CLI mode that conversationId IS the run's
+    // conversation_id — there is no platform-conversation translation table anymore.
+    (workflowDb.findResumableRun as ReturnType<typeof mock>).mockResolvedValueOnce({
+      id: 'run-approve-conv',
+      working_path: undefined,
+    });
+    (hydrateResumableRun as ReturnType<typeof mock>).mockResolvedValueOnce({
+      completedNodeOutputs: {},
+    });
 
-    try {
-      await workflowApproveCommand('run-approve-conv');
-    } catch {
-      // downstream failure is acceptable — we only need to reach getOrCreateConversation
-    }
+    await workflowApproveCommand('run-approve-conv');
 
-    // Verify the original platform conversation ID was passed through
-    expect(conversationsDb.getConversationById).toHaveBeenCalledWith('db-uuid-original');
-    expect(conversationsDb.getOrCreateConversation).toHaveBeenCalledWith('cli', 'cli-original-123');
+    // executeWorkflow(deps, adapter, conversationId, workingCwd, workflow, userMessage, dbConversationId, opts)
+    const lastCall = (executeWorkflow as ReturnType<typeof mock>).mock.calls.at(-1);
+    expect(lastCall?.[2]).toBe('db-uuid-original');
   });
 
   it('should discover workflows from codebase.default_cwd, not working_path', async () => {
@@ -2272,8 +2332,9 @@ describe('workflowRejectCommand', () => {
 
   it('should pass original platform conversation ID through on reject-resume', async () => {
     const workflowDb = await import('@rith/core/db/workflows');
-    const conversationsDb = await import('@rith/core/db/conversations');
+    const codebaseDb = await import('@rith/core/db/codebases');
     const workflowDiscovery = await import('@rith/workflows/workflow-discovery');
+    const { executeWorkflow, hydrateResumableRun } = await import('@rith/workflows/executor');
 
     const runData = {
       id: 'run-reject-conv',
@@ -2294,15 +2355,7 @@ describe('workflowRejectCommand', () => {
         rejection_count: 0,
       },
     };
-    // rejectWorkflow reads the run twice internally (getRunOrThrow + updateWorkflowRun check)
     (workflowDb.getWorkflowRun as ReturnType<typeof mock>).mockResolvedValueOnce(runData);
-
-    // Return a conversation with the original platform ID
-    (conversationsDb.getConversationById as ReturnType<typeof mock>).mockResolvedValueOnce({
-      id: 'db-uuid-reject',
-      platform_type: 'cli',
-      platform_conversation_id: 'cli-reject-456',
-    });
 
     (
       workflowDiscovery.discoverWorkflowsWithConfig as ReturnType<typeof mock>
@@ -2311,18 +2364,26 @@ describe('workflowRejectCommand', () => {
       errors: [],
     });
 
-    // Clear call history before our test so we can assert precisely
-    (conversationsDb.getOrCreateConversation as ReturnType<typeof mock>).mockClear();
+    // The run has no codebase_id, so the resumed run resolves its codebase via the working path.
+    (codebaseDb.findCodebaseByDefaultCwd as ReturnType<typeof mock>).mockResolvedValueOnce({
+      id: 'cb-reject',
+      default_cwd: '/repo',
+    });
+    // Drive the reject-resume path far enough to reach executeWorkflow so we can inspect
+    // the conversationId it receives. In CLI mode that IS the run's conversation_id.
+    (workflowDb.findResumableRun as ReturnType<typeof mock>).mockResolvedValueOnce({
+      id: 'run-reject-conv',
+      working_path: undefined,
+    });
+    (hydrateResumableRun as ReturnType<typeof mock>).mockResolvedValueOnce({
+      completedNodeOutputs: {},
+    });
 
-    try {
-      await workflowRejectCommand('run-reject-conv', 'needs work');
-    } catch {
-      // downstream workflowRunCommand failure is acceptable — we only need to reach getOrCreateConversation
-    }
+    await workflowRejectCommand('run-reject-conv', 'needs work');
 
-    // Verify the original platform conversation ID was passed through
-    expect(conversationsDb.getConversationById).toHaveBeenCalledWith('db-uuid-reject');
-    expect(conversationsDb.getOrCreateConversation).toHaveBeenCalledWith('cli', 'cli-reject-456');
+    // executeWorkflow(deps, adapter, conversationId, workingCwd, workflow, userMessage, dbConversationId, opts)
+    const lastCall = (executeWorkflow as ReturnType<typeof mock>).mock.calls.at(-1);
+    expect(lastCall?.[2]).toBe('db-uuid-reject');
   });
 
   it('cancels when max attempts reached', async () => {

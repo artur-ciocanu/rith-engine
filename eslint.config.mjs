@@ -105,5 +105,5 @@ export default tseslint.config(
       // Constructor style preference
       '@typescript-eslint/consistent-generic-constructors': 'off',
     },
-  },
+  }
 );

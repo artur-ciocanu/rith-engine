@@ -3,7 +3,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import type { NodeConfig } from '../types'
+import type { NodeConfig } from '../types';
 import { resolvePiSkills, resolvePiThinkingLevel, resolvePiTools } from './options-translator';
 
 // ─── resolvePiThinkingLevel ─────────────────────────────────────────────

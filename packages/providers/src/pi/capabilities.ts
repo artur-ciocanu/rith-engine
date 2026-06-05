@@ -1,4 +1,4 @@
-import type { ProviderCapabilities } from '../types'
+import type { ProviderCapabilities } from '../types';
 
 /**
  * Pi capabilities — intentionally conservative. Declared flags must reflect

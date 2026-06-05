@@ -66,51 +66,7 @@ psql $DATABASE_URL < migrations/019_workflow_resume_path.sql
 psql $DATABASE_URL < migrations/020_codebase_env_vars.sql
 ```
 
-## Local PostgreSQL via Docker
-
-Use the `with-db` Docker Compose profile for automatic PostgreSQL setup.
-
-Set in `.env`:
-
-```ini
-DATABASE_URL=postgresql://postgres:postgres@postgres:5432/remote_coding_agent
-```
-
-**For fresh installations**, the database schema is created automatically when you start with `docker compose --profile with-db`. The combined migration runs on first startup.
-
-**For updates to existing Docker installations**, you need to manually run new migrations:
-
-```bash
-# Connect to the running postgres container
-docker compose exec postgres psql -U postgres -d remote_coding_agent
-
-# Then run the migrations you haven't applied yet
-\i /migrations/012_workflow_events.sql
-\i /migrations/013_conversation_titles.sql
-\i /migrations/014_message_history.sql
-\i /migrations/015_background_dispatch.sql
-\i /migrations/016_session_ended_reason.sql
-\i /migrations/017_drop_command_templates.sql
-\i /migrations/018_fix_workflow_status_default.sql
-\i /migrations/019_workflow_resume_path.sql
-\i /migrations/020_codebase_env_vars.sql
-\q
-```
-
-Or from your host machine (requires `psql` installed):
-
-```bash
-psql postgresql://postgres:postgres@localhost:5432/remote_coding_agent < migrations/020_codebase_env_vars.sql
-# ... and so on for each migration not yet applied
-```
-
 ## Verifying the Database
-
-**Health check:**
-```bash
-curl http://localhost:3090/health/db
-# Expected: {"status":"ok","database":"connected"}
-```
 
 **List tables (PostgreSQL):**
 ```bash

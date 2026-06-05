@@ -289,14 +289,6 @@ export function getDefaultWorkflowsPath(): string {
   return join(getAppRithBasePath(), 'workflows', 'defaults');
 }
 
-/**
- * Returns the path to the cached web UI distribution for a given version.
- * Example: ~/.rith/web-dist/v0.3.2/
- */
-export function getWebDistDir(version: string): string {
-  return join(getRithHome(), 'web-dist', version);
-}
-
 // =============================================================================
 // Project-centric path functions
 // =============================================================================

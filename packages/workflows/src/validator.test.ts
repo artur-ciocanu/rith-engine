@@ -208,7 +208,6 @@ describe('validateWorkflowResources — MCP validation', () => {
   });
 });
 
-
 // =============================================================================
 // validateCommand
 // =============================================================================
@@ -381,4 +380,3 @@ describe('validateWorkflowResources — script nodes', () => {
     expect(scriptErrors).toHaveLength(0);
   });
 });
-
