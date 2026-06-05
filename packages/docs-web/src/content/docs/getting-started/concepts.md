@@ -44,7 +44,7 @@ Nodes are the building blocks of workflows. Each node does exactly one thing, an
 | `approval:` | Pauses the workflow for human review (approve or reject) |
 | `cancel:` | Terminates the workflow early with a reason string |
 
-Nodes connect through `depends_on` to form a DAG. You can add conditional branching with `when:` expressions, control join behavior with `trigger_rule`, and override the AI provider or model per node.
+Nodes connect through `depends_on` to form a DAG. You can add conditional branching with `when:` expressions, control join behavior with `trigger_rule`, and override the model per node.
 
 ```yaml
 nodes:

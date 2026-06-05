@@ -128,7 +128,7 @@ Your main repo was never touched.
 
 Notice that most nodes have `context: fresh`. This is deliberate.
 
-Each AI node runs inside a Claude Code session. That session accumulates context — files read, tool calls made, conversation history. After investigating a complex codebase issue, that context can be thousands of tokens long, with lots of detail that's irrelevant to the next phase.
+Each AI node runs inside a Pi (AI) session. That session accumulates context — files read, tool calls made, conversation history. After investigating a complex codebase issue, that context can be thousands of tokens long, with lots of detail that's irrelevant to the next phase.
 
 `context: fresh` starts a fresh session for that node. The AI comes in without the baggage of previous nodes — just the task instructions and whatever artifacts it reads explicitly.
 

@@ -20,10 +20,10 @@ Before you start, make sure you have:
 | -------------------------------- | ------------------ | ------------------------------------------------------------------------------------------------------------------- |
 | **Git**                          | `git --version`    | [git-scm.com](https://git-scm.com/)                                                                                 |
 | **Bun** (replaces Node.js + npm) | `bun --version`    | Linux/macOS: `curl -fsSL https://bun.sh/install \| bash` — Windows: `powershell -c "irm bun.sh/install.ps1 \| iex"` |
-| **Claude Code CLI**              | `claude --version` | [docs.claude.com/claude-code/installation](https://docs.claude.com/en/docs/claude-code/installation) — in compiled Rith Engine binaries, also set `CLAUDE_BIN_PATH` ([details](/getting-started/ai-assistants/#binary-path-configuration-compiled-binaries-only)) |
+| **AI provider (Pi)**             | bundled            | Ships with Rith Engine — authenticate with `pi /login` or set `ANTHROPIC_API_KEY` ([details](/getting-started/ai-assistants/)) |
 | **GitHub account**               | —                  | [github.com](https://github.com/)                                                                                   |
 
-> **Do not run as root.** Rith Engine (and the Claude Code CLI it depends on) does not work when run as the `root` user. If you're on a VPS or server that only has root, create a regular user first:
+> **Do not run as root.** Rith Engine does not work when run as the `root` user. If you're on a VPS or server that only has root, create a regular user first:
 >
 > ```bash
 > adduser rith          # create user (Debian/Ubuntu)
@@ -82,7 +82,7 @@ This installs all dependencies across the monorepo. Takes about 30 seconds.
 
 ## Step 2: Set Up Authentication
 
-You need two things: a GitHub token (for cloning repos) and Claude authentication (for the AI assistant).
+You need two things: a GitHub token (for cloning repos) and Pi authentication (for the AI provider).
 
 ### GitHub Token
 
@@ -91,39 +91,35 @@ You need two things: a GitHub token (for cloning repos) and Claude authenticatio
 3. Select scope: **`repo`**
 4. Copy the token (starts with `ghp_...`)
 
-### Claude Authentication
+### Pi Authentication
 
-If you already use Claude Code, you're probably already authenticated. Check with:
-
-```bash
-claude --version
-```
-
-If not authenticated:
+Pi Coding Agent is bundled with Rith Engine. Authenticate once via OAuth:
 
 ```bash
-claude /login
+pi /login
 ```
 
-Follow the browser flow to log in. This stores credentials globally — no API keys needed.
+Follow the browser flow to log in. This writes `~/.pi/agent/auth.json`, which Pi picks up
+automatically — no API keys needed.
+
+Alternatively, set provider API keys: `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, or `GEMINI_API_KEY`.
 
 ---
 
 ## Step 3: Configure Environment (Optional)
 
-The CLI uses your existing Claude authentication by default. For GitHub integration, set your token:
+The CLI uses your existing Pi authentication by default. For GitHub integration, set your token:
 
 ```bash
 # Set in ~/.rith/.env or your repo's .rith/.env
 GH_TOKEN=ghp_your_token_here
 GITHUB_TOKEN=ghp_your_token_here
-CLAUDE_USE_GLOBAL_AUTH=true
 ```
 
 That's it. Everything else has sensible defaults:
 
 - **Database:** SQLite at `~/.rith/rith.db` (auto-created, zero setup)
-- **AI assistant:** Claude (default)
+- **AI provider:** Pi (default model `anthropic/claude-sonnet-4-5`)
 
 > **Why two GitHub token variables?** `GH_TOKEN` is used by the GitHub CLI (`gh`), and `GITHUB_TOKEN` is used by Rith Engine's GitHub integration. Set them to the same value.
 
@@ -218,7 +214,6 @@ rith workflow run <name> --cwd /path/to/repo "<message>"
 | `rith complete <branch>` | Complete branch lifecycle |
 | `rith validate workflows [name]` | Validate workflow definitions |
 | `rith validate commands [name]` | Validate command files |
-| `rith setup` | Interactive setup wizard for credentials and config |
 | `rith version` | Show version info |
 
 ### Worktree Management
@@ -278,7 +273,8 @@ your-repo/
 **Example `.rith/config.yaml`:**
 
 ```yaml
-assistant: claude
+pi:
+  model: anthropic/claude-sonnet-4-5   # AI provider model
 commands:
   folder: .claude/commands/rith    # additional command search path
 worktree:
@@ -313,7 +309,7 @@ Place `.yaml` files in your repo's `.rith/workflows/`:
 ```yaml
 name: my-workflow
 description: Plan then implement a feature
-model: sonnet
+model: anthropic/claude-sonnet-4-5
 
 nodes:
   - id: plan
@@ -354,14 +350,11 @@ When you use the `--branch` flag, the CLI creates a git worktree so your work ha
 
 ## Using With Claude Code (Skill)
 
-If you want Claude Code to be able to invoke Rith Engine workflows on your behalf, install the
-Rith Engine skill into your project. The setup wizard handles this automatically — just run
-`rith setup` and accept the skill installation prompt.
-
-To install manually instead:
+If you use the Claude Code app and want it to invoke Rith Engine workflows on your behalf, copy the
+bundled Rith Engine skill into your project:
 
 ```bash
-cp -r Rith Engine/.claude/skills/rith /path/to/your/repo/.claude/skills/
+cp -r .claude/skills/rith /path/to/your/repo/.claude/skills/
 ```
 
 Then in Claude Code, say things like "use rith to fix issue #42" and it will invoke the appropriate workflow.
@@ -390,9 +383,9 @@ Follow the hint — delete the stale workspace folder and re-run, or pass `--no-
 
 Install Bun: `curl -fsSL https://bun.sh/install | bash`, then restart your terminal (or `source ~/.bashrc`).
 
-### "command not found: claude"
+### "AI provider requires a model"
 
-Install Claude Code CLI: see [docs.claude.com/claude-code/installation](https://docs.claude.com/en/docs/claude-code/installation).
+Set a model via node `model:`, workflow `model:`, or `pi.model` in `.rith/config.yaml` (for example `anthropic/claude-sonnet-4-5`).
 
 ### Clone command fails with 401/403
 
@@ -407,11 +400,10 @@ If it returns your GitHub profile, the token works. If not, regenerate it.
 
 ### AI doesn't respond
 
-Check that Claude authentication is working:
+Check that Pi authentication is working:
 
 ```bash
-claude --version   # Should show version
-claude /login      # Re-authenticate if needed
+pi /login      # Re-authenticate if needed
 ```
 
 ### "Cannot find module" or dependency errors
@@ -460,6 +452,6 @@ See [Authoring Workflows](/guides/authoring-workflows/) and [Authoring Commands]
 ## Further Reading
 
 - [Configuration](/getting-started/configuration/) — All configuration options
-- [AI Assistants](/getting-started/ai-assistants/) — Claude, Codex, and Pi setup details
+- [AI Assistants](/getting-started/ai-assistants/) — Pi setup and authentication
 - [CLI Reference](/reference/cli/) — Full CLI documentation
 - [Authoring Workflows](/guides/authoring-workflows/) — Creating custom workflows

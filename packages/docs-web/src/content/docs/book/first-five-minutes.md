@@ -18,10 +18,10 @@ Before you start, make sure you have:
 
 - [ ] **Git** installed (`git --version` should work)
 - [ ] **Bun** installed — get it at [bun.sh](https://bun.sh) if you don't have it (`bun --version`)
-- [ ] **Claude Code** installed and authenticated — run `claude /login` if you haven't
+- [ ] **Pi authentication** — Pi (the AI agent) is bundled with Rith Engine, so there's nothing extra to install. Authenticate with `pi /login` (OAuth), or set an API key (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, or `GEMINI_API_KEY`)
 - [ ] **A git repository** to run workflows against — any project works
 
-> **Already using Claude Code?** You're already authenticated. No API keys or extra setup needed — Rith Engine uses the same credentials.
+> **Authenticating Pi**: `pi /login` writes OAuth credentials to `~/.pi/agent/auth.json`, which Rith Engine picks up automatically. Already have an `ANTHROPIC_API_KEY` (or `OPENAI_API_KEY` / `GEMINI_API_KEY`) in your environment? That works too — no extra setup needed.
 
 ---
 

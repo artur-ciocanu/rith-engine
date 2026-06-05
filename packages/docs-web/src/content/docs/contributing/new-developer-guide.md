@@ -8,7 +8,7 @@ sidebar:
   order: 1
 ---
 
-> **TL;DR**: Rith Engine is a CLI workflow engine that runs AI coding assistants (Claude Code, Codex) in isolated git worktrees. CI systems or developers invoke `rith workflow run` to execute multi-step AI workflows defined as YAML DAGs.
+> **TL;DR**: Rith Engine is a CLI workflow engine that runs the Pi Coding Agent in isolated git worktrees. CI systems or developers invoke `rith workflow run` to execute multi-step AI workflows defined as YAML DAGs.
 
 ---
 
@@ -24,7 +24,7 @@ sidebar:
 │                                                                    │
 │   ┌──────────┐     ❌ No isolation    ┌──────────────────┐        │
 │   │  CI / Dev│ ──────────────────────│  AI Assistant     │        │
-│   │          │     ❌ No multi-step  │  (Claude Code)   │        │
+│   │          │     ❌ No multi-step  │  (Pi)            │        │
 │   └──────────┘     ❌ No DAG flows   └──────────────────┘        │
 │                                                                    │
 └─────────────────────────────────────────────────────────────────────┘
@@ -36,8 +36,8 @@ sidebar:
 │   │  CI Job  │ ─rith workflow run───▶│  Rith Engine CLI │         │
 │   │  or Dev  │                       │                  │         │
 │   └──────────┘                       │  ┌────────────┐  │         │
-│        │                             │  │Claude Code │  │         │
-│        │                             │  │   SDK      │  │         │
+│        │                             │  │Pi Coding   │  │         │
+│        │                             │  │Agent SDK   │  │         │
 │        │                             │  └─────┬──────┘  │         │
 │        │                             │        │         │         │
 │        │                             │  ┌─────▼──────┐  │         │
@@ -61,8 +61,8 @@ sidebar:
 │                                                                          │
 │   ┌─────────┐            ┌─────────────────┐            ┌──────────┐   │
 │   │ CI Job  │            │                 │            │          │   │
-│   │ or Dev  │──workflow──▶│  Workflow       │───Claude──▶│ Git Repo │   │
-│   │ Terminal│   run      │  Executor       │   Code     │          │   │
+│   │ or Dev  │──workflow──▶│  Workflow       │─────Pi────▶│ Git Repo │   │
+│   │ Terminal│   run      │  Executor       │            │          │   │
 │   │         │◀──exit ────│  (DAG runner)   │◀──────────│ (files)  │   │
 │   └─────────┘   code     └─────────────────┘            └──────────┘   │
 │                                                                          │
@@ -383,8 +383,8 @@ For larger features, Ralph executes user stories one-by-one until complete. The 
 │                                  │                                      │
 │                                  ▼                                      │
 │   ┌─────────────────────────────────────────────────────────────────┐  │
-│   │ packages/providers    AI assistant interface                    │  │
-│   │                       Claude Code SDK, Codex SDK, Pi           │  │
+│   │ packages/providers    Pi Coding Agent interface                 │  │
+│   │                       pi-coding-agent SDK (sole AI provider)    │  │
 │   └──────────────────────────────┬──────────────────────────────────┘  │
 │                                  │                                      │
 │                                  ▼                                      │
@@ -439,27 +439,27 @@ Each workflow run gets its own isolated copy of the repo:
 │                                                                         │
 │   ┌─────────────────────────────────────────────────────────────────┐  │
 │   │ 1. DEFAULTS (hardcoded)                                         │  │
-│   │    assistant: claude                                            │  │
+│   │    pi.model: anthropic/claude-sonnet-4-5  # built-in default    │  │
 │   └─────────────────────────────────────────────────────────────────┘  │
 │                              │                                          │
 │                              ▼                                          │
 │   ┌─────────────────────────────────────────────────────────────────┐  │
 │   │ 2. GLOBAL CONFIG (~/.rith/config.yaml)                         │  │
-│   │    defaultAssistant: claude                                     │  │
+│   │    pi.model: anthropic/claude-opus-4-5                          │  │
 │   └─────────────────────────────────────────────────────────────────┘  │
 │                              │                                          │
 │                              ▼                                          │
 │   ┌─────────────────────────────────────────────────────────────────┐  │
 │   │ 3. REPO CONFIG (.rith/config.yaml)                             │  │
-│   │    assistant: codex          # This repo prefers Codex          │  │
-│   │    commands:                                                    │  │
-│   │      folder: .claude/commands/custom                            │  │
+│   │    pi:                       # This repo's AI settings          │  │
+│   │      model: anthropic/claude-sonnet-4-5                         │  │
+│   │    commands: { folder: .rith/commands/custom }                  │  │
 │   └─────────────────────────────────────────────────────────────────┘  │
 │                              │                                          │
 │                              ▼                                          │
 │   ┌─────────────────────────────────────────────────────────────────┐  │
 │   │ 4. ENVIRONMENT VARIABLES (highest priority)                     │  │
-│   │    DEFAULT_AI_ASSISTANT=claude                                  │  │
+│   │    DATABASE_URL=postgres://...   # overrides config             │  │
 │   └─────────────────────────────────────────────────────────────────┘  │
 │                                                                         │
 └─────────────────────────────────────────────────────────────────────────┘
@@ -532,7 +532,7 @@ Each workflow run gets its own isolated copy of the repo:
 │                                                                         │
 │   ┌────────────────────────────────────────────────────────────────┐   │
 │   │                                                                │   │
-│   │   CI / Terminal ──▶ rith workflow run ──▶ AI (Claude/Codex)    │   │
+│   │   CI / Terminal ──▶ rith workflow run ──▶ AI (Pi)              │   │
 │   │                           │                    │               │   │
 │   │                           ▼                    ▼               │   │
 │   │                      Workflows           Git Worktrees         │   │

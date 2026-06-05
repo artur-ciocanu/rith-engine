@@ -11,10 +11,9 @@ sidebar:
 
 1. [Install Rith Engine](/getting-started/installation/)
 2. [Install Pi Coding Agent](/getting-started/ai-assistants/) — Rith Engine uses it as the AI executor
-3. Authenticate with your preferred provider (see [Pi Coding Agent auth](/getting-started/ai-assistants/#authentication))
-4. In compiled Rith Engine binaries, set `CLAUDE_BIN_PATH` (see [Binary path configuration](/getting-started/ai-assistants/#binary-path-configuration-compiled-binaries-only))
-5. Navigate to any git repository
-6. For private repos: set `GH_TOKEN` (GitHub), `GITLAB_TOKEN` (GitLab), or `GITEA_TOKEN` (Gitea/Forgejo) — Rith Engine uses these to authenticate when cloning
+3. Authenticate Pi (see [Pi Coding Agent auth](/getting-started/ai-assistants/#authentication))
+4. Navigate to any git repository
+5. For private repos: set `GH_TOKEN` (GitHub), `GITLAB_TOKEN` (GitLab), or `GITEA_TOKEN` (Gitea/Forgejo) — Rith Engine uses these to authenticate when cloning
 
 ## Run Your First Workflow
 

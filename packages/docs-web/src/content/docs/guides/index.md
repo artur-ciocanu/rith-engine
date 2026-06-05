@@ -22,11 +22,11 @@ How-to guides for building and running AI coding workflows with Rith Engine.
 - [Approval Nodes](/guides/approval-nodes/) — Human review gates with optional AI rework on rejection
 - [Script Nodes](/guides/script-nodes/) — TypeScript/JavaScript (bun) or Python (uv) as a deterministic DAG node, without AI
 
-## Node Features (Claude only)
+## Node Features
 
-- [Per-Node Hooks](/guides/hooks/) — Attach Claude SDK hooks for tool control, context injection, and input modification
-- [Per-Node MCP Servers](/guides/mcp-servers/) — Connect external tools (GitHub, Postgres, etc.) to individual nodes
-- [Per-Node Skills](/guides/skills/) — Preload specialized knowledge into node agents
+- [Per-Node Skills](/guides/skills/) — Preload specialized knowledge into node agents (supported on Pi)
+- [Per-Node Hooks](/guides/hooks/) — Claude Agent SDK hooks for tool control (not supported under Pi)
+- [Per-Node MCP Servers](/guides/mcp-servers/) — Connect external tools to individual nodes (not supported under Pi)
 
 ## Bundled Workflows
 

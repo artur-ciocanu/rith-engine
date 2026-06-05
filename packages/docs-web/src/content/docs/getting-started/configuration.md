@@ -1,6 +1,6 @@
 ---
 title: Configuration
-description: Configure Rith Engine with API keys, assistants, and project settings.
+description: Configure Rith Engine with API keys, Pi settings, and project configuration.
 category: getting-started
 area: config
 audience: [user, operator]
@@ -14,12 +14,9 @@ Set these in your shell or `.env` file:
 
 | Variable | Required | Description |
 |----------|----------|-------------|
-| `CLAUDE_BIN_PATH` | No (binary builds autodetect `~/.local/bin/claude`) | Absolute path to the Claude Code binary, SDK `cli.js`, or the npm platform-package directory (e.g. `@anthropic-ai/claude-code-win32-x64`, auto-expanded to `claude`/`claude.exe`). Overrides autodetection in compiled Rith Engine binaries. Falls back to `assistants.claude.claudeBinaryPath`, then to the native-installer path. Dev mode (`bun run`) auto-resolves via `node_modules`. |
-| `CLAUDE_USE_GLOBAL_AUTH` | No | Set to `true` to use credentials from `claude /login` (default when no other Claude token is set) |
-| `CLAUDE_CODE_OAUTH_TOKEN` | No | OAuth token from `claude setup-token` (alternative to global auth) |
-| `CLAUDE_API_KEY` | No | Anthropic API key for pay-per-use (alternative to global auth) |
-| `CODEX_BIN_PATH` | No | Absolute path to the Codex CLI binary. Overrides auto-detection in compiled Rith Engine builds. |
-| `CODEX_ACCESS_TOKEN` | Yes (for Codex) | Codex access token (see [AI Assistants](/getting-started/ai-assistants/)) |
+| `ANTHROPIC_API_KEY` | No | Anthropic API key for Pi auth (alternative to `pi /login`) |
+| `OPENAI_API_KEY` | No | OpenAI API key for Pi auth (alternative to `pi /login`) |
+| `GEMINI_API_KEY` | No | Google Gemini API key for Pi auth (alternative to `pi /login`) |
 | `DATABASE_URL` | No | PostgreSQL connection string (default: SQLite) |
 | `GH_TOKEN` | No | GitHub personal access token — used to authenticate when cloning private GitHub repos |
 | `GITLAB_TOKEN` | No | GitLab personal/project access token — used to authenticate when cloning private GitLab repos (also used by the GitLab adapter) |
@@ -32,17 +29,13 @@ Set these in your shell or `.env` file:
 Create `.rith/config.yaml` in your repository:
 
 ```yaml
-assistants:
-  claude:
-    model: sonnet  # or 'opus', 'haiku', 'inherit'
-    settingSources:
-      - project
-  codex:
-    model: gpt-5.3-codex
-    modelReasoningEffort: medium
+pi:
+  model: anthropic/claude-sonnet-4-5
+  enableExtensions: false           # load Pi's extension ecosystem (default: false)
+  extensionFlags: { plan: true }    # per-extension feature flags (pi --<flag>)
+  maxConcurrent: 4                   # cap concurrent Pi sessions across parallel DAG nodes
 
 # docs:
 #   path: packages/docs-web/src/content/docs  # Optional: default is docs/
-```
 
 See the [full configuration reference](/reference/configuration/) for all options.

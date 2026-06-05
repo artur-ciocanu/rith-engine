@@ -195,25 +195,24 @@ You've just built a mini version of `rith-idea-to-pr` — the same structure, co
 |--------|-------------|-------------|
 | `name` | Identifies the workflow in `rith workflow list` | Required |
 | `description` | Shown in listings and used by the router | Required |
-| `provider` | Sets the AI provider (any registered provider, e.g. `claude`, `codex`) | When you need a specific provider |
-| `model` | Sets the model for all nodes (`sonnet`, `opus`, `haiku`) | When you want to override the config default |
+| `model` | Sets the model for all nodes (`anthropic/claude-sonnet-4-5`, `anthropic/claude-opus-4-5`, `anthropic/claude-haiku-4-5`) | When you want to override the config default |
 | `context` | `fresh` starts a new session; `shared` inherits from prior node | Use `fresh` before verification nodes |
 | `depends_on` | List of node IDs that must complete before this node runs | To express ordering and fan-in |
 | `idle_timeout` | Per-node idle timeout in milliseconds (default: 5 minutes) | For long-running nodes |
 
-These options apply at the node level (inside `nodes:`). `provider` and `model` can also be set at the top level of the YAML to apply to all nodes.
+These options apply at the node level (inside `nodes:`). `model` can also be set at the top level of the YAML to apply to all nodes.
 
 **Per-node model override:**
 ```yaml
 nodes:
   - id: plan
     command: rith-create-plan
-    model: opus        # use the more capable model for planning
+    model: anthropic/claude-opus-4-5    # use the more capable model for planning
 
   - id: validate
     command: run-tests
     depends_on: [plan]
-    model: haiku       # fast and cheap for a mechanical check
+    model: anthropic/claude-haiku-4-5   # fast and cheap for a mechanical check
     context: fresh
 ```
 

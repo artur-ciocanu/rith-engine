@@ -115,9 +115,7 @@ description: |
   What this workflow does.
 
 # Optional workflow-level configuration
-provider: claude
-model: sonnet
-interactive: true                # Ensures approval gates pause for user input
+model: anthropic/claude-sonnet-4-5
 worktree:                        # Optional: pin isolation behavior regardless of caller
   enabled: false                 #   false = always run in the live checkout (--no-worktree).
                                  #           Use for read-only workflows like triage/reporting.
@@ -133,7 +131,7 @@ tags: [GitLab, Review]           # Optional: filter tags for categorization. Ove
 nodes:
   - id: classify                 # Unique node ID (used for dependency refs and $id.output)
     command: classify-issue      # Loads from .rith/commands/classify-issue.md
-    output_format:               # Optional: structured JSON output. SDK-enforced on Claude; best-effort (prompt + JSON extraction) on Pi.
+    output_format:               # Optional: structured JSON output. Best-effort on Pi (schema appended to prompt, JSON extracted from result text).
       type: object
       properties:
         type:
@@ -160,11 +158,10 @@ nodes:
     prompt: "Summarize the changes made in $implement.output"  # Inline prompt (no command file)
     depends_on: [implement]
     context: fresh               # Force fresh session for this node
-    provider: claude             # Per-node provider override
-    model: haiku                 # Per-node model override
-    # hooks:                     # Optional: per-node SDK hook callbacks (Claude only) — see hooks guide
-    # mcp: .rith/mcp/servers.json  # Optional: per-node MCP servers (Claude)
-    # skills: [remotion-best-practices]  # Optional: per-node skills (Claude only) — see skills guide
+    model: anthropic/claude-haiku-4-5  # Per-node model override
+    # hooks: ...                 # NOT supported under Pi (Claude Agent SDK only)
+    # mcp: .rith/mcp/servers.json  # NOT supported under Pi (Claude Agent SDK only)
+    # skills: [remotion-best-practices]  # Optional: per-node skills — see skills guide
 ```
 
 ### Node Fields
@@ -198,28 +195,27 @@ nodes:
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
-| `provider` | string | inherited | Per-node provider override (any registered provider, e.g. `'claude'`, `'pi'`) |
-| `model` | string | inherited | Per-node model override |
-| `output_format` | object | — | JSON Schema for structured output. SDK-enforced on Claude; best-effort on Pi (schema appended to prompt, JSON extracted from result text) |
-| `allowed_tools` | string[] | — | Whitelist of built-in tools. `[]` = no tools. Claude only |
-| `denied_tools` | string[] | — | Tools to remove. Applied after `allowed_tools`. Claude only |
-| `hooks` | object | — | Per-node SDK hook callbacks. Claude only. See [Hooks](/guides/hooks/) |
-| `mcp` | string | — | Path to MCP server config JSON file. Claude only. See [MCP Servers](/guides/mcp-servers/) |
-| `skills` | string[] | — | Skills to preload. Claude only. See [Skills](/guides/skills/) |
-| `agents` | object | — | Inline sub-agent definitions keyed by kebab-case ID. Claude only. See [Inline sub-agents](#inline-sub-agents) |
-| `effort` | `'low'`\|`'medium'`\|`'high'`\|`'max'` | — | Reasoning depth. Claude only. Also settable at workflow level |
-| `thinking` | string \| object | — | Thinking mode: `'adaptive'`, `'disabled'`, or `{type:'enabled', budgetTokens:N}`. Claude only. Also settable at workflow level |
-| `maxBudgetUsd` | number | — | USD cost cap; node fails if exceeded. Claude only. Per-node only |
-| `systemPrompt` | string | — | Override the default `claude_code` system prompt for this node. Claude only. Per-node only |
-| `fallbackModel` | string | — | Model to use if primary model fails. Claude only. Also settable at workflow level |
-| `betas` | string[] | — | SDK beta feature flags (e.g., `'context-1m-2025-08-07'`). Claude only. Also settable at workflow level |
-| `sandbox` | object | — | OS-level filesystem/network restrictions for the Claude subprocess. Claude only. Also settable at workflow level |
+| `model` | string | inherited | Per-node model override (Pi `<provider-id>/<model-id>` ref) |
+| `output_format` | object | — | JSON Schema for structured output. Best-effort on Pi (schema appended to prompt, JSON extracted from result text) |
+| `allowed_tools` | string[] | — | Whitelist of built-in tools. `[]` = no tools. Pi enforces tool restrictions (built-ins: `read, bash, edit, write, grep, find, ls`) |
+| `denied_tools` | string[] | — | Tools to remove. Applied after `allowed_tools`. Enforced by Pi |
+| `skills` | string[] | — | Skills to preload. Resolved from `.agents/skills` and `.claude/skills`. See [Skills](/guides/skills/) |
+| `effort` | `'low'`\|`'medium'`\|`'high'`\|`'max'` | — | Reasoning depth (Pi maps low\|medium\|high\|max; `max`→`xhigh`). Also settable at workflow level |
+| `thinking` | string | — | Thinking mode, string form (e.g. `thinking: high`). Object form is Claude-specific and ignored by Pi. Prefer `effort`. Also settable at workflow level |
+| `systemPrompt` | string | — | Override Pi's default system prompt (string form only; non-string forms ignored with a warning). Per-node or request-level |
+| `hooks` | object | — | **Not supported under Pi** (Claude Agent SDK only); accepted but ignored. See [Hooks](/guides/hooks/) |
+| `mcp` | string | — | **Not supported under Pi** (Claude Agent SDK only); accepted but ignored. See [MCP Servers](/guides/mcp-servers/) |
+| `agents` | object | — | Inline sub-agent definitions. **Not supported under Pi** (ignored). See [Inline sub-agents](#inline-sub-agents) |
+| `maxBudgetUsd` | number | — | **Not supported under Pi** (cost control ignored). Per-node only |
+| `fallbackModel` | string | — | **Not supported under Pi** (ignored). Also settable at workflow level |
+| `betas` | string[] | — | **Not supported under Pi** (Claude Agent SDK only) |
+| `sandbox` | object | — | **Not supported under Pi** (ignored). Also settable at workflow level |
 
-### Claude SDK Advanced Options
+### Reasoning Options (Pi)
 
-These fields map directly to Claude Agent SDK options. All are Claude-only. They can be set **per-node** or at the **workflow level** as defaults (per-node takes precedence). `maxBudgetUsd` and `systemPrompt` are per-node only.
+Pi supports two reasoning controls, settable **per-node** or at the **workflow level** as defaults (per-node takes precedence).
 
-**effort** — reasoning depth:
+**effort** — reasoning depth. Pi maps `low | medium | high | max` (with `max` raised to `xhigh`):
 
 ```yaml
 - id: thorough-review
@@ -227,82 +223,34 @@ These fields map directly to Claude Agent SDK options. All are Claude-only. They
   effort: high   # 'low' | 'medium' | 'high' | 'max'
 ```
 
-**thinking** — extended thinking mode (string shorthand or object form):
+**thinking** — extended thinking mode. Use the **string form** only; the object form is Claude-specific and Pi ignores it with a warning. Prefer `effort`:
 
 ```yaml
 - id: deep-analysis
   command: analyze
-  thinking: adaptive              # 'adaptive' | 'disabled'
-  # thinking: { type: enabled, budgetTokens: 8000 }  # object form
+  thinking: high                  # string form (e.g. 'high')
 ```
 
-**maxBudgetUsd** — per-node USD cost cap (node fails with error if exceeded):
-
-```yaml
-- id: expensive-step
-  command: generate
-  maxBudgetUsd: 2.50
-```
-
-**systemPrompt** — override the default `claude_code` system prompt:
-
-```yaml
-- id: security-review
-  prompt: "Review this code for vulnerabilities"
-  systemPrompt: "You are a security expert specializing in TypeScript. Focus only on security issues."
-```
-
-**fallbackModel** — use a different model if the primary fails:
-
-```yaml
-- id: implement
-  command: implement
-  model: claude-opus-4-5
-  fallbackModel: claude-sonnet-4-6
-```
-
-**betas** — SDK beta feature flags:
-
-```yaml
-- id: long-context-node
-  command: summarize
-  betas: ['context-1m-2025-08-07']
-```
-
-**sandbox** — OS-level filesystem/network restrictions (layers on top of worktree isolation):
-
-```yaml
-- id: untrusted-code-analysis
-  command: analyze-external
-  sandbox:
-    enabled: true
-    network:
-      allowedDomains: []
-      allowManagedDomainsOnly: true
-    filesystem:
-      denyWrite: ['/etc', '/usr']
-```
-
-**Workflow-level defaults** (inherited by all Claude nodes unless overridden per-node):
+**Workflow-level defaults** (inherited by all nodes unless overridden per-node):
 
 ```yaml
 name: my-workflow
-effort: high         # All Claude nodes use high effort by default
-thinking: adaptive   # All Claude nodes use adaptive thinking
-fallbackModel: claude-haiku-4-5-20251001
-betas: ['context-1m-2025-08-07']
-sandbox:
-  enabled: true
+effort: high         # All nodes use high effort by default
+thinking: high       # All nodes use this thinking level
 
 nodes:
   - id: step1
     command: step1
-    # Inherits workflow-level effort, thinking, fallbackModel, betas, sandbox
+    # Inherits workflow-level effort and thinking
 
   - id: step2
     command: step2
     effort: low      # Per-node override — ignores workflow-level effort
 ```
+
+### Claude Agent SDK Options (not supported under Pi)
+
+The following fields map to the Claude Agent SDK. In the Pi-only build they are **ignored** — the schema may still accept them, but Pi does not act on them: `mcp`, `agents`, `hooks`, `sandbox`, `betas`, `settingSources`, `fallbackModel`, and `maxBudgetUsd`. Don't rely on them.
 
 ### `trigger_rule` Values
 
@@ -370,7 +318,7 @@ Variable substitution order:
 
 ### `output_format` for Structured JSON
 
-Use `output_format` to enforce JSON output from an AI node. The schema is passed via the Pi SDK's structured output support. For Claude, it uses the SDK's `outputFormat` option. Both ensure clean JSON for `when:` conditions and `$nodeId.output` substitution:
+Use `output_format` to request JSON output from an AI node. On Pi this is best-effort: the schema is appended to the prompt and JSON is extracted from the result text. The captured JSON is available for `when:` conditions and `$nodeId.output` substitution:
 
 ```yaml
 nodes:
@@ -393,29 +341,31 @@ nodes:
 
 ### `allowed_tools` and `denied_tools` for Tool Restrictions
 
-Restrict which built-in tools a node can use without relying on prompt instructions. Restrictions are enforced at the Claude SDK level.
+Restrict which built-in tools a node can use without relying on prompt instructions. Restrictions are enforced by Pi.
 
 ```yaml
 nodes:
   - id: review
     command: code-review
-    allowed_tools: [Read, Grep, Glob]   # whitelist — only these tools available
+    allowed_tools: [read, grep, find]   # whitelist — only these tools available
 
   - id: implement
     command: implement-feature
-    denied_tools: [WebSearch, WebFetch] # blacklist — remove these tools
+    denied_tools: [write, bash]         # blacklist — remove these tools
 
   - id: mcp-only
     command: mcp-command
     allowed_tools: []                   # empty list = disable all built-in tools
 ```
 
-- `allowed_tools: []` disables all built-in tools (useful for MCP-only nodes). Use the `mcp` field on a node to attach per-node MCP servers — see [Node Fields](#node-fields)
+- `allowed_tools: []` disables all built-in tools
 - If both are set, `denied_tools` is applied after `allowed_tools`
 - `undefined` (field absent) and `[]` have different semantics — absent means use default tool set, `[]` means no tools
-- Claude only
+- Enforced by Pi. Unknown tool names (e.g. Claude's `WebFetch`) are ignored with a warning
 
 ### Inline sub-agents
+
+> **Not supported under Pi.** The `agents:` field is accepted by the schema but the Pi provider ignores it — inline sub-agents require the Claude Agent SDK. The example below is retained for reference only.
 
 Define sub-agents directly in the workflow YAML. The main agent can spawn them in parallel via the `Task` tool — useful for map-reduce patterns where a cheap model (e.g. Haiku) briefs items and a stronger model reduces.
 
@@ -426,7 +376,7 @@ nodes:
       Fetch open issues via `gh issue list ...`. For each issue, spawn the
       brief-gen sub-agent in parallel (one message, multiple Task tool calls)
       to produce a 2-3 sentence brief. Then cluster briefs for duplicates.
-    model: sonnet
+    model: anthropic/claude-sonnet-4-5
     allowed_tools: [Bash, Read, Write, Task]
     agents:
       brief-gen:
@@ -434,7 +384,7 @@ nodes:
         prompt: |
           You are concise. Read the issue provided in the caller's prompt.
           Return JSON { summary, primarySymptom, affectedArea }.
-        model: haiku
+        model: anthropic/claude-haiku-4-5
         tools: [Bash, Read]
 ```
 
@@ -443,12 +393,12 @@ Keys:
 - Agent IDs must be **kebab-case** (`^[a-z0-9]+(-[a-z0-9]+)*$`)
 - Each definition requires `description` and `prompt`; `model`, `tools`, `disallowedTools`, `skills`, and `maxTurns` are optional
 - Map is merged with any SDK-level agents and with the internal `dag-node-skills` wrapper created by `skills:` — user-defined agents win on ID collision (a warning is logged when this happens)
-- Claude only. Community providers that don't support inline agents emit a warning and ignore the field
+- **Not supported under Pi** — the field is ignored with a warning.
 
 **When to use `agents:` vs `.claude/agents/*.md` files:**
 
 - **`agents:` (inline)** — use when the sub-agent is specific to ONE workflow's needs. Keeps the workflow self-contained in a single YAML file; travels cleanly in PRs and forks.
-- **`.claude/agents/*.md` (on-disk)** — use when the sub-agent is shared across multiple workflows OR the whole project (for example, a `triage-agent` used by several maintenance workflows). On-disk agents live outside workflow YAMLs and are picked up automatically by the Claude Agent SDK.
+- **`.claude/agents/*.md` (on-disk)** — use when the sub-agent is shared across multiple workflows OR the whole project (for example, a `triage-agent` used by several maintenance workflows). On-disk agents live outside workflow YAMLs. (Both sources require the Claude Agent SDK and are ignored under Pi.)
 
 Both sources coexist — inline agents and on-disk agents are both available to `Task(subagent_type=...)` at runtime.
 
@@ -615,39 +565,32 @@ Workflows can configure AI models and provider-specific options at the workflow 
 Model and options are resolved in this order:
 
 1. **Workflow-level** - Explicit settings in the workflow YAML
-2. **Config defaults** - `assistants.*` in `.rith/config.yaml`
-3. **SDK defaults** - Built-in defaults from the Claude SDK
+2. **Config defaults** - `pi.*` in `.rith/config.yaml`
+3. **Pi SDK defaults** - Built-in defaults from `~/.pi/agent/settings.json`
 
-### Provider and Model
+### Model
 
 ```yaml
 name: my-workflow
-provider: claude     # Any registered provider (default: from config)
-model: sonnet        # Model override (default: from config assistants.claude.model)
+model: anthropic/claude-sonnet-4-5   # Model override (default: from config pi.model)
 ```
 
-**Model strings:** Whatever you write in `model:` is forwarded verbatim to the resolved provider's SDK. Rith Engine doesn't keep an internal allow-list, because vendor SDKs ship new models faster than this doc can. The provider's API decides whether the string is valid at request time.
+**Model strings:** Whatever you write in `model:` is forwarded verbatim to Pi as a `<pi-provider-id>/<model-id>` ref. Rith Engine doesn't keep an internal allow-list — Pi's resolved backend decides whether the string is valid at request time.
 
 Common shapes you'll see in practice:
 
-- **Claude (Anthropic):** family aliases (`sonnet`, `opus`, `haiku`), full model IDs (`claude-opus-4-7`, `claude-3-5-sonnet-20241022`), context-window suffixed forms (`opus[1m]`, `claude-opus-4-7[1m]`), or `inherit` to reuse the previous session's model.
-- **Pi (Oh My Pi):** `<backend>/<model-id>` refs — e.g. `google/gemini-2.5-pro`, `openrouter/qwen/qwen3-coder`.
-- **Copilot (community):** GitHub Copilot model names — e.g. `gpt-5`, `gpt-5-mini`, `claude-sonnet-4.5`, or `auto`.
+- **Pi format** — `<pi-provider-id>/<model-id>` refs, e.g. `anthropic/claude-sonnet-4-5`, `google/gemini-2.5-pro`, `openrouter/qwen/qwen3-coder`.
 
-If the SDK rejects the string at request time, the node fails loudly with the SDK's error message — Rith Engine never silently re-routes a model from one provider to another based on the string.
-
-**Provider selection is independent of the model string** — a `model: opus[1m]` node with no `provider:` field will route to your `defaultAssistant` regardless of the model name. Always pair a provider-specific model string with an explicit `provider:` on the node.
+If Pi rejects the string at request time, the node fails loudly with Pi's error message.
 
 
-### Interactive Mode
 
-Set `interactive: true` to ensure the workflow pauses for user input at approval gates
-and interactive loop nodes. This is the recommended setting for any workflow containing
-approval or interactive loop nodes.
+### Approval Gates and Interactive Loops
+
+Approval gates and interactive loop nodes pause for user input automatically — there is no workflow-level toggle to enable this. (The former workflow-level `interactive:` option has been removed.)
 
 ```yaml
-name: my-interactive-workflow
-interactive: true   # Ensures approval gates pause for user response
+name: my-workflow
 
 nodes:
   - id: plan
@@ -661,18 +604,9 @@ nodes:
     depends_on: [review-gate]
 ```
 
-### Provider Validation
+### Model Validation
 
-Workflows are validated at load time for **provider identity only**:
-- Both the workflow-level `provider:` and any per-node `provider:` overrides must name a registered provider (`claude`, `pi`, `copilot`).
-- Validation errors are shown in `/workflow list`.
-
-Example validation error:
-```
-Unknown provider 'claud'. Registered: claude, pi, copilot
-```
-
-Model strings are not validated at load time — they're forwarded to the SDK as-is and validated by the upstream API at request time.
+Model strings are not validated at load time — they're forwarded to Pi as-is and validated by Pi's resolved backend at request time. A model must resolve from the node `model:`, the workflow `model:`, or `pi.model` in config; if none resolves, Pi errors with `Pi provider requires a model`.
 
 ### Resource Validation (CLI)
 
@@ -688,17 +622,15 @@ This checks resource resolution beyond what load-time validation covers. Use `--
 
 **`.rith/config.yaml`:**
 ```yaml
-assistants:
-  claude:
-    model: haiku  # Fast model for most tasks
+pi:
+  model: anthropic/claude-haiku-4-5  # Fast model for most tasks
 ```
 
 **Workflow with override:**
 ```yaml
 name: complex-analysis
 description: Deep code analysis requiring powerful model
-provider: claude
-model: opus  # Override config default (haiku) for this workflow
+model: anthropic/claude-opus-4-5  # Override config default for this workflow
 
 nodes:
   - id: analyze
@@ -710,7 +642,7 @@ nodes:
     context: fresh
 ```
 
-The workflow uses `opus` instead of the config default `haiku`, but other settings inherit from config.
+The workflow uses `anthropic/claude-opus-4-5` instead of the config default `anthropic/claude-haiku-4-5`, but other settings inherit from config.
 
 ---
 
@@ -1150,16 +1082,16 @@ Before deploying a workflow:
 5. **Parallel by default** — nodes in the same topological layer run concurrently
 6. **Conditional branching** — `when:` conditions and `trigger_rule` control which nodes run
 7. **`output_format`** — enforce structured JSON output from AI nodes for reliable branching
-8. **`allowed_tools` / `denied_tools`** — restrict tools per node (Claude only, SDK-enforced)
+8. **`allowed_tools` / `denied_tools`** — restrict tools per node, enforced by Pi
 9. **`retry:`** — auto-retries transient errors (default: 2 retries / 3 total attempts, 3 s backoff); customize per node
-10. **`hooks`** — attach SDK hook callbacks to Claude nodes for tool control and context injection
-11. **`mcp:`** — attach per-node MCP servers via JSON config (Claude)
-12. **`skills:`** — preload skills into Claude nodes for domain expertise
-13. **`agents:`** — inline Claude sub-agent definitions invokable via the `Task` tool
-14. **`effort` / `thinking`** — control reasoning depth and thinking mode per node or workflow (Claude only)
-15. **`maxBudgetUsd`** — set a USD cost cap per node; fails with error if exceeded (Claude only)
-16. **`systemPrompt`** — override the default system prompt per node (Claude only)
-17. **`sandbox`** — OS-level filesystem/network restrictions per node or workflow (Claude only)
+10. **`hooks`** — Claude Agent SDK hooks; not supported under Pi
+11. **`mcp:`** — MCP servers; not supported under Pi
+12. **`skills:`** — preload skills into nodes for domain expertise
+13. **`agents:`** — inline sub-agent definitions; not supported under Pi
+14. **`effort` / `thinking`** — control reasoning depth (Pi; `thinking` string form) per node or workflow
+15. **`maxBudgetUsd`** — cost cap; not supported under Pi
+16. **`systemPrompt`** — override Pi's default system prompt (string form)
+17. **`sandbox`** — OS-level restrictions; not supported under Pi
 18. **Loop nodes** — use `loop:` within a DAG node for iterative execution until completion signal
 19. **Defaults as templates** — browse `.rith/workflows/defaults/` for real examples to copy and modify
 20. **Test thoroughly** — each command, the artifact flow, and edge cases

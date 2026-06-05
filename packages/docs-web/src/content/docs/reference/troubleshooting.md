@@ -39,12 +39,6 @@ Docker:
 docker compose logs -f app
 ```
 
-**Verify configuration:**
-```bash
-# Check your Rith Engine config
-rith doctor
-```
-
 **Test with health check:**
 ```bash
 curl http://localhost:3090/health
@@ -278,40 +272,25 @@ docker compose exec app ls -la /.rith/workspaces
 docker compose exec app git clone https://github.com/user/repo /.rith/workspaces/test-repo
 ```
 
-## "Claude Code not found" When Running Compiled Binary
+## Pi Provider Errors
 
-**Symptom:** A workflow that uses Claude fails with:
+**Symptom:** A workflow fails with `Pi provider requires a model`.
 
-```
-Claude Code not found. Rith Engine requires the Claude Code executable to be
-reachable at a configured path in compiled builds.
-```
+**Cause:** No model resolved. Pi needs a model from one of these sources (highest priority first): a node's `model:`, the workflow's top-level `model:`, or `pi.model` in `.rith/config.yaml`.
 
-**Cause:** Compiled Rith Engine binaries (`rith` from the curl/PowerShell installer or Homebrew) do not bundle Claude Code. They need an explicit path to the Claude Code executable. Source/dev mode (`bun run`) auto-resolves via `node_modules` and is unaffected.
-
-**Fix:** Install Claude Code separately and point Rith Engine at it.
-
-```bash
-# macOS / Linux / WSL — Anthropic's recommended native installer
-curl -fsSL https://claude.ai/install.sh | bash
-export CLAUDE_BIN_PATH="$HOME/.local/bin/claude"
-
-# Windows (PowerShell)
-irm https://claude.ai/install.ps1 | iex
-$env:CLAUDE_BIN_PATH = "$env:USERPROFILE\.local\bin\claude.exe"
-```
-
-For a durable setup, set the path in `~/.rith/config.yaml` instead:
+**Fix:** Set a model in Pi format `<pi-provider-id>/<model-id>` (e.g. `anthropic/claude-sonnet-4-5`):
 
 ```yaml
-assistants:
-  claude:
-    claudeBinaryPath: /absolute/path/to/claude
+# ~/.rith/config.yaml or .rith/config.yaml
+pi:
+  model: anthropic/claude-sonnet-4-5
 ```
 
-`rith setup` auto-detects and writes `CLAUDE_BIN_PATH` for you. After setup, run `rith doctor` to confirm the binary actually spawns. Docker users do not need to do anything — the image pre-sets the variable.
+**Symptom:** Authentication errors when Pi calls the model backend.
 
-See the [AI Assistants → Binary path configuration](/getting-started/ai-assistants/#binary-path-configuration-compiled-binaries-only) guide for the full install matrix.
+**Cause:** No credentials. Pi is bundled with Rith Engine — there is nothing to install — but it still needs auth for the chosen backend.
+
+**Fix:** Run `pi /login` (OAuth, writes `~/.pi/agent/auth.json`, picked up automatically) or export an API key — `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, or `GEMINI_API_KEY`. Local backends (LM Studio, ollama) registered in `~/.pi/agent/models.json` need no credentials.
 
 ## Workflows Hang Silently When Run Inside Claude Code
 
