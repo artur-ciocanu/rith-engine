@@ -197,7 +197,6 @@ async function loadWorkflows(cwd: string): Promise<WorkflowLoadResult> {
 interface WorkflowJsonEntry {
   name: string;
   description: string;
-  provider?: string;
   model?: string;
   modelReasoningEffort?: string;
   webSearchMode?: string;
@@ -216,7 +215,6 @@ export async function workflowListCommand(cwd: string, json?: boolean): Promise<
           name: w.name,
           description: w.description,
         };
-        if (w.provider !== undefined) entry.provider = w.provider;
         if (w.model !== undefined) entry.model = w.model;
         if (w.modelReasoningEffort !== undefined)
           entry.modelReasoningEffort = w.modelReasoningEffort;
@@ -247,9 +245,6 @@ export async function workflowListCommand(cwd: string, json?: boolean): Promise<
     for (const { workflow } of workflowEntries) {
       console.log(`  ${workflow.name}`);
       console.log(`    ${workflow.description}`);
-      if (workflow.provider) {
-        console.log(`    Provider: ${workflow.provider}`);
-      }
       console.log('');
     }
   }

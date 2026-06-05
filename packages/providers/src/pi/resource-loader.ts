@@ -31,10 +31,10 @@ export interface NoopResourceLoaderOptions {
    * This is the switch that opens up the community package ecosystem
    * (https://shittycodingagent.ai/packages) — ~540 npm packages registering
    * custom tools and lifecycle hooks via `pi.registerTool()` / `pi.on()`.
-   * Tools and hooks work fully in programmatic sessions; TUI-only features
-   * (renderers, keybindings, slash commands) silently no-op. Extensions that
-   * gate on `ctx.hasUI` additionally need `interactive: true` — see
-   * `PiProviderDefaults.interactive`.
+   * Tools and hooks work fully in programmatic sessions. Extensions that gate
+   * on `ctx.hasUI` also engage: the Pi provider binds a UI context that forwards
+   * their `notify()` output into the chunk stream (so `hasUI` is true). Only
+   * TUI-only features (renderers, keybindings, slash commands) silently no-op.
    *
    * Trust boundary: enabling this loads arbitrary JS code with the Rith Engine
    * server's OS permissions. Only flip this on when the operator trusts both

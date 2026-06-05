@@ -1435,72 +1435,37 @@ describe('PiProvider', () => {
     expect(result?.structuredOutput).toBeUndefined();
   });
 
-  // ─── Interactive ExtensionUIContext binding ───────────────────────────
+  // ─── Extension session_start binding ──────────────────────────────────
 
-  test('interactive: true with enableExtensions binds a UIContext to the session', async () => {
+  test('enableExtensions (default) fires bindExtensions with a notify-forwarding UIContext', async () => {
     process.env.GEMINI_API_KEY = 'sk-test';
     resetScript(scriptedAgentEnd());
 
     await consume(
       new PiProvider().sendQuery('hi', '/tmp', undefined, {
         model: 'google/gemini-2.5-pro',
-        assistantConfig: { enableExtensions: true, interactive: true },
       })
     );
 
     expect(mockBindExtensions).toHaveBeenCalledTimes(1);
-    const [bindings] = mockBindExtensions.mock.calls[0] as [{ uiContext?: unknown }];
+    const [bindings] = mockBindExtensions.mock.calls[0] as [{ uiContext?: { notify?: unknown } }];
+    // A bound uiContext is what makes ctx.hasUI true AND forwards extension notify().
     expect(bindings.uiContext).toBeDefined();
+    expect(typeof bindings.uiContext?.notify).toBe('function');
   });
 
-  test('enableExtensions: false disables binding even if interactive: true is set', async () => {
+  test('enableExtensions: false skips bindExtensions', async () => {
     process.env.GEMINI_API_KEY = 'sk-test';
     resetScript(scriptedAgentEnd());
 
     await consume(
       new PiProvider().sendQuery('hi', '/tmp', undefined, {
         model: 'google/gemini-2.5-pro',
-        assistantConfig: { enableExtensions: false, interactive: true },
+        assistantConfig: { enableExtensions: false },
       })
     );
 
     expect(mockBindExtensions).not.toHaveBeenCalled();
-  });
-
-  test('interactive: false with extensions on binds empty (session_start fires, no UIContext)', async () => {
-    // When extensions are loaded, session_start MUST fire so each extension's
-    // startup handler runs (reads flags, registers tools, etc.). Binding with
-    // no uiContext keeps Pi's internal noOpUIContext active so hasUI stays
-    // false — extensions that gate UI flows (like plannotator) will auto-approve
-    // in this mode.
-    process.env.GEMINI_API_KEY = 'sk-test';
-    resetScript(scriptedAgentEnd());
-
-    await consume(
-      new PiProvider().sendQuery('hi', '/tmp', undefined, {
-        model: 'google/gemini-2.5-pro',
-        assistantConfig: { interactive: false },
-      })
-    );
-
-    expect(mockBindExtensions).toHaveBeenCalledTimes(1);
-    const [bindings] = mockBindExtensions.mock.calls[0] as [{ uiContext?: unknown }];
-    expect(bindings.uiContext).toBeUndefined();
-  });
-
-  test('default (nothing set) binds with UIContext — extensions + interactive both on', async () => {
-    process.env.GEMINI_API_KEY = 'sk-test';
-    resetScript(scriptedAgentEnd());
-
-    await consume(
-      new PiProvider().sendQuery('hi', '/tmp', undefined, {
-        model: 'google/gemini-2.5-pro',
-      })
-    );
-
-    expect(mockBindExtensions).toHaveBeenCalledTimes(1);
-    const [bindings] = mockBindExtensions.mock.calls[0] as [{ uiContext?: unknown }];
-    expect(bindings.uiContext).toBeDefined();
   });
 
   // ─── extensionFlags pass-through ──────────────────────────────────────
@@ -1529,7 +1494,6 @@ describe('PiProvider', () => {
         model: 'google/gemini-2.5-pro',
         assistantConfig: {
           enableExtensions: true,
-          interactive: true,
           extensionFlags: { plan: true, 'plan-file': 'PLAN.md' },
         },
       })
@@ -1554,47 +1518,6 @@ describe('PiProvider', () => {
 
     expect(mockSetFlagValue).not.toHaveBeenCalled();
     expect(mockBindExtensions).not.toHaveBeenCalled();
-  });
-
-  test('assistantConfig.env applies to process.env when not already set', async () => {
-    process.env.GEMINI_API_KEY = 'sk-test';
-    delete process.env.PI_TEST_ONE;
-    delete process.env.PI_TEST_TWO;
-    resetScript(scriptedAgentEnd());
-
-    try {
-      await consume(
-        new PiProvider().sendQuery('hi', '/tmp', undefined, {
-          model: 'google/gemini-2.5-pro',
-          assistantConfig: { env: { PI_TEST_ONE: 'one', PI_TEST_TWO: 'two' } },
-        })
-      );
-
-      expect(process.env.PI_TEST_ONE).toBe('one');
-      expect(process.env.PI_TEST_TWO).toBe('two');
-    } finally {
-      delete process.env.PI_TEST_ONE;
-      delete process.env.PI_TEST_TWO;
-    }
-  });
-
-  test('shell env wins over assistantConfig.env (no override)', async () => {
-    process.env.GEMINI_API_KEY = 'sk-test';
-    process.env.PI_TEST_SHELL_WINS = 'shell-value';
-    resetScript(scriptedAgentEnd());
-
-    try {
-      await consume(
-        new PiProvider().sendQuery('hi', '/tmp', undefined, {
-          model: 'google/gemini-2.5-pro',
-          assistantConfig: { env: { PI_TEST_SHELL_WINS: 'config-value' } },
-        })
-      );
-
-      expect(process.env.PI_TEST_SHELL_WINS).toBe('shell-value');
-    } finally {
-      delete process.env.PI_TEST_SHELL_WINS;
-    }
   });
 
   // Semaphore tests run last — the module-level piSemaphore singleton persists

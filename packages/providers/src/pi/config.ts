@@ -1,15 +1,14 @@
-import type { ProviderDefaults } from '../types';
+import type { PiDefaults } from '../types';
 
-export type { ProviderDefaults };
+export type { PiDefaults };
 
 /**
  * Parse raw YAML-derived config into typed Pi defaults.
- * Defensive: invalid fields are dropped silently (matches parseClaudeConfig
- * and parseCodexConfig — never throws, so broken user config can't prevent
- * provider registration or workflow discovery).
+ * Defensive: invalid fields are dropped silently so broken user config can't
+ * prevent provider registration or workflow discovery.
  */
-export function parseProviderConfig(raw: Record<string, unknown>): ProviderDefaults {
-  const result: ProviderDefaults = {};
+export function parseProviderConfig(raw: Record<string, unknown>): PiDefaults {
+  const result: PiDefaults = {};
 
   if (typeof raw.model === 'string') {
     result.model = raw.model;
@@ -17,10 +16,6 @@ export function parseProviderConfig(raw: Record<string, unknown>): ProviderDefau
 
   if (typeof raw.enableExtensions === 'boolean') {
     result.enableExtensions = raw.enableExtensions;
-  }
-
-  if (typeof raw.interactive === 'boolean') {
-    result.interactive = raw.interactive;
   }
 
   if (
@@ -36,18 +31,6 @@ export function parseProviderConfig(raw: Record<string, unknown>): ProviderDefau
     }
     if (Object.keys(flags).length > 0) {
       result.extensionFlags = flags;
-    }
-  }
-
-  if (raw.env && typeof raw.env === 'object' && !Array.isArray(raw.env)) {
-    const env: Record<string, string> = {};
-    for (const [key, value] of Object.entries(raw.env as Record<string, unknown>)) {
-      if (typeof value === 'string') {
-        env[key] = value;
-      }
-    }
-    if (Object.keys(env).length > 0) {
-      result.env = env;
     }
   }
 

@@ -42,7 +42,7 @@ nodes:
     command: rith-implement-tasks
     depends_on: [confirm-plan]
     context: fresh
-    model: opus[1m]
+    model: anthropic/claude-opus-4-5
 
   # ═══════════════════════════════════════════════════════════════════
   # PHASE 4: VALIDATE

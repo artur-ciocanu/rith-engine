@@ -55,34 +55,6 @@ describe('parseProviderConfig', () => {
     );
   });
 
-  test('parses interactive: true', () => {
-    expect(parseProviderConfig({ interactive: true })).toEqual({ interactive: true });
-  });
-
-  test('parses interactive: false', () => {
-    expect(parseProviderConfig({ interactive: false })).toEqual({ interactive: false });
-  });
-
-  test('drops non-boolean interactive silently', () => {
-    expect(parseProviderConfig({ interactive: 'yes' })).toEqual({});
-    expect(parseProviderConfig({ interactive: 1 })).toEqual({});
-    expect(parseProviderConfig({ interactive: null })).toEqual({});
-  });
-
-  test('combines all three fields', () => {
-    expect(
-      parseProviderConfig({
-        model: 'google/gemini-2.5-pro',
-        enableExtensions: true,
-        interactive: true,
-      })
-    ).toEqual({
-      model: 'google/gemini-2.5-pro',
-      enableExtensions: true,
-      interactive: true,
-    });
-  });
-
   test('parses extensionFlags with boolean and string values', () => {
     expect(parseProviderConfig({ extensionFlags: { plan: true, profile: 'Default' } })).toEqual({
       extensionFlags: { plan: true, profile: 'Default' },
@@ -112,56 +84,12 @@ describe('parseProviderConfig', () => {
       parseProviderConfig({
         model: 'openai-codex/gpt-5.1-codex-mini',
         enableExtensions: true,
-        interactive: true,
         extensionFlags: { plan: true },
       })
     ).toEqual({
       model: 'openai-codex/gpt-5.1-codex-mini',
       enableExtensions: true,
-      interactive: true,
       extensionFlags: { plan: true },
-    });
-  });
-
-  test('parses env with string values', () => {
-    expect(parseProviderConfig({ env: { PLANNOTATOR_REMOTE: '1', FOO: 'bar' } })).toEqual({
-      env: { PLANNOTATOR_REMOTE: '1', FOO: 'bar' },
-    });
-  });
-
-  test('drops non-string env values silently', () => {
-    expect(
-      parseProviderConfig({
-        env: { GOOD: 'yes', BOOL: true, NUM: 42, NESTED: { x: 1 }, NULLISH: null },
-      })
-    ).toEqual({ env: { GOOD: 'yes' } });
-  });
-
-  test('drops env when all entries are invalid', () => {
-    expect(parseProviderConfig({ env: { NUM: 42, NESTED: {} } })).toEqual({});
-  });
-
-  test('drops non-object env silently', () => {
-    expect(parseProviderConfig({ env: 'PLANNOTATOR_REMOTE=1' })).toEqual({});
-    expect(parseProviderConfig({ env: ['A=1'] })).toEqual({});
-    expect(parseProviderConfig({ env: null })).toEqual({});
-  });
-
-  test('combines env with other fields', () => {
-    expect(
-      parseProviderConfig({
-        model: 'openai-codex/gpt-5.4-mini',
-        enableExtensions: true,
-        interactive: true,
-        extensionFlags: { plan: true },
-        env: { PLANNOTATOR_REMOTE: '1' },
-      })
-    ).toEqual({
-      model: 'openai-codex/gpt-5.4-mini',
-      enableExtensions: true,
-      interactive: true,
-      extensionFlags: { plan: true },
-      env: { PLANNOTATOR_REMOTE: '1' },
     });
   });
 

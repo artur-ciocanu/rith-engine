@@ -17,7 +17,7 @@ description: |
   8. Simplifies changed code (implements fixes directly, not just reports)
   9. Reports results back to the GitHub issue with follow-up suggestions
 
-model: sonnet
+model: anthropic/claude-sonnet-4-5
 
 nodes:
   # ═══════════════════════════════════════════════════════════════
@@ -68,7 +68,7 @@ nodes:
 
       Provide reasoning for your classification.
     depends_on: [fetch-issue]
-    model: haiku
+    model: anthropic/claude-haiku-4-5
     allowed_tools: []
     output_format:
       type: object
@@ -132,7 +132,7 @@ nodes:
     command: rith-fix-issue
     depends_on: [bridge-artifacts]
     context: fresh
-    model: opus[1m]
+    model: anthropic/claude-opus-4-5
 
   # ═══════════════════════════════════════════════════════════════
   # PHASE 5: VALIDATE
@@ -236,7 +236,7 @@ nodes:
 
       Provide your reasoning for each decision.
     depends_on: [review-scope]
-    model: haiku
+    model: anthropic/claude-haiku-4-5
     allowed_tools: []
     context: fresh
     output_format:

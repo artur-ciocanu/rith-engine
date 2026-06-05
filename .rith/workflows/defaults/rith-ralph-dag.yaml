@@ -20,7 +20,7 @@ nodes:
   # ═══════════════════════════════════════════════════════════════
 
   - id: detect-input
-    model: haiku
+    model: anthropic/claude-haiku-4-5
     prompt: |
       # Detect Ralph Input
 
@@ -188,7 +188,7 @@ nodes:
   - id: implement
     depends_on: [validate-prd]
     idle_timeout: 600000
-    model: opus[1m]
+    model: anthropic/claude-opus-4-5
     loop:
       prompt: |
         # Ralph Agent — Autonomous Story Implementation

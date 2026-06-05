@@ -7,20 +7,18 @@
  * Located at ~/.rith/config.yaml
  */
 
-// Provider config defaults — canonical definitions live in @rith/providers/types.
-// Imported and re-exported here so existing consumers don't break.
-import type { ProviderDefaults } from '@rith/providers/types';
+// Pi config defaults — canonical definition lives in @rith/providers/types.
+// Imported and re-exported here so config consumers have one import site.
+import type { PiDefaults } from '@rith/providers/types';
 
-export type { ProviderDefaults };
+export type { PiDefaults };
 
 export interface GlobalConfig {
   /**
-   * Provider defaults (model, reasoning effort, etc.)
+   * Pi provider config: default model plus Rith→Pi execution policy
+   * (enableExtensions, extensionFlags, maxConcurrent).
    */
-  provider?: ProviderDefaults;
-
-  /** @deprecated Use `provider:` in config.yaml. Kept for backward compatibility. */
-  pi?: ProviderDefaults;
+  pi?: PiDefaults;
 
   /**
    * Directory preferences (usually not needed - defaults work well)
@@ -126,12 +124,9 @@ export interface RepoConfig {
   };
 
   /**
-   * Provider defaults for this repository
+   * Pi provider config for this repository.
    */
-  provider?: ProviderDefaults;
-
-  /** @deprecated Use `provider:` in config.yaml. Kept for backward compatibility. */
-  pi?: ProviderDefaults;
+  pi?: PiDefaults;
 }
 
 /**
@@ -139,7 +134,7 @@ export interface RepoConfig {
  * Environment variables take precedence
  */
 export interface MergedConfig {
-  provider: ProviderDefaults;
+  pi: PiDefaults;
   paths: {
     workspaces: string;
     worktrees: string;

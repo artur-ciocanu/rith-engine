@@ -2,7 +2,7 @@ import { createLogger } from '@rith/paths';
 import type { AgentSession, AgentSessionEvent } from '@mariozechner/pi-coding-agent';
 import type { AssistantMessage, Usage } from '@mariozechner/pi-ai';
 
-import type { MessageChunk, TokenUsage } from '../types'
+import type { MessageChunk, TokenUsage } from '../types';
 
 let cachedLog: ReturnType<typeof createLogger> | undefined;
 function getLog(): ReturnType<typeof createLogger> {
@@ -194,7 +194,7 @@ export function buildResultChunk(messages: readonly unknown[]): MessageChunk {
 // Structured-output parsing is shared across providers. Import once for local
 // use and re-export so existing callers and tests keep their import path
 // stable; new providers should import from `../shared/structured-output`.
-import { tryParseStructuredOutput } from '../shared/structured-output'
+import { tryParseStructuredOutput } from '../shared/structured-output';
 export { tryParseStructuredOutput };
 
 /**
@@ -275,7 +275,7 @@ export type BridgeQueueItem =
   | { kind: 'done' }
   | { kind: 'error'; error: Error };
 
-/** Lets the UI stub push notifications into the session's chunk queue. */
+/** Lets the UI stub push extension `notify()` output into the session's chunk queue. */
 export interface BridgeNotifier {
   setEmitter(fn: ((chunk: MessageChunk) => void) | undefined): void;
 }

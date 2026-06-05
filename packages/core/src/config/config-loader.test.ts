@@ -208,7 +208,7 @@ pi:
 
       const config = await loadConfig();
 
-      expect(config.provider).toEqual({});
+      expect(config.pi).toEqual({});
     });
 
     test('repo config overrides global provider config', async () => {
@@ -232,7 +232,7 @@ pi:
       });
 
       const config = await loadConfig('/test/repo');
-      expect(config.provider.model).toBe('gemini');
+      expect(config.pi.model).toBe('gemini');
     });
 
     test('merges provider config from global and repo', async () => {
@@ -256,8 +256,8 @@ pi:
       });
 
       const config = await loadConfig('/test/repo');
-      expect(config.provider.model).toBe('opus');
-      expect(config.provider.enableExtensions).toBe(true);
+      expect(config.pi.model).toBe('opus');
+      expect(config.pi.enableExtensions).toBe(true);
     });
 
     test('propagates baseBranch from repo worktree config', async () => {
@@ -417,13 +417,13 @@ pi:
     - user
 `);
       const config = await loadConfig();
-      expect(config.provider.settingSources).toEqual(['project', 'user']);
+      expect(config.pi.settingSources).toEqual(['project', 'user']);
     });
 
     test('defaults to undefined settingSources when not configured', async () => {
       mockFsReadFile.mockResolvedValue('');
       const config = await loadConfig();
-      expect(config.provider.settingSources).toBeUndefined();
+      expect(config.pi.settingSources).toBeUndefined();
     });
 
     test('repo settingSources overrides global', async () => {
@@ -447,7 +447,7 @@ pi:
       });
 
       const config = await loadConfig('/test/repo');
-      expect(config.provider.settingSources).toEqual(['project']);
+      expect(config.pi.settingSources).toEqual(['project']);
     });
   });
 
@@ -459,7 +459,7 @@ pi:
 `);
 
       await updateGlobalConfig({
-        provider: { model: 'opus' },
+        pi: { model: 'opus' },
       });
 
       expect(mockFsWriteFile).toHaveBeenCalledTimes(1);
@@ -475,7 +475,7 @@ pi:
 `);
 
       await updateGlobalConfig({
-        provider: { model: 'opus' },
+        pi: { model: 'opus' },
       });
 
       expect(mockFsWriteFile).toHaveBeenCalledTimes(1);
@@ -489,7 +489,7 @@ pi:
       mockFsReadFile.mockRejectedValue(error);
 
       await updateGlobalConfig({
-        provider: { model: 'gemini' },
+        pi: { model: 'gemini' },
       });
 
       expect(mockFsWriteFile).toHaveBeenCalledTimes(2); // 1st: default template, 2nd: merged update
@@ -503,7 +503,7 @@ pi:
       permError.code = 'EACCES';
       mockFsWriteFile.mockRejectedValue(permError);
 
-      await expect(updateGlobalConfig({ provider: { model: 'test' } })).rejects.toThrow(
+      await expect(updateGlobalConfig({ pi: { model: 'test' } })).rejects.toThrow(
         'Permission denied'
       );
     });
