@@ -67,7 +67,7 @@ A workflow that runs your preferred review checklist on every project:
 # ~/.rith/workflows/my-review.yaml
 name: my-review
 description: Personal code review with my standards
-model: sonnet
+model: anthropic/claude-sonnet-4-5
 
 nodes:
   - id: review
@@ -104,7 +104,7 @@ A simple workflow for understanding unfamiliar codebases:
 # ~/.rith/workflows/explain.yaml
 name: explain
 description: Quick explanation of a codebase or module
-model: haiku
+model: anthropic/claude-haiku-4-5
 
 nodes:
   - id: explain

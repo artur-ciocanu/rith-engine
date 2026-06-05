@@ -15,10 +15,6 @@ Pi Coding Agent is the sole AI executor in Rith Engine. It drives all workflow n
 
 Pi is included as a dependency of `@rith/providers` — no separate install needed. It's available immediately after `bun install`.
 
-## Quick setup via wizard
-
-Run `rith setup` and follow the prompts. The wizard asks for your preferred backend and API key, writes the key to `~/.rith/.env`, and writes the model ref to `~/.rith/config.yaml` automatically.
-
 ## Authentication
 
 Pi supports both OAuth subscriptions and API keys. Rith Engine reads your existing Pi credentials from `~/.pi/agent/auth.json` (written by running `pi` → `/login`) AND from env vars — env vars take priority per-request so codebase-scoped overrides work.
@@ -52,9 +48,8 @@ Providers that aren't in the env-var table above (LM Studio, ollama, llamacpp, c
 
 ```yaml
 # .rith/config.yaml
-assistants:
-  pi:
-    model: lm-studio/qwen2.5-coder-14b   # whatever ID you registered with Pi
+pi:
+  model: lm-studio/qwen2.5-coder-14b   # whatever ID you registered with Pi
 ```
 
 Rith Engine logs an info-level `pi.auth_missing` event when no credentials are found and continues — Pi's SDK then connects directly to the local endpoint defined in `models.json`. If the provider does require auth (a less-common cloud backend not in the env-var table) the SDK call fails downstream; the `pi.auth_missing` breadcrumb in the log lets you trace it back to a missing env-var mapping.
@@ -64,16 +59,12 @@ Rith Engine logs an info-level `pi.auth_missing` event when no credentials are f
 Configure Pi's behavior in `.rith/config.yaml`:
 
 ```yaml
-assistants:
-  pi:
-    model: anthropic/claude-haiku-4-5       # '<pi-provider-id>/<model-id>' format
-    enableExtensions: false                 # load Pi's extension ecosystem (default: false)
-    interactive: false                      # give extensions a UI bridge (requires enableExtensions)
-    extensionFlags:                         # per-extension feature flags (Pi's --flag CLI switches)
-      plan: true
-    env:                                    # env vars for extensions (e.g. PLANNOTATOR_REMOTE: "1")
-      PLANNOTATOR_REMOTE: "1"
-    maxConcurrent: 4                        # max concurrent Pi session.prompt() calls (default: unlimited)
+pi:
+  model: anthropic/claude-haiku-4-5       # '<pi-provider-id>/<model-id>' format
+  enableExtensions: false                 # load Pi's extension ecosystem (default: false)
+  extensionFlags:                         # per-extension feature flags (Pi's --flag CLI switches)
+    plan: true
+  maxConcurrent: 4                        # max concurrent Pi session.prompt() calls (default: unlimited)
 ```
 
 ### Provider defaults reference
@@ -82,15 +73,13 @@ assistants:
 |---|---|---|---|
 | `model` | `string` | — | Model ref in `<pi-provider-id>/<model-id>` format, e.g. `google/gemini-2.5-pro` |
 | `enableExtensions` | `boolean` | `false` | Load Pi's extension ecosystem (~540 community packages) |
-| `interactive` | `boolean` | `false` | Bind an `ExtensionUIContext` so extensions can prompt for approval. Requires `enableExtensions` |
 | `extensionFlags` | `Record<string, boolean \| string>` | — | Per-extension feature flags, equivalent to `pi --<name>` CLI switches |
-| `env` | `Record<string, string>` | — | Env vars injected at session start for extensions. Shell env wins over config |
 | `maxConcurrent` | `number` | unlimited | Max concurrent `session.prompt()` calls. Prevents cascading 429s in parallel workflows |
 
 ### Configuration priority
 
 1. Workflow-level options (in YAML `model`, `effort`, etc.)
-2. Config file defaults (`.rith/config.yaml` `assistants.pi.*`)
+2. Config file defaults (`.rith/config.yaml` `pi.*`)
 3. Pi SDK defaults (from `~/.pi/agent/settings.json`)
 
 ## Pi settings (baseline behavior)
@@ -113,10 +102,8 @@ A major reason to pick Pi is its **extension ecosystem**: community packages (in
 Rith Engine turns extensions **on by default**. To opt out in `.rith/config.yaml`:
 
 ```yaml
-assistants:
-  pi:
-    enableExtensions: false   # skip extension discovery entirely
-    # interactive: false       # keep extensions loaded, but give them no UI bridge
+pi:
+  enableExtensions: false   # skip extension discovery entirely
 ```
 
 Most extensions need three config surfaces:
@@ -136,13 +123,12 @@ pi install npm:@plannotator/pi-extension
 
 ```yaml
 # .rith/config.yaml
-assistants:
-  pi:
-    model: anthropic/claude-haiku-4-5
-    extensionFlags:
-      plan: true              # enables the plannotator "plan" flag
-    env:
-      PLANNOTATOR_REMOTE: "1" # exposes the review URL on 127.0.0.1:19432 so you can open it from anywhere
+pi:
+  model: anthropic/claude-haiku-4-5
+  extensionFlags:
+    plan: true              # enables the plannotator "plan" flag
+env:
+  PLANNOTATOR_REMOTE: "1"   # exposes the review URL on 127.0.0.1:19432 so you can open it from anywhere
 ```
 
 ```yaml
@@ -158,12 +144,11 @@ When the node runs, plannotator prints a review URL and blocks until you click a
 Pi models use a `<pi-provider-id>/<model-id>` format:
 
 ```yaml
-assistants:
-  pi:
-    model: anthropic/claude-haiku-4-5       # via Anthropic
-    # model: google/gemini-2.5-pro           # via Google
-    # model: groq/llama-3.3-70b-versatile   # via Groq
-    # model: openrouter/qwen/qwen3-coder    # via OpenRouter (nested slashes allowed)
+pi:
+  model: anthropic/claude-haiku-4-5       # via Anthropic
+  # model: google/gemini-2.5-pro           # via Google
+  # model: groq/llama-3.3-70b-versatile   # via Groq
+  # model: openrouter/qwen/qwen3-coder    # via OpenRouter (nested slashes allowed)
 ```
 
 ## Usage in workflows
@@ -190,7 +175,7 @@ nodes:
 
 | Feature | Support | YAML field |
 |---|---|---|
-| Extensions (community + local) | ✅ (default on) | `enableExtensions: false` to disable; `interactive: false` to load without UI bridge; `extensionFlags: { <name>: true }` per extension |
+| Extensions (community + local) | ✅ (default on) | `enableExtensions: false` to disable; `extensionFlags: { <name>: true }` per extension |
 | Session resume | ✅ | automatic (Rith Engine persists `sessionId`) |
 | Tool restrictions | ✅ | `allowed_tools` / `denied_tools` (read, bash, edit, write, grep, find, ls) |
 | Thinking level | ✅ | `effort: low\|medium\|high\|max` (max → xhigh) |

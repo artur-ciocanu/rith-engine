@@ -1,6 +1,6 @@
 ---
 title: Per-Node Skills
-description: Preload specialized knowledge into individual workflow nodes using the Claude Agent SDK skills system.
+description: Preload specialized knowledge into individual workflow nodes using the skills system.
 category: guides
 area: workflows
 audience: [user]
@@ -13,7 +13,8 @@ DAG workflow nodes support a `skills` field that preloads named skills into the
 node's agent context. Each node gets specialized procedural knowledge — code review
 patterns, Remotion best practices, testing conventions — without polluting other nodes.
 
-**Claude only** — Codex nodes will warn and ignore the `skills` field.
+Skills are **supported on Pi**. Each node loads only the skills it lists, so other
+nodes stay lean.
 
 ## Quick Start
 
@@ -43,28 +44,19 @@ gotchas) without the user having to paste instructions into the prompt.
 
 ## How It Works
 
-When a node has `skills: [name, ...]`, the executor wraps it in an
-[AgentDefinition](https://platform.claude.com/docs/en/agent-sdk/subagents) — the
-Claude Agent SDK mechanism for scoping skills to subagents.
+When a node has `skills: [name, ...]`, Pi resolves each name against the skill
+directories on disk and injects the matching `SKILL.md` content into the node's
+agent context before it runs.
 
 ```
 YAML: skills: [remotion-best-practices]
   ↓
-Executor builds AgentDefinition:
-  {
-    description: "DAG node 'generate'",
-    prompt: "You have preloaded skills: remotion-best-practices...",
-    skills: ["remotion-best-practices"],
-    tools: [...nodeTools, "Skill"]
-  }
+Pi looks up `remotion-best-practices` in the skill directories
   ↓
-SDK loads skill content into agent context at startup
+Pi loads that skill's SKILL.md into the node's context at startup
   ↓
-Agent executes with full skill knowledge available
+Agent executes with the skill knowledge available
 ```
-
-The `Skill` tool is automatically added to `allowedTools` so the agent can invoke
-skills. You don't need to add it manually.
 
 ## Installing Skills
 
@@ -123,23 +115,25 @@ Step-by-step content here. The agent loads this when the skill activates.
 
 ## Skill Discovery
 
-Skills are discovered from these locations (via the default
-`settingSources: ['project', 'user']` set in ClaudeProvider):
+Skills are resolved by name from these locations, in both your project (`<cwd>`)
+and your user-global home (`~`):
 
 | Location | Scope |
 |----------|-------|
-| `.claude/skills/` (in cwd) | Project-level |
-| `~/.claude/skills/` | User-level (all projects) |
+| `.agents/skills/<name>/` | Project-level (cwd) |
+| `.claude/skills/<name>/` | Project-level (cwd) |
+| `~/.agents/skills/<name>/` | User-level (all projects) |
+| `~/.claude/skills/<name>/` | User-level (all projects) |
 
-Set `assistants.claude.settingSources: ['project']` in `.rith/config.yaml`
-to scope a workflow to project-level skills only.
+Each skill is a directory containing a `SKILL.md` file; the directory name is the
+skill name you reference in `skills:`.
 
 Skills installed via `npx skills add` land in `.claude/skills/` by default.
 Use `-g` for global installation to `~/.claude/skills/`.
 
 ## Scoping: Installed vs Active
 
-**Installed** = the skill exists on disk. It's discoverable by the Claude subprocess.
+**Installed** = the skill exists on disk. It's discoverable by Pi.
 
 **Active** = listed in `skills:` on a specific DAG node. Only THAT node gets the
 skill content injected into its context.
@@ -169,7 +163,7 @@ smaller box with a tastefully curated set of tools."
 
 | Skill | Install | What It Teaches |
 |-------|---------|----------------|
-| `rith` (bundled) | `rith skill install` | Rith Engine workflows, commands, and project conventions |
+| `rith` (bundled) | ships with Rith Engine (copy `.claude/skills/rith` into your project) | Rith Engine workflows, commands, and project conventions |
 | `remotion-best-practices` | `npx skills add remotion-dev/skills` | Remotion animation patterns, API usage, gotchas (35 rules) |
 | `skill-creator` | `npx skills add anthropics/skills` | How to create new SKILL.md files |
 | Community skills | Browse [skills.sh](https://skills.sh) | Search 500K+ skills for any domain |
@@ -191,41 +185,13 @@ Keep it concise — each skill's full content is injected into context at startu
 (not progressive disclosure). The agentskills.io spec recommends keeping SKILL.md
 under 500 lines / 5000 tokens.
 
-## Combining Skills with MCP
-
-Skills and MCP compose naturally on the same node:
-
-```yaml
-  - id: create-pr
-    prompt: "Create a PR with the changes"
-    skills:
-      - pr-conventions      # Teaches HOW to write good PRs
-    mcp: .rith/mcp/github.json  # Provides the GitHub tools
-```
-
-Skills teach the **process**. MCP provides the **capability**. Together they
-produce better results than either alone.
-
-## Codex Compatibility
-
-Codex nodes with `skills` log a warning and continue without the skills:
-
-```
-Warning: Node 'review' has skills set but uses Codex — per-node skills
-are not supported for Codex.
-```
-
-To use skills, ensure the node uses Claude (the default provider, or set
-`provider: claude` explicitly).
-
 ## Limitations
 
 - **Pre-installation required** — skills must exist on disk before the workflow runs.
   There is no on-demand fetching (yet).
-- **Claude only** — the SDK's `AgentDefinition.skills` field is Claude-specific.
 - **Full injection** — skill content is fully injected at startup, not progressively
   disclosed. Keep skills concise.
-- **No validation** — if a named skill doesn't exist, the SDK may fail silently.
+- **No validation** — if a named skill doesn't exist, it is silently skipped.
   Verify skills are installed with `npx skills list`.
 
 ## Troubleshooting
@@ -233,14 +199,11 @@ To use skills, ensure the node uses Claude (the default provider, or set
 | Problem | Cause | Fix |
 |---------|-------|-----|
 | Skill not found | Not installed | Run `npx skills add <source>` |
-| Skill ignored | Node uses Codex provider | Set `provider: claude` on the node |
 | Too many skills | Context budget exceeded | Reduce to 2-3 most relevant skills per node |
 | Skill has no effect | Description too vague | Rewrite SKILL.md with specific, actionable instructions |
 
 ## Related
 
-- [Inline sub-agents](/guides/authoring-workflows/#inline-sub-agents) — `agents:` field for workflow-scoped sub-agents (composes with `skills:` on the same node; user-defined agents win on ID collision with the internal `dag-node-skills` wrapper)
-- [Per-Node MCP Servers](/guides/mcp-servers/) — `mcp:` field for external tool access
-- [Hooks](/guides/hooks/) — `hooks:` field for tool permission control
+- [Authoring Workflows](/guides/authoring-workflows/) — node fields and the `skills:` field
 - [skills.sh](https://skills.sh) — marketplace for discovering skills
 - [agentskills.io](https://agentskills.io) — the open SKILL.md standard

@@ -11,7 +11,7 @@ This page covers Rith Engine's security model: how AI permissions work, how plat
 
 ## Permission Model
 
-Rith Engine runs the Claude Code SDK in `bypassPermissions` mode. This means the AI agent can read, write, and execute files without interactive confirmation prompts.
+Rith Engine runs the Pi Coding Agent without interactive permission prompts. This means the AI agent can read, write, and execute files without per-action confirmation.
 
 **Why this is used:**
 - Rith Engine is designed for automated, unattended workflows triggered from the CLI and CI pipelines where there is no human at a terminal to approve each action.
@@ -19,7 +19,7 @@ Rith Engine runs the Claude Code SDK in `bypassPermissions` mode. This means the
 
 **What this means in practice:**
 - The AI assistant has full read/write access to the working directory (the cloned repository or worktree).
-- It can run shell commands, modify files, and use all tools available to the Claude Code SDK.
+- It can run shell commands, modify files, and use all of Pi's built-in tools.
 - There is no per-action confirmation step.
 
 **Mitigations:**
@@ -50,7 +50,7 @@ nodes:
 - `allowed_tools` is a whitelist -- only listed tools are available. An empty list (`[]`) disables all tools.
 - `denied_tools` is a blacklist -- listed tools are blocked, all others are available.
 - These are mutually exclusive per node. If both are set, `allowed_tools` takes precedence.
-- Tool restrictions are currently supported for the Claude provider only. Codex nodes with `denied_tools` will log a warning; `allowed_tools` is not supported by the Codex SDK.
+- Tool restrictions are enforced by Pi. Pi's built-in tools are `read, bash, edit, write, grep, find, ls`; an empty `allowed_tools` (`[]`) disables all of them, and unknown tool names (e.g. Claude's `WebFetch`) are ignored with a warning.
 
 ## Data Privacy and Logging
 
@@ -137,5 +137,5 @@ Rith Engine's own env sources (`~/.rith/.env`, dev `.env`) are loaded after the 
 **CORS:**
 
 **Docker deployments:**
-- `CLAUDE_USE_GLOBAL_AUTH=true` does not work in Docker (no local `claude` CLI). Provide `CLAUDE_CODE_OAUTH_TOKEN` or `CLAUDE_API_KEY` explicitly.
+- Pi authenticates via `~/.pi/agent/auth.json` (mount it into the container) or the API-key env vars `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` / `GEMINI_API_KEY`.
 - Escape `$` as `$$` in Docker Compose `.env` files to prevent variable substitution of bcrypt hashes.

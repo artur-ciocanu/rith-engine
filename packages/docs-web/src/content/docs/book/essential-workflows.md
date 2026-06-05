@@ -52,7 +52,7 @@ What do you want to do?
 
 #### `rith-assist`
 
-The starting point for anything that doesn't fit elsewhere. It runs a single full-capability Claude Code session against your codebase.
+The starting point for anything that doesn't fit elsewhere. It runs a single full-capability Pi (AI) session against your codebase.
 
 **When to use it**: Questions about the codebase, debugging sessions, one-off tasks, general help when no other workflow applies.
 

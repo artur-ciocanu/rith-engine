@@ -84,10 +84,10 @@ to the user in the CLI terminal.
 | `approval.on_reject.prompt` | string | No | Prompt template run via AI when the user rejects. `$REJECTION_REASON` is substituted with the reject reason. After running, the workflow re-pauses at the same gate |
 | `approval.on_reject.max_attempts` | integer | No | Max times the on_reject prompt runs before the workflow is cancelled. Range: 1–10. Default: 3 |
 
-Approval nodes do not support AI-specific fields (`model`, `provider`, `context`,
-`output_format`, `allowed_tools`, `denied_tools`, `hooks`, `mcp`, `skills`,
+Approval nodes do not support AI-specific fields (`model`, `context`,
+`output_format`, `allowed_tools`, `denied_tools`, `skills`,
 `idle_timeout`) since they don't invoke an AI agent. (The `on_reject.prompt` runs
-as a separate AI node using the workflow's default provider.)
+as a separate AI node.)
 
 Standard DAG fields (`id`, `depends_on`, `when`, `trigger_rule`, `retry`) work
 as expected.

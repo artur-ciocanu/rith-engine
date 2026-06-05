@@ -45,43 +45,29 @@ bun install
 
 - [Bun](https://bun.sh) >= 1.0.0
 - [GitHub CLI](https://cli.github.com/) (`gh`)
-- [Claude Code](https://claude.ai/code) (`claude`)
+- [git](https://git-scm.com/)
 
-## Claude Code is required
+## AI provider (Pi) is bundled
 
-Rith Engine orchestrates Claude Code; it does not bundle it. Install Claude Code separately:
+Rith Engine uses [Pi Coding Agent](https://github.com/badlogic/pi-mono) as its AI provider. Pi
+ships as a dependency of `@rith/providers` — there is no separate AI binary to install.
 
-```bash
-# macOS / Linux / WSL (Anthropic's recommended installer)
-curl -fsSL https://claude.ai/install.sh | bash
-
-# Windows (PowerShell)
-irm https://claude.ai/install.ps1 | iex
-```
-
-Source installs (`bun run`) find the executable automatically via `node_modules`. Compiled binaries (quick install, Homebrew) must point at the Claude Code executable:
+Authenticate Pi once, either via OAuth or API keys:
 
 ```bash
-# After the native installer:
-export CLAUDE_BIN_PATH="$HOME/.local/bin/claude"
-
-# After `npm install -g @anthropic-ai/claude-code`:
-export CLAUDE_BIN_PATH="$(npm root -g)/@anthropic-ai/claude-code/cli.js"
+# OAuth (writes ~/.pi/agent/auth.json, picked up automatically)
+pi /login
 ```
 
-Or set it durably in `~/.rith/config.yaml`:
+Or set provider API keys in your environment:
 
-```yaml
-assistants:
-  claude:
-    claudeBinaryPath: /absolute/path/to/claude
+```bash
+export ANTHROPIC_API_KEY=...   # anthropic/* models
+export OPENAI_API_KEY=...      # openai/* models
+export GEMINI_API_KEY=...      # google/* models
 ```
 
-Docker images (`ghcr.io/artur-ciocanu/rith-engine`) ship with Claude Code pre-installed and
-`CLAUDE_BIN_PATH` pre-set — no configuration needed.
-
-See [AI Assistants → Claude Code](/getting-started/ai-assistants/#binary-path-configuration-compiled-binaries-only)
-for full details and install-layout paths.
+See [AI Assistants](/getting-started/ai-assistants/) for full authentication and model details.
 
 ## Verify Installation
 

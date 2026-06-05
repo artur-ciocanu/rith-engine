@@ -108,10 +108,9 @@ rith workflow run my-workflow "auth refresh-tokens"
 | `name` | Yes | string | Identifies the workflow in `rith workflow list` |
 | `description` | Yes | string | Shown in listings and used by the router |
 | `nodes` | Yes | array | DAG nodes (see Node Options below) |
-| `provider` | No | string | Registered provider identifier (e.g. `claude`, `codex`). Default: `claude` |
-| `model` | No | string | Model for all nodes (`sonnet`, `opus`, `haiku`, or full model ID) |
-| `modelReasoningEffort` | No | string | Codex only: `minimal` \| `low` \| `medium` \| `high` \| `xhigh` |
-| `webSearchMode` | No | string | Codex only: `disabled` \| `cached` \| `live` |
+| `model` | No | string | Model for all nodes in Pi `<provider>/<model>` format (e.g. `anthropic/claude-sonnet-4-5`, `anthropic/claude-opus-4-5`, `anthropic/claude-haiku-4-5`) |
+| `modelReasoningEffort` | No | string | Reasoning effort: `low` \| `medium` \| `high` \| `max` (Pi maps `max` to its highest tier) |
+| `webSearchMode` | No | string | Not supported under Pi (the field is accepted but ignored) |
 | `additionalDirectories` | No | string[] | Extra directories available to the AI |
 
 ### Node Options (DAG)
@@ -131,18 +130,17 @@ All nodes share these base fields:
 | `depends_on` | No | string[] | Node IDs that must complete before this node runs |
 | `when` | No | string | Condition expression; node is skipped if false |
 | `trigger_rule` | No | string | Join semantics when multiple upstreams exist (see Trigger Rules) |
-| `provider` | No | string | Per-node provider override (any registered provider) |
-| `model` | No | string | Per-node model override |
+| `model` | No | string | Per-node model override (Pi `<provider>/<model>` format) |
 | `context` | No | `fresh` \| `shared` | Session context — `fresh` starts a new conversation, `shared` inherits from prior node |
 | `output_format` | No | JSON Schema | Enforce structured JSON output from this node |
-| `allowed_tools` | No | string[] | Restrict available tools to this list (Claude only) |
-| `denied_tools` | No | string[] | Remove specific tools from this node's context (Claude only) |
+| `allowed_tools` | No | string[] | Restrict available tools to this list. Pi built-in tools: `read, bash, edit, write, grep, find, ls`. `[]` means no tools; unknown names are ignored with a warning |
+| `denied_tools` | No | string[] | Remove specific tools from this node's context |
 | `idle_timeout` | No | number | Per-node idle timeout in milliseconds (default: 5 minutes) |
 | `retry` | No | object | Retry configuration for transient failures (see Retry Options). **Hard error on loop nodes** |
-| `hooks` | No | object | SDK hook callbacks (Claude only; see Hook Schema) |
-| `mcp` | No | string | Path to MCP server config JSON file (Claude only) |
-| `skills` | No | string[] | Skill names to preload into this node's context (Claude only) |
-| `agents` | No | object | Inline sub-agent definitions keyed by kebab-case ID. Claude only |
+| `hooks` | No | object | Not supported under Pi (the field is accepted but ignored) |
+| `mcp` | No | string | Not supported under Pi (the field is accepted but ignored) |
+| `skills` | No | string[] | Skill names to preload into this node's context (resolved from `.agents/skills` and `.claude/skills`, project and user-global) |
+| `agents` | No | object | Not supported under Pi (the field is accepted but ignored) |
 
 **Script-specific fields** (required when `script:` is set):
 
@@ -210,7 +208,7 @@ Defined under `retry:` inside a node:
 
 ## Hook Schema
 
-Hooks are defined per-node under `hooks:`. See [Chapter 9](/book/hooks-and-quality/) for full examples.
+Hooks are **not supported in the Pi-only build** — the `hooks:` field is accepted by the schema but ignored at runtime. The schema below is retained for reference only.
 
 ```yaml
 hooks:
@@ -293,7 +291,6 @@ defaults:
 | `Routing unclear — falling back to rith-assist` | No workflow matched the input | Use an explicit workflow name: `rith workflow run my-workflow "..."` |
 | `Worktree already exists for branch X` | Prior run left a worktree | Run `rith complete X` or `rith isolation cleanup` |
 | `Not a git repository` | Running outside a repo | `cd` into a git repo first — workflow and isolation commands require one |
-| `Unknown provider 'X'. Registered: claude, codex, pi` | Typo in `provider:` (workflow root or node-level) | Set `provider:` to one of the registered ids. Model strings themselves are not validated at load time — the SDK rejects unknown models at request time. |
 | `$BASE_BRANCH referenced but could not be detected` | No base branch set and auto-detection failed | Set `worktree.baseBranch` in `.rith/config.yaml` or ensure `main`/`master` exists |
 | Workflow hangs with no output | Node idle timeout hit | Increase `idle_timeout` on the node (milliseconds) |
 
@@ -330,7 +327,7 @@ rith workflow run rith-assist "/command-invoke my-command some-arg"
 
 - **Validate your YAML**: `rith validate workflows my-workflow`
 - **Check the logs**: `~/.rith/workspaces/<owner>/<repo>/logs/`
-- **Report issues**: [github.com/anthropics/claude-code/issues](https://github.com/anthropics/claude-code/issues)
+- **Report issues**: [github.com/artur-ciocanu/rith-engine/issues](https://github.com/artur-ciocanu/rith-engine/issues)
 
 ---
 

@@ -55,31 +55,12 @@ Settings are loaded in this order (later overrides earlier):
 Create `~/.rith/config.yaml` for user-wide preferences:
 
 ```yaml
-# Default AI assistant
-defaultAssistant: claude # must match a registered provider (e.g. claude, codex)
-
-# Assistant defaults
-assistants:
-  claude:
-    model: sonnet
-    settingSources:   # Which sources the Claude SDK loads (default: ['project', 'user'])
-      - project       # Project-level <cwd>/.claude/ (CLAUDE.md, skills, commands, agents)
-      - user          # User-level ~/.claude/ (CLAUDE.md, skills, commands, agents)
-    # Optional: absolute path to the Claude Code executable.
-    # Required in compiled Rith Engine binaries when CLAUDE_BIN_PATH is not set.
-    # Accepts the native binary (~/.local/bin/claude from the curl installer),
-    # the npm-installed cli.js, or the npm platform-package directory
-    # (e.g. @anthropic-ai/claude-code-win32-x64 — auto-expanded to claude/claude.exe).
-    # Source/dev mode auto-resolves.
-    # claudeBinaryPath: /absolute/path/to/claude
-  codex:
-    model: gpt-5.3-codex
-    modelReasoningEffort: medium
-    webSearchMode: disabled
-    additionalDirectories:
-      - /absolute/path/to/other/repo
-    # codexBinaryPath: /absolute/path/to/codex  # Optional: Codex CLI path
-
+# Pi Coding Agent defaults
+pi:
+  model: anthropic/claude-sonnet-4-5  # <pi-provider-id>/<model-id> (required: node > workflow > config)
+  enableExtensions: false             # load Pi's extension ecosystem (default: false)
+  extensionFlags: { plan: true }      # per-extension feature flags (pi --<flag>)
+  maxConcurrent: 4                    # cap concurrent Pi sessions across parallel DAG nodes
 
 # Custom paths (usually not needed)
 paths:
@@ -97,18 +78,10 @@ concurrency:
 Create `.rith/config.yaml` in any repository for project-specific settings:
 
 ```yaml
-# AI assistant for this project (used as default provider for workflows)
-assistant: claude
-
-# Assistant defaults (override global)
-assistants:
-  claude:
-    model: sonnet
-    settingSources:  # Override global settingSources for this repo
-      - project
-  codex:
-    model: gpt-5.3-codex
-    webSearchMode: live
+# Pi Coding Agent defaults (override global)
+pi:
+  model: anthropic/claude-sonnet-4-5
+  enableExtensions: true
 
 # Commands configuration
 commands:
@@ -147,28 +120,6 @@ defaults:
 
 ```
 
-### Claude settingSources
-
-Controls which sources the Claude Agent SDK loads during sessions — `CLAUDE.md`, skills, commands, agents, and hooks:
-
-| Value | Description |
-|-------|-------------|
-| `project` | Load project-level `<cwd>/.claude/` (CLAUDE.md, skills, commands, agents) |
-| `user` | Load user-level `~/.claude/` (CLAUDE.md, skills, commands, agents) |
-
-**Default**: `['project', 'user']` — both project-level and user-level sources are loaded.
-
-To restrict a project to project-level resources only (e.g. CI, shared environments, or when `~/.claude/` contains personal commands you don't want surfacing in workflows):
-
-```yaml
-assistants:
-  claude:
-    settingSources:
-      - project
-```
-
-Set in `~/.rith/config.yaml` (global) or `.rith/config.yaml` (repo-specific).
-
 ### Worktree file copying (`worktree.copyFiles`)
 
 `git worktree add` only copies **tracked** files into a new worktree. Anything gitignored — secrets, local planning docs, agent reports, IDE settings, data fixtures — is absent by default. Rith Engine's `worktree.copyFiles` closes that gap: after the worktree is created, each listed path is copied from the canonical repo into the worktree via raw filesystem copy (not git), so gitignored content comes along for the ride.
@@ -182,7 +133,7 @@ worktree:
   copyFiles:
     - .env                  # local secrets
     - .vscode/              # editor settings
-    - .claude/              # per-repo Claude Code config (agents, skills, hooks)
+    - .claude/              # skills Pi loads from .claude/skills
     - plans/                # working docs that aren't committed
     - reports/              # agent-generated markdown reports
     - data/fixtures/        # local-only test data
@@ -223,41 +174,22 @@ Environment variables override all other configuration. They are organized by ca
 | `PORT` | HTTP server listen port | `3090` (auto-allocated in worktrees) |
 | `LOG_LEVEL` | Logging verbosity (`fatal`, `error`, `warn`, `info`, `debug`, `trace`) | `info` |
 | `BOT_DISPLAY_NAME` | Bot name shown in batch-mode "starting" messages | `Rith Engine` |
-| `DEFAULT_AI_ASSISTANT` | Default AI assistant. Must match a registered provider id — currently `pi`. | `pi` |
 | `MAX_CONCURRENT_CONVERSATIONS` | Maximum concurrent AI conversations | `10` |
 | `SESSION_RETENTION_DAYS` | Delete inactive sessions older than N days | `30` |
 | `RITH_SUPPRESS_NESTED_CLAUDE_WARNING` | When set to `1`, suppresses the stderr warning emitted when `rith` is run inside a Claude Code session | -- |
 | `RITH_VERBOSE_BOOT` | When set to `1`, prints `[rith] loaded N keys from …` lines to stderr at boot. Also enabled by `LOG_LEVEL=debug` or `LOG_LEVEL=trace`. Silent by default to avoid interleaving with interactive command output. | -- |
 
-### AI Providers -- Claude
+### AI Provider -- Pi
+
+Pi Coding Agent is the sole AI provider and is bundled with Rith Engine — there is no separate binary to install. Authenticate once, either via OAuth or API keys:
 
 | Variable | Description | Default |
 | --- | --- | --- |
-| `CLAUDE_USE_GLOBAL_AUTH` | Use global auth from `claude /login` (`true`/`false`) | Auto-detect |
-| `CLAUDE_CODE_OAUTH_TOKEN` | Explicit OAuth token (alternative to global auth) | -- |
-| `CLAUDE_API_KEY` | Explicit API key (alternative to global auth) | -- |
-| `TITLE_GENERATION_MODEL` | Lightweight model for generating conversation titles | SDK default |
-| `RITH_CLAUDE_FIRST_EVENT_TIMEOUT_MS` | Timeout (ms) before Claude subprocess is considered hung (throws with diagnostic log) | `60000` |
+| `ANTHROPIC_API_KEY` | API key for Anthropic models (Pi provider id `anthropic`) | -- |
+| `OPENAI_API_KEY` | API key for OpenAI models (Pi provider id `openai`) | -- |
+| `GEMINI_API_KEY` | API key for Google models (Pi provider id `google`) | -- |
 
-When `CLAUDE_USE_GLOBAL_AUTH` is unset, Rith Engine auto-detects: it uses explicit tokens if present, otherwise falls back to global auth.
-
-### AI Providers -- Codex
-
-| Variable | Description | Default |
-| --- | --- | --- |
-| `CODEX_ID_TOKEN` | Codex ID token (from `~/.codex/auth.json`) | -- |
-| `CODEX_ACCESS_TOKEN` | Codex access token | -- |
-| `CODEX_REFRESH_TOKEN` | Codex refresh token | -- |
-| `CODEX_ACCOUNT_ID` | Codex account ID | -- |
-
-### AI Providers -- Copilot (community)
-
-| Variable | Description | Default |
-| --- | --- | --- |
-| `COPILOT_GITHUB_TOKEN` | Explicit GitHub PAT for the Copilot provider. Always wins over `useLoggedInUser` when set. | -- |
-| `COPILOT_BIN_PATH` | Absolute path to the Copilot CLI binary. Required in compiled Rith Engine binaries when `assistants.copilot.copilotCliPath` is not set; auto-detected in dev mode. | -- |
-
-The Copilot provider also reads `assistants.copilot.{model, modelReasoningEffort, copilotCliPath, configDir, enableConfigDiscovery, useLoggedInUser, logLevel}` from `~/.rith/config.yaml` or `.rith/config.yaml`. See the [AI Assistants guide](/getting-started/ai-assistants/) for the full setup.
+Run `pi /login` (OAuth) to write `~/.pi/agent/auth.json`, which Rith Engine picks up automatically. API keys in the environment override `auth.json`. Local backends (LM Studio, ollama) need no credentials — register them in `~/.pi/agent/models.json`. Baseline Pi settings live in `~/.pi/agent/settings.json` (plus `<repo>/.pi/settings.json`).
 
 ### Forge Integrations -- GitHub
 
@@ -299,7 +231,7 @@ The Copilot provider also reads `assistants.copilot.{model, modelReasoningEffort
 | Variable | Description | Default |
 | --- | --- | --- |
 | `RITH_DATA` | Host path for Rith Engine data (workspaces, worktrees, artifacts). Compose-only — read by `docker-compose.yml` to choose the bind-mount source for `/.rith`; not read by Rith Engine source code. | Docker-managed volume |
-| `RITH_USER_HOME` | Host path for `/home/appuser` (Claude/Codex/Pi config, `~/.gitconfig`, shell history). Compose-only — read by `docker-compose.yml` to choose the bind-mount source for `/home/appuser`; not read by Rith Engine source code. Persisted by default to a Docker-managed volume so user state survives rebuilds. | Docker-managed volume |
+| `RITH_USER_HOME` | Host path for `/home/appuser` (Pi config, `~/.gitconfig`, shell history). Compose-only — read by `docker-compose.yml` to choose the bind-mount source for `/home/appuser`; not read by Rith Engine source code. Persisted by default to a Docker-managed volume so user state survives rebuilds. | Docker-managed volume |
 | `DOMAIN` | Public domain for Caddy reverse proxy (TLS auto-provisioned) | -- |
 | `CADDY_BASIC_AUTH` | Caddy basicauth directive to protect API | Disabled |
 | `COOKIE_MAX_AGE` | Auth cookie lifetime in seconds | `86400` |
@@ -308,11 +240,11 @@ The Copilot provider also reads `assistants.copilot.{model, modelReasoningEffort
 
 Rith Engine keys env loading on **directory ownership, not filename**. `.rith/` (at `~/` or `<cwd>/`) is rith-owned. Anything else is yours.
 
-| Path | Stripped at boot? | Rith Engine loads? | `rith setup` writes? |
-| --- | --- | --- | --- |
-| `<cwd>/.env` | **yes** (safety guard) | never | never |
-| `<cwd>/.rith/.env` | no | yes (repo scope, overrides user scope) | yes iff `--scope project` |
-| `~/.rith/.env` | no | yes (user scope) | yes iff `--scope home` (default) |
+| Path | Stripped at boot? | Rith Engine loads? |
+| --- | --- | --- |
+| `<cwd>/.env` | **yes** (safety guard) | never |
+| `<cwd>/.rith/.env` | no | yes (repo scope, overrides user scope) |
+| `~/.rith/.env` | no | yes (user scope) |
 
 **Load order at boot** (every entry point — CLI and server):
 
@@ -326,7 +258,7 @@ Rith Engine keys env loading on **directory ownership, not filename**. `.rith/` 
 [rith] stripped 2 keys from /path/to/target-repo (.env, .env.local) to prevent target repo env from leaking into Rith Engine processes
 ```
 
-The `[rith] loaded N keys from …` lines are suppressed by default (they would otherwise interleave with `rith setup`/`rith doctor` checklist output). To enable them, set `RITH_VERBOSE_BOOT=1` or `LOG_LEVEL=debug` before running:
+The `[rith] loaded N keys from …` lines are suppressed by default (they would otherwise interleave with interactive command output). To enable them, set `RITH_VERBOSE_BOOT=1` or `LOG_LEVEL=debug` before running:
 
 ```
 [rith] loaded 3 keys from ~/.rith/.env
@@ -377,18 +309,21 @@ No configuration needed. Rith Engine works out of the box with:
 
 - `~/.rith/` for all managed files
 - Pi as default AI assistant
-### Custom AI Preference
+
+### Custom Model Preference
 
 ```yaml
 # ~/.rith/config.yaml
-defaultAssistant: codex
+pi:
+  model: anthropic/claude-opus-4-5
 ```
 
 ### Project-Specific Settings
 
 ```yaml
 # .rith/config.yaml in your repo
-assistant: claude  # Workflows inherit this provider unless they specify their own
+pi:
+  model: anthropic/claude-sonnet-4-5  # default model for this repo's workflows
 commands:
   autoLoad: true
 ```
