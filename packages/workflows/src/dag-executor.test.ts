@@ -3,6 +3,8 @@ import { mkdir, writeFile, rm } from 'fs/promises';
 import { join } from 'path';
 import { tmpdir } from 'os';
 import * as git from '@rith/git';
+import * as realPaths from '@rith/paths';
+import { mockModuleScoped } from './test-mock-module';
 
 // --- Mock logger (MUST come before imports of modules under test) ---
 
@@ -16,7 +18,7 @@ const mockLogger = {
   fatal: mockLogFn,
   child: mock(() => mockLogger),
 };
-mock.module('@rith/paths', () => ({
+mockModuleScoped('@rith/paths', realPaths, {
   createLogger: mock(() => mockLogger),
   getCommandFolderSearchPaths: (folder?: string) => {
     const paths = ['.rith/commands'];
@@ -29,7 +31,7 @@ mock.module('@rith/paths', () => ({
   getHomeWorkflowsPath: () => '/nonexistent/home/workflows',
   getLegacyHomeWorkflowsPath: () => '/nonexistent/home/.rith/workflows',
   getRithHome: () => '/nonexistent/home',
-}));
+});
 
 // --- Imports (after mocks) ---
 import {

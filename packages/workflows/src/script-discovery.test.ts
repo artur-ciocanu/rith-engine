@@ -1,13 +1,16 @@
 import { describe, test, expect, mock, beforeEach } from 'bun:test';
+import * as realFsPromises from 'fs/promises';
+import * as realPaths from '@rith/paths';
+import { mockModuleScoped } from './test-mock-module';
 
 // Mock fs/promises before importing the module under test
 const mockReaddir = mock(async (_path: string): Promise<string[]> => []);
 const mockStat = mock(async (_path: string) => ({ isDirectory: () => false }));
 
-mock.module('fs/promises', () => ({
+mockModuleScoped('fs/promises', realFsPromises, {
   readdir: mockReaddir,
   stat: mockStat,
-}));
+});
 
 // Mock logger
 const mockLogger = {
@@ -19,10 +22,10 @@ const mockLogger = {
   trace: mock(() => undefined),
 };
 let mockHomeScriptsPath = '/home/scripts';
-mock.module('@rith/paths', () => ({
+mockModuleScoped('@rith/paths', realPaths, {
   createLogger: mock(() => mockLogger),
   getHomeScriptsPath: mock(() => mockHomeScriptsPath),
-}));
+});
 
 import { discoverScripts, discoverScriptsForCwd, getDefaultScripts } from './script-discovery';
 

@@ -1,4 +1,6 @@
 import { describe, it, expect, mock } from 'bun:test';
+import * as realPaths from '@rith/paths';
+import { mockModuleScoped } from './test-mock-module';
 
 // --- Mock logger (MUST come before imports of modules under test) ---
 
@@ -12,9 +14,9 @@ const mockLogger = {
   fatal: mockLogFn,
   child: mock(() => mockLogger),
 };
-mock.module('@rith/paths', () => ({
+mockModuleScoped('@rith/paths', realPaths, {
   createLogger: mock(() => mockLogger),
-}));
+});
 
 // --- Imports (after mocks) ---
 

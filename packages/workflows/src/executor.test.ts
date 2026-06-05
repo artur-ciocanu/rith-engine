@@ -4,6 +4,12 @@
  * that the inner dag-executor.test.ts cannot reach.
  */
 import { describe, it, expect, mock, beforeEach } from 'bun:test';
+import * as realPaths from '@rith/paths';
+import * as realGit from '@rith/git';
+import * as realDagExecutor from './dag-executor';
+import * as realLogger from './logger';
+import * as realEventEmitter from './event-emitter';
+import { mockModuleScoped } from './test-mock-module';
 
 // --- Mock logger ---
 const mockLogFn = mock(() => {});
@@ -19,30 +25,30 @@ const mockLogger = {
   isLevelEnabled: mock(() => true),
   level: 'info',
 };
-mock.module('@rith/paths', () => ({
+mockModuleScoped('@rith/paths', realPaths, {
   createLogger: mock(() => mockLogger),
   parseOwnerRepo: mock(() => null),
   getRunArtifactsPath: mock(() => '/tmp/artifacts'),
   getProjectLogsPath: mock(() => '/tmp/logs'),
-}));
+});
 
 // --- Mock git ---
-mock.module('@rith/git', () => ({
+mockModuleScoped('@rith/git', realGit, {
   getDefaultBranch: mock(async () => 'main'),
   toRepoPath: mock((p: string) => p),
-}));
+});
 
 // --- Mock dag-executor ---
 const mockExecuteDagWorkflow = mock(async (): Promise<string | undefined> => undefined);
-mock.module('./dag-executor', () => ({
+mockModuleScoped('./dag-executor', realDagExecutor, {
   executeDagWorkflow: mockExecuteDagWorkflow,
-}));
+});
 
 // --- Mock logger functions ---
-mock.module('./logger', () => ({
+mockModuleScoped('./logger', realLogger, {
   logWorkflowStart: mock(async () => {}),
   logWorkflowError: mock(async () => {}),
-}));
+});
 
 // --- Mock event emitter ---
 const mockEmitter = {
@@ -50,9 +56,9 @@ const mockEmitter = {
   unregisterRun: mock(() => {}),
   emit: mock(() => {}),
 };
-mock.module('./event-emitter', () => ({
+mockModuleScoped('./event-emitter', realEventEmitter, {
   getWorkflowEventEmitter: mock(() => mockEmitter),
-}));
+});
 
 // --- Import after mocks ---
 import { executeWorkflow, hydrateResumableRun } from './executor';

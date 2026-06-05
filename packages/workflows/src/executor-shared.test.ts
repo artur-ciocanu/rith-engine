@@ -1,4 +1,6 @@
 import { describe, it, expect, mock } from 'bun:test';
+import * as realPaths from '@rith/paths';
+import { mockModuleScoped } from './test-mock-module';
 
 // Mock logger before importing module under test
 const mockLogFn = mock(() => {});
@@ -14,9 +16,9 @@ const mockLogger = {
   isLevelEnabled: mock(() => true),
   level: 'info',
 };
-mock.module('@rith/paths', () => ({
+mockModuleScoped('@rith/paths', realPaths, {
   createLogger: mock(() => mockLogger),
-}));
+});
 
 import type { IWorkflowPlatform } from './deps';
 import {
