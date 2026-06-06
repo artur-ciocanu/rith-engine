@@ -151,6 +151,29 @@ interface WorkflowLevelOptions {
 /** Internal node execution result — extends NodeOutput with cost data for aggregation. */
 type NodeExecutionResult = NodeOutput & { costUsd?: number };
 
+/**
+ * Per-run constants threaded to every DAG node executor. Built once in
+ * `executeDagWorkflow`; fields are stable for the whole run. The `nodeOutputs`
+ * Map reference is stable too — only its contents mutate as nodes complete.
+ */
+export interface DagExecutionContext {
+  readonly deps: WorkflowDeps;
+  readonly platform: IWorkflowPlatform;
+  readonly conversationId: string;
+  readonly cwd: string;
+  readonly workflowRun: WorkflowRun;
+  readonly artifactsDir: string;
+  readonly logDir: string;
+  readonly baseBranch: string;
+  readonly docsDir: string;
+  readonly nodeOutputs: Map<string, NodeOutput>;
+  readonly config: WorkflowConfig;
+  readonly workflowModel: string | undefined;
+  readonly workflowLevelOptions: WorkflowLevelOptions;
+  readonly configuredCommandFolder: string | undefined;
+  readonly issueContext: string | undefined;
+}
+
 /** Throttle interval for the during-streaming cancel check (reads — no write contention in WAL mode). */
 const CANCEL_CHECK_INTERVAL_MS = 10_000;
 
@@ -489,22 +512,25 @@ export function buildTopologicalLayers(nodes: readonly DagNode[]): DagNode[][] {
  * Parallel nodes and context: 'fresh' nodes always receive fresh sessions (caller ensures resumeSessionId is undefined).
  */
 async function executeNodeInternal(
-  deps: WorkflowDeps,
-  platform: IWorkflowPlatform,
-  conversationId: string,
-  cwd: string,
-  workflowRun: WorkflowRun,
+  ctx: DagExecutionContext,
   node: CommandNode | PromptNode,
   nodeOptions: SendQueryOptions | undefined,
-  artifactsDir: string,
-  logDir: string,
-  baseBranch: string,
-  docsDir: string,
-  nodeOutputs: Map<string, NodeOutput>,
-  resumeSessionId: string | undefined,
-  configuredCommandFolder?: string,
-  issueContext?: string
+  resumeSessionId: string | undefined
 ): Promise<NodeExecutionResult> {
+  const {
+    deps,
+    platform,
+    conversationId,
+    cwd,
+    workflowRun,
+    artifactsDir,
+    logDir,
+    baseBranch,
+    docsDir,
+    nodeOutputs,
+    configuredCommandFolder,
+    issueContext,
+  } = ctx;
   const nodeStartTime = Date.now();
   const nodeContext: SendMessageContext = { workflowId: workflowRun.id, nodeName: node.id };
 
@@ -1180,20 +1206,23 @@ const NODE_OUTPUT_FILE_THRESHOLD = 32_768;
  * No AI session is created — bash nodes are free/deterministic.
  */
 async function executeBashNode(
-  deps: WorkflowDeps,
-  platform: IWorkflowPlatform,
-  conversationId: string,
-  cwd: string,
-  workflowRun: WorkflowRun,
+  ctx: DagExecutionContext,
   node: BashNode,
-  artifactsDir: string,
-  logDir: string,
-  baseBranch: string,
-  docsDir: string,
-  nodeOutputs: Map<string, NodeOutput>,
-  issueContext?: string,
   envVars?: Record<string, string>
 ): Promise<NodeOutput> {
+  const {
+    deps,
+    platform,
+    conversationId,
+    cwd,
+    workflowRun,
+    artifactsDir,
+    logDir,
+    baseBranch,
+    docsDir,
+    nodeOutputs,
+    issueContext,
+  } = ctx;
   const nodeStartTime = Date.now();
   const nodeContext: SendMessageContext = { workflowId: workflowRun.id, nodeName: node.id };
 
@@ -1359,20 +1388,23 @@ async function executeBashNode(
  * stdout is captured and trimmed as the node output; stderr is logged as a warning.
  */
 async function executeScriptNode(
-  deps: WorkflowDeps,
-  platform: IWorkflowPlatform,
-  conversationId: string,
-  cwd: string,
-  workflowRun: WorkflowRun,
+  ctx: DagExecutionContext,
   node: ScriptNode,
-  artifactsDir: string,
-  logDir: string,
-  baseBranch: string,
-  docsDir: string,
-  nodeOutputs: Map<string, NodeOutput>,
-  issueContext?: string,
   envVars?: Record<string, string>
 ): Promise<NodeOutput> {
+  const {
+    deps,
+    platform,
+    conversationId,
+    cwd,
+    workflowRun,
+    artifactsDir,
+    logDir,
+    baseBranch,
+    docsDir,
+    nodeOutputs,
+    issueContext,
+  } = ctx;
   const nodeStartTime = Date.now();
   const nodeContext: SendMessageContext = { workflowId: workflowRun.id, nodeName: node.id };
 
@@ -1659,22 +1691,25 @@ function buildLoopNodeOptions(
  * - Does not write current_step_index (DAG tracks per-node completion)
  */
 async function executeLoopNode(
-  deps: WorkflowDeps,
-  platform: IWorkflowPlatform,
-  conversationId: string,
-  cwd: string,
-  workflowRun: WorkflowRun,
+  ctx: DagExecutionContext,
   node: LoopNode,
-  workflowModel: string | undefined,
-  artifactsDir: string,
-  logDir: string,
-  baseBranch: string,
-  docsDir: string,
-  nodeOutputs: Map<string, NodeOutput>,
-  config: WorkflowConfig,
-  issueContext?: string,
-  workflowLevelOptions?: WorkflowLevelOptions
+  workflowModel: string | undefined
 ): Promise<NodeExecutionResult> {
+  const {
+    deps,
+    platform,
+    conversationId,
+    cwd,
+    workflowRun,
+    artifactsDir,
+    logDir,
+    baseBranch,
+    docsDir,
+    nodeOutputs,
+    config,
+    workflowLevelOptions,
+    issueContext,
+  } = ctx;
   const loop = node.loop;
   const msgContext = { workflowId: workflowRun.id, nodeName: node.id };
 
@@ -2255,23 +2290,23 @@ async function executeLoopNode(
  * then re-pauses at the approval gate. After max_attempts rejections, cancels normally.
  */
 async function executeApprovalNode(
-  node: ApprovalNode,
-  workflowRun: WorkflowRun,
-  deps: WorkflowDeps,
-  platform: IWorkflowPlatform,
-  conversationId: string,
-  workflowModel: string | undefined,
-  cwd: string,
-  artifactsDir: string,
-  logDir: string,
-  baseBranch: string,
-  docsDir: string,
-  nodeOutputs: Map<string, NodeOutput>,
-  config: WorkflowConfig,
-  workflowLevelOptions: WorkflowLevelOptions,
-  configuredCommandFolder?: string,
-  issueContext?: string
+  ctx: DagExecutionContext,
+  node: ApprovalNode
 ): Promise<NodeOutput> {
+  const {
+    deps,
+    platform,
+    conversationId,
+    workflowRun,
+    artifactsDir,
+    baseBranch,
+    docsDir,
+    nodeOutputs,
+    config,
+    workflowModel,
+    workflowLevelOptions,
+    issueContext,
+  } = ctx;
   const msgContext = { workflowId: workflowRun.id, nodeName: node.id };
 
   // Detect rejection resume — check metadata for rejection_reason set by reject handlers
@@ -2359,21 +2394,10 @@ async function executeApprovalNode(
     );
 
     const output = await executeNodeInternal(
-      deps,
-      platform,
-      conversationId,
-      cwd,
-      workflowRun,
+      ctx,
       syntheticNode,
       nodeOptions,
-      artifactsDir,
-      logDir,
-      baseBranch,
-      docsDir,
-      nodeOutputs,
-      undefined, // fresh session
-      configuredCommandFolder,
-      issueContext
+      undefined // fresh session
     );
 
     if (output.state === 'failed') {
@@ -2481,6 +2505,25 @@ export async function executeDagWorkflow(
       'dag.workflow_resume_prepopulated'
     );
   }
+
+  // Per-run constants threaded to every DAG node executor (built once; see DagExecutionContext).
+  const ctx: DagExecutionContext = {
+    deps,
+    platform,
+    conversationId,
+    cwd,
+    workflowRun,
+    artifactsDir,
+    logDir,
+    baseBranch,
+    docsDir,
+    nodeOutputs,
+    config,
+    workflowModel,
+    workflowLevelOptions,
+    configuredCommandFolder,
+    issueContext,
+  };
 
   getLog().info(
     {
@@ -2692,21 +2735,7 @@ export async function executeDagWorkflow(
 
           // 3. Bash node dispatch — no AI, no session
           if (isBashNode(node)) {
-            const output = await executeBashNode(
-              deps,
-              platform,
-              conversationId,
-              cwd,
-              workflowRun,
-              node,
-              artifactsDir,
-              logDir,
-              baseBranch,
-              docsDir,
-              nodeOutputs,
-              issueContext,
-              config.envVars
-            );
+            const output = await executeBashNode(ctx, node, config.envVars);
             return { nodeId: node.id, output };
           }
 
@@ -2717,46 +2746,13 @@ export async function executeDagWorkflow(
             const loopModel: string | undefined =
               node.model ?? workflowModel ?? loopAssistantConfig?.model;
 
-            const output = await executeLoopNode(
-              deps,
-              platform,
-              conversationId,
-              cwd,
-              workflowRun,
-              node,
-              loopModel,
-              artifactsDir,
-              logDir,
-              baseBranch,
-              docsDir,
-              nodeOutputs,
-              config,
-              issueContext,
-              workflowLevelOptions
-            );
+            const output = await executeLoopNode(ctx, node, loopModel);
             return { nodeId: node.id, output };
           }
 
           // 3c. Approval node dispatch — pauses workflow for human review
           if (isApprovalNode(node)) {
-            const output = await executeApprovalNode(
-              node,
-              workflowRun,
-              deps,
-              platform,
-              conversationId,
-              workflowModel,
-              cwd,
-              artifactsDir,
-              logDir,
-              baseBranch,
-              docsDir,
-              nodeOutputs,
-              config,
-              workflowLevelOptions,
-              configuredCommandFolder,
-              issueContext
-            );
+            const output = await executeApprovalNode(ctx, node);
             return { nodeId: node.id, output };
           }
 
@@ -2794,21 +2790,7 @@ export async function executeDagWorkflow(
 
           // 3e. Script node dispatch — runs via bun or uv
           if (isScriptNode(node)) {
-            const output = await executeScriptNode(
-              deps,
-              platform,
-              conversationId,
-              cwd,
-              workflowRun,
-              node,
-              artifactsDir,
-              logDir,
-              baseBranch,
-              docsDir,
-              nodeOutputs,
-              issueContext,
-              config.envVars
-            );
+            const output = await executeScriptNode(ctx, node, config.envVars);
             return { nodeId: node.id, output };
           }
 
@@ -2835,25 +2817,7 @@ export async function executeDagWorkflow(
           };
 
           for (let attempt = 0; attempt <= retryConfig.maxRetries; attempt++) {
-            output = await executeNodeInternal(
-              deps,
-              platform,
-              conversationId,
-              cwd,
-              workflowRun,
-              node,
-              nodeOptions,
-              artifactsDir,
-              logDir,
-              baseBranch,
-              docsDir,
-              nodeOutputs,
-              // Always pass the prior session ID — forkSession:true in executeNodeInternal
-              // ensures the source is never mutated, so retries can safely resume from it.
-              resumeSessionId,
-              configuredCommandFolder,
-              issueContext
-            );
+            output = await executeNodeInternal(ctx, node, nodeOptions, resumeSessionId);
 
             if (output.state !== 'failed') break;
 
