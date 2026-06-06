@@ -10,10 +10,6 @@ import { resolve, relative } from 'node:path';
 // export in CI. Direct file import avoids the resolution gap.
 import { setLogLevel } from '../../packages/paths/src/logger.ts';
 import { parseWorkflow } from '../../packages/workflows/src/loader.ts';
-import {
-  registerBuiltinProviders,
-  registerCommunityProviders,
-} from '../../packages/providers/src/registry.ts';
 
 // Silence the loader's Pino warnings (workflow_missing_description, etc).
 // parseWorkflow logs to stdout by default; the decide node substitutes our
@@ -21,13 +17,6 @@ import {
 // loader's child logger is lazy-initialized, so setting the root level
 // before the first parseWorkflow call propagates correctly.
 setLogLevel('fatal');
-
-// parseWorkflow checks `provider:` against the runtime providers registry.
-// The CLI populates it at startup; this standalone script must do the same
-// or every workflow with `provider: claude` gets a false-positive
-// "Unknown provider" error.
-registerBuiltinProviders();
-registerCommunityProviders();
 
 /**
  * Decide whether a YAML file is shaped like a Rith Engine workflow definition

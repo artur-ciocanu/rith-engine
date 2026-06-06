@@ -383,7 +383,7 @@ For larger features, Ralph executes user stories one-by-one until complete. The 
 │                                  │                                      │
 │                                  ▼                                      │
 │   ┌─────────────────────────────────────────────────────────────────┐  │
-│   │ packages/providers    Pi Coding Agent interface                 │  │
+│   │ packages/pi           Pi Coding Agent interface                 │  │
 │   │                       pi-coding-agent SDK (sole AI provider)    │  │
 │   └──────────────────────────────┬──────────────────────────────────┘  │
 │                                  │                                      │

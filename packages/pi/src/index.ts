@@ -1,20 +1,20 @@
 // Types (contract layer)
 export type {
-  IAgentProvider,
+  PiAgent,
   AgentRequestOptions,
   SendQueryOptions,
   NodeConfig,
-  ProviderCapabilities,
+  PiCapabilities,
   MessageChunk,
   TokenUsage,
   SystemPromptInput,
   PiDefaults,
 } from './types';
 
-// Pi provider
-export { PiProvider } from './pi/provider';
-export { parseProviderConfig } from './pi/config';
-export { PI_CAPABILITIES } from './pi/capabilities';
+// Pi coding agent
+export { PiCodingAgent } from './agent';
+export { parsePiConfig } from './config';
+export { PI_CAPABILITIES } from './capabilities';
 
 // Shared utilities
 export { resolveSkillDirectories } from './shared/skills';

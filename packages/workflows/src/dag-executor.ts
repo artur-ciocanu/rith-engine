@@ -16,7 +16,7 @@ import type {
   WorkflowConfig,
   WorkflowDeps,
 } from './deps';
-import type { SendQueryOptions, NodeConfig, TokenUsage } from '@rith/providers/types';
+import type { SendQueryOptions, NodeConfig, TokenUsage } from '@rith/pi/types';
 import type {
   DagNode,
   ApprovalNode,
@@ -326,8 +326,8 @@ export function substituteNodeOutputRefs(
   );
 }
 
-// buildSDKHooksFromYAML moved to @rith/providers/src/claude/provider.ts
-// loadMcpConfig moved to @rith/providers/src/mcp/config.ts
+// buildSDKHooksFromYAML moved to @rith/pi/src/agent.ts
+// loadMcpConfig moved to @rith/pi/src/mcp/config.ts
 
 /**
  * Resolve per-node model and build SendQueryOptions.
@@ -599,7 +599,7 @@ async function executeNodeInternal(
   // Substitute upstream node output references
   const finalPrompt = substituteNodeOutputRefs(substitutedPrompt, nodeOutputs);
 
-  const aiClient = deps.getAgentProvider();
+  const aiClient = deps.getAgent();
   const streamingMode = platform.getStreamingMode();
 
   let nodeOutputText = ''; // Always accumulate regardless of streaming mode
@@ -832,7 +832,7 @@ async function executeNodeInternal(
         // failure — which let failed iterations masquerade as successes.
         // Exception: errorSubtype === 'success' is the Claude SDK's marker for a
         // clean stop_sequence termination. The Claude provider already filters
-        // this out, but the guard here keeps a third-party IAgentProvider that
+        // this out, but the guard here keeps a third-party PiAgent that
         // forwards the SDK pair raw from producing a "SDK returned success"
         // false failure.
         if (msg.isError && msg.errorSubtype !== 'success') {
@@ -1679,7 +1679,7 @@ async function executeLoopNode(
   const msgContext = { workflowId: workflowRun.id, nodeName: node.id };
 
   // Resolve AI client
-  const aiClient = deps.getAgentProvider();
+  const aiClient = deps.getAgent();
 
   // Detect interactive loop resume — check if workflowRun.metadata has loop gate state for this node
   const rawApproval = workflowRun.metadata?.approval;
@@ -1849,7 +1849,7 @@ async function executeLoopNode(
           // clean stop_sequence termination (the SDK sets is_error: true alongside
           // subtype: 'success' to encode "non-default termination, not a failure").
           // The Claude provider already filters this; the guard here defends
-          // against a third-party IAgentProvider that forwards the SDK pair raw.
+          // against a third-party PiAgent that forwards the SDK pair raw.
           if (msg.isError && msg.errorSubtype !== 'success') {
             const subtype = msg.errorSubtype ?? 'unknown';
             const errorsDetail = msg.errors?.length ? ` — ${msg.errors.join('; ')}` : '';

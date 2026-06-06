@@ -45,7 +45,7 @@ function getLog(): Logger {
 // =============================================================================
 
 // Pi backends offered by the wizard. `envVar` names mirror PI_API_KEY_VARS in
-// doctor.ts and PI_PROVIDER_ENV_VARS in packages/providers/src/pi/provider.ts.
+// doctor.ts and PI_PROVIDER_ENV_VARS in packages/pi/src/agent.ts.
 const PI_BACKENDS = [
   {
     id: 'anthropic',

@@ -112,14 +112,14 @@ const mockSendQuery = mock(function* () {
   yield { type: 'result', sessionId: 'session-id' };
 });
 
-const mockGetAgentProvider = mock(() => ({
+const mockGetAgent = mock(() => ({
   sendQuery: mockSendQuery,
 }));
 
 function createMockDeps(): WorkflowDeps {
   return {
     store: createMockStore(),
-    getAgentProvider: mockGetAgentProvider,
+    getAgent: mockGetAgent,
     loadConfig: mock(() =>
       Promise.resolve({
         commands: {},
@@ -173,7 +173,7 @@ describe('script node deps field — command construction', () => {
     await mkdir(testDir, { recursive: true });
     mockExecFileAsync.mockClear();
     mockSendQuery.mockClear();
-    mockGetAgentProvider.mockClear();
+    mockGetAgent.mockClear();
   });
 
   afterEach(async () => {

@@ -1,5 +1,5 @@
 // CONTRACT LAYER — provider-agnostic types for the Pi-only workflow engine.
-// @rith/workflows and @rith/core import from this subpath (@rith/providers/types).
+// @rith/workflows and @rith/core import from this subpath (@rith/pi/types).
 // HARD RULE: This file must never import SDK packages or other @rith/* packages.
 
 // ─── Pi Config Defaults ────────────────────────────────────────────────────
@@ -156,7 +156,7 @@ export interface NodeConfig {
    * Intentional hand-written duplicate of `agentDefinitionSchema` (authoritative
    * source: `@rith/workflows/schemas/dag-node`). Normally we follow the
    * project rule "derive types from Zod via `z.infer`, never write parallel
-   * interfaces" — broken here on purpose: `@rith/providers/types` is the
+   * interfaces" — broken here on purpose: `@rith/pi/types` is the
    * contract subpath consumed by `@rith/workflows`, so importing from
    * `@rith/workflows` would create a circular dependency.
    *
@@ -206,7 +206,7 @@ export interface SendQueryOptions extends AgentRequestOptions {
  * Provider capability flags. The dag-executor uses these for capability warnings
  * when a node specifies features the target provider doesn't support.
  */
-export interface ProviderCapabilities {
+export interface PiCapabilities {
   sessionResume: boolean;
   mcp: boolean;
   skills: boolean;
@@ -223,9 +223,10 @@ export interface ProviderCapabilities {
 }
 
 /**
- * Pi Coding Agent provider interface.
+ * SDK-free DI contract for the Pi coding agent. Implemented by `PiCodingAgent`;
+ * tests inject a structural `{ sendQuery }` fake.
  */
-export interface IAgentProvider {
+export interface PiAgent {
   /**
    * Send a message and get streaming response.
    * @param prompt - User message or prompt

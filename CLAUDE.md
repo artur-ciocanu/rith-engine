@@ -66,7 +66,7 @@ These are implementation constraints, not slogans. Apply them by default.
 
 **SRP + ISP — Single Responsibility + Interface Segregation**
 - Keep each module and package focused on one concern
-- Extend behavior by implementing existing narrow interfaces (`IPlatformAdapter`, `IAgentProvider`, `IDatabase`, `IWorkflowStore`) whenever possible — note `IAgentProvider` is a slim send-query contract (no `getType`/`getCapabilities` methods)
+- Extend behavior by implementing existing narrow interfaces (`IPlatformAdapter`, `PiAgent`, `IDatabase`, `IWorkflowStore`) whenever possible — note `PiAgent` is a slim send-query contract (no `getType`/`getCapabilities` methods)
 - Avoid fat interfaces and "god modules" that mix policy, transport, and storage
 - Do not add unrelated methods to an existing interface — define a new one
 
@@ -248,10 +248,10 @@ packages/
 │       ├── adapters/         # CLI adapter (stdout output)
 │       ├── commands/         # CLI command implementations
 │       └── cli.ts            # CLI entry point
-├── providers/                # @rith/providers - Pi Coding Agent provider (SDK deps live here)
+├── pi/                       # @rith/pi - Pi Coding Agent (SDK deps live here)
 │   └── src/
-│       ├── types.ts          # Contract layer (IAgentProvider, SendQueryOptions, MessageChunk — ZERO SDK deps)
-│       ├── pi/               # PiProvider + config + model-ref + event-bridge + session-resolver
+│       ├── types.ts          # Contract layer (PiAgent, SendQueryOptions, MessageChunk — ZERO SDK deps)
+│       ├── agent.ts          # PiCodingAgent + config + model-ref + event-bridge + session-resolver (flat module)
 │       ├── shared/           # Shared utilities (skills, structured-output)
 │       ├── mcp/              # MCP configuration
 │       └── index.ts          # Package exports
@@ -277,7 +277,7 @@ packages/
 │       ├── executor.ts       # Workflow execution orchestrator (executeWorkflow)
 │       ├── dag-executor.ts   # DAG-specific execution logic
 │       ├── store.ts          # IWorkflowStore interface (database abstraction)
-│       ├── deps.ts           # WorkflowDeps injection types (IWorkflowPlatform, imports from @rith/providers/types)
+│       ├── deps.ts           # WorkflowDeps injection types (IWorkflowPlatform, imports from @rith/pi/types)
 │       ├── event-emitter.ts  # Workflow observability events
 │       ├── logger.ts         # JSONL file logger
 │       ├── validator.ts      # Resource validation (command files, MCP configs, skill dirs)
@@ -358,11 +358,11 @@ import * as core from '@rith/core';  // Don't do this
 **Package Split:**
 - **@rith/paths**: Path resolution utilities, Pino logger factory, web dist cache path (`getWebDistDir`), CWD env stripper (`stripCwdEnv`, `strip-cwd-env-boot`) (no @rith/* deps; `pino` and `dotenv` are allowed external deps)
 - **@rith/git**: Git operations - worktrees, branches, repos, exec wrappers (depends only on @rith/paths)
-- **@rith/providers**: Pi Coding Agent provider — owns SDK deps, `IAgentProvider` interface, `sendQuery()` contract, and Pi-specific option translation. `@rith/providers/types` is the contract subpath (zero SDK deps, zero runtime side effects) that `@rith/workflows` imports from. The provider lives under `pi/`; shared utilities under `shared/`.
+- **@rith/pi**: Pi Coding Agent — owns SDK deps, the `PiAgent` interface, `sendQuery()` contract, and Pi-specific option translation. `@rith/pi/types` is the contract subpath (zero SDK deps, zero runtime side effects) that `@rith/workflows` imports from. The agent lives in `agent.ts` (flat module, `PiCodingAgent`); shared utilities under `shared/`.
 - **@rith/isolation**: Worktree isolation types, providers, resolver, error classifiers (depends only on @rith/git + @rith/paths)
-- **@rith/workflows**: Workflow engine - loader, router, executor, DAG, logger, bundled defaults (depends only on @rith/git + @rith/paths + @rith/providers/types + @hono/zod-openapi + zod; DB/AI/config injected via `WorkflowDeps`)
-- **@rith/cli**: Command-line interface for running workflows (depends on @rith/core + @rith/providers + @rith/workflows + @rith/git + @rith/isolation)
-- **@rith/core**: Business logic, database, orchestration (depends on @rith/providers for AI; provides `createWorkflowStore()` adapter bridging core DB → `IWorkflowStore`)
+- **@rith/workflows**: Workflow engine - loader, router, executor, DAG, logger, bundled defaults (depends only on @rith/git + @rith/paths + @rith/pi/types + @hono/zod-openapi + zod; DB/AI/config injected via `WorkflowDeps`)
+- **@rith/cli**: Command-line interface for running workflows (depends on @rith/core + @rith/pi + @rith/workflows + @rith/git + @rith/isolation)
+- **@rith/core**: Business logic, database, orchestration (depends on @rith/pi for AI; provides `createWorkflowStore()` adapter bridging core DB → `IWorkflowStore`)
 
 
 
@@ -375,9 +375,9 @@ import * as core from '@rith/core';  // Don't do this
 - Variable substitution: `$1`, `$2`, `$3`, `$ARGUMENTS`
 - Session management via Pi Coding Agent SDK
 - Stream AI responses to CLI output
-**4. AI Agent Provider** (`packages/providers/src/`)
-- Implements `IAgentProvider` interface
-- **PiProvider**: `@mariozechner/pi-coding-agent` — one harness for ~20 LLM backends via `<provider>/<model>` refs (e.g. `anthropic/claude-haiku-4-5`, `openrouter/qwen/qwen3-coder`); supports extensions, skills, tool restrictions, thinking level, best-effort structured output. See `packages/docs-web/src/content/docs/getting-started/ai-assistants.md` for setup, capability matrix, and extension config.
+**4. AI Agent** (`packages/pi/src/`)
+- Implements the `PiAgent` interface
+- **PiCodingAgent**: `@mariozechner/pi-coding-agent` — one harness for ~20 LLM backends via `<provider>/<model>` refs (e.g. `anthropic/claude-haiku-4-5`, `openrouter/qwen/qwen3-coder`); supports extensions, skills, tool restrictions, thinking level, best-effort structured output. See `packages/docs-web/src/content/docs/getting-started/ai-assistants.md` for setup, capability matrix, and extension config.
 - Streaming: `for await (const event of events) { await platform.send(event) }`
 
 ### Configuration
@@ -451,7 +451,7 @@ assistants:
 ### When Creating New Features
 
 **Quick reference:**
-- **AI Providers**: Implement `IAgentProvider`, session management, streaming
+- **AI Agent**: Implement `PiAgent`, session management, streaming
 - **Database Operations**: Use `IDatabase` interface (supports SQLite via adapter)
 - **Plan insertion points**: Use stable text anchors (e.g., "after the `it('throws on ...')` test block"), never raw line numbers — line numbers drift on every preceding edit.
 
@@ -460,8 +460,8 @@ assistants:
 When working with the Pi Coding Agent SDK, prefer importing and using SDK types directly:
 
 ```typescript
-// ✅ CORRECT - Import SDK types directly from the provider package
-import type { IAgentProvider, MessageChunk } from '@rith/providers/types';
+// ✅ CORRECT - Import SDK types directly from the Pi package
+import type { PiAgent, MessageChunk } from '@rith/pi/types';
 ```
 
 ```typescript

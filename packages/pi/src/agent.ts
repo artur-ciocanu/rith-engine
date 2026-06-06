@@ -4,9 +4,9 @@ import { join } from 'node:path';
 
 import { createLogger } from '@rith/paths';
 
-import type { IAgentProvider, MessageChunk, SendQueryOptions } from '../types';
+import type { PiAgent, MessageChunk, SendQueryOptions } from './types';
 
-import { parseProviderConfig } from './config';
+import { parsePiConfig } from './config';
 import { parsePiModelRef } from './model-ref';
 
 // IMPORTANT: Do NOT add static `import { ... } from '@mariozechner/*'` here,
@@ -34,7 +34,7 @@ import { parsePiModelRef } from './model-ref';
  * Simple counting semaphore for capping concurrent Pi `session.prompt()` calls.
  * Pi/Minimax has no built-in SDK-level throttling; without this, large parallel
  * workflow batches (e.g. 10+ concurrent review PRs × 5 aspects each) hit rate
- * limits and cascade-fail. Module-level so it's shared across all PiProvider
+ * limits and cascade-fail. Module-level so it's shared across all PiCodingAgent
  * instances within a process — Pi concurrency is global (one upstream backend).
  */
 class Semaphore {
@@ -74,7 +74,7 @@ let piSemaphore: Semaphore | undefined;
  * optional fields from that package.json — `piConfig.name`, `piConfig.configDir`,
  * and `version` — so the stub is genuinely minimal. Idempotent: the file is
  * only written once per host (existsSync check), and the env var is set on
- * every call so multiple PiProvider instances stay consistent.
+ * every call so multiple PiCodingAgent instances stay consistent.
  *
  * Done on each sendQuery rather than at module load so (a) the file write
  * is paid only when Pi is actually used, and (b) the env var can't get
@@ -136,16 +136,16 @@ function getLog(): ReturnType<typeof createLogger> {
 
 // Structured-output prompt augmentation is shared across providers. Import
 // once for local use and re-export so existing callers and tests keep their
-// import path stable; new providers should import from `../shared/structured-output`.
-import { augmentPromptForJsonSchema } from '../shared/structured-output';
+// import path stable; new providers should import from `./shared/structured-output`.
+import { augmentPromptForJsonSchema } from './shared/structured-output';
 export { augmentPromptForJsonSchema };
 
 /**
- * Pi community provider — wraps `@mariozechner/pi-coding-agent`'s full
+ * Pi coding agent — wraps `@mariozechner/pi-coding-agent`'s full
  * coding-agent harness. Each `sendQuery()` call creates a fresh session
  * (no reuse) so concurrent calls don't collide.
  */
-export class PiProvider implements IAgentProvider {
+export class PiCodingAgent implements PiAgent {
   async *sendQuery(
     prompt: string,
     cwd: string,
@@ -185,7 +185,7 @@ export class PiProvider implements IAgentProvider {
     const { createAgentSession } = piCodingAgent;
 
     const assistantConfig = requestOptions?.assistantConfig ?? {};
-    const piConfig = parseProviderConfig(assistantConfig);
+    const piConfig = parsePiConfig(assistantConfig);
 
     // 1. Resolve model ref: request (workflow node / chat) → config default
     const modelRef = requestOptions?.model ?? piConfig.model;

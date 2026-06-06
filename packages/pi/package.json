@@ -1,5 +1,5 @@
 {
-  "name": "@rith/providers",
+  "name": "@rith/pi",
   "version": "0.3.12",
   "type": "module",
   "main": "./src/index.ts",
@@ -7,13 +7,10 @@
   "exports": {
     ".": "./src/index.ts",
     "./types": "./src/types.ts",
-    "./pi": "./src/pi/index.ts",
-    "./pi/provider": "./src/pi/provider.ts",
-    "./pi/config": "./src/pi/config.ts",
     "./mcp/config": "./src/mcp/config.ts"
   },
   "scripts": {
-    "test": "bun test src/pi/provider-lazy-load.test.ts && bun test src/pi/provider.test.ts src/pi/config.test.ts src/pi/model-ref.test.ts src/pi/options-translator.test.ts src/pi/session-resolver.test.ts src/pi/ui-context-stub.test.ts src/pi/event-bridge.test.ts && bun test src/shared/",
+    "test": "bun test src/agent-lazy-load.test.ts && bun test src/agent.test.ts src/config.test.ts src/model-ref.test.ts src/options-translator.test.ts src/session-resolver.test.ts src/ui-context-stub.test.ts src/event-bridge.test.ts && bun test src/shared/",
     "type-check": "bun x tsc --noEmit"
   },
   "dependencies": {

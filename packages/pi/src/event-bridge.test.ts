@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import type { AgentSession, AgentSessionEvent } from '@mariozechner/pi-coding-agent';
 
-import type { MessageChunk } from '../types';
+import type { MessageChunk } from './types';
 import {
   AsyncQueue,
   bridgeSession,

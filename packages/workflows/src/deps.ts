@@ -4,22 +4,22 @@
  * Defines narrow interfaces for what the workflow engine needs from external systems.
  * Callers in @rith/core satisfy these structurally — no adapter wrappers needed.
  *
- * Provider types are imported directly from @rith/providers/types (contract layer).
- * No more mirror copies — single source of truth for IAgentProvider, MessageChunk, etc.
+ * Pi agent types are imported directly from @rith/pi/types (contract layer).
+ * No more mirror copies — single source of truth for PiAgent, MessageChunk, etc.
  */
 import type { IWorkflowStore } from './store';
 import type {
-  IAgentProvider,
+  PiAgent,
   MessageChunk,
   TokenUsage,
   SendQueryOptions,
   NodeConfig,
-} from '@rith/providers/types';
+} from '@rith/pi/types';
 
-// Re-export provider types so existing workflow engine consumers don't break
-export type { IAgentProvider, MessageChunk, TokenUsage, SendQueryOptions, NodeConfig };
+// Re-export Pi agent types so existing workflow engine consumers don't break
+export type { PiAgent, MessageChunk, TokenUsage, SendQueryOptions, NodeConfig };
 
-// Backwards compat alias — deprecated, prefer direct import from @rith/providers/types
+// Backwards compat alias — deprecated, prefer direct import from @rith/pi/types
 export type WorkflowTokenUsage = TokenUsage;
 
 // ---------------------------------------------------------------------------
@@ -74,10 +74,10 @@ export interface WorkflowConfig {
 }
 
 // ---------------------------------------------------------------------------
-// Agent provider factory type
+// Pi agent factory type
 // ---------------------------------------------------------------------------
 
-export type AgentProviderFactory = () => IAgentProvider;
+export type PiAgentFactory = () => PiAgent;
 
 // ---------------------------------------------------------------------------
 // WorkflowDeps — the single injection point
@@ -85,6 +85,6 @@ export type AgentProviderFactory = () => IAgentProvider;
 
 export interface WorkflowDeps {
   store: IWorkflowStore;
-  getAgentProvider: AgentProviderFactory;
+  getAgent: PiAgentFactory;
   loadConfig: (cwd: string) => Promise<WorkflowConfig>;
 }

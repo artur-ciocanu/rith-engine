@@ -20,7 +20,7 @@ import { pool, getDatabaseType } from '@rith/core';
 import { BUNDLED_COMMANDS, BUNDLED_WORKFLOWS } from '@rith/workflows/defaults';
 
 // Env vars that indicate a Pi backend API key is configured. Mirrors
-// `PI_PROVIDER_ENV_VARS` in packages/providers/src/pi/provider.ts — the keys
+// `PI_PROVIDER_ENV_VARS` in packages/pi/src/agent.ts — the keys
 // Pi's getEnvApiKey() recognizes at request time.
 const PI_API_KEY_VARS = [
   'ANTHROPIC_API_KEY',

@@ -50,7 +50,7 @@ bun install
 ## AI provider (Pi) is bundled
 
 Rith Engine uses [Pi Coding Agent](https://github.com/badlogic/pi-mono) as its AI provider. Pi
-ships as a dependency of `@rith/providers` — there is no separate AI binary to install.
+ships as a dependency of `@rith/pi` — there is no separate AI binary to install.
 
 Authenticate Pi once, either via OAuth or API keys:
 

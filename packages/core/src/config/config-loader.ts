@@ -1,7 +1,7 @@
 /**
  * Configuration loader for Rith Engine YAML config files.
  *
- * Pi is the sole provider — registry-based provider resolution has been removed.
+ * Pi is the sole AI backend — registry-based provider resolution has been removed.
  *
  * Loads, merges, and caches:
  *   1. Built-in defaults
