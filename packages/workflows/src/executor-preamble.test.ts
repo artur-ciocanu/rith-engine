@@ -120,7 +120,7 @@ function makeDeps(store?: IWorkflowStore): WorkflowDeps {
         commands: { folder: '' },
       })
     ),
-    getAgentProvider: mock(() => ({
+    getAgent: mock(() => ({
       run: mock(async () => {}),
     })),
   } as unknown as WorkflowDeps;

@@ -44,8 +44,8 @@ mock.module('../db/codebases', () => ({
   getCodebase: mockGetCodebase,
 }));
 
-mock.module('@rith/providers', () => ({
-  getAgentProvider: mock(() => ({})),
+mock.module('@rith/pi', () => ({
+  PiCodingAgent: mock(() => ({})),
 }));
 
 mock.module('../config/config-loader', () => ({
@@ -145,10 +145,10 @@ describe('createWorkflowStore', () => {
 });
 
 describe('createWorkflowDeps', () => {
-  test('returns WorkflowDeps with store, getAgentProvider, and loadConfig', () => {
+  test('returns WorkflowDeps with store, getAgent, and loadConfig', () => {
     const deps = createWorkflowDeps();
     expect(deps.store).toBeDefined();
-    expect(typeof deps.getAgentProvider).toBe('function');
+    expect(typeof deps.getAgent).toBe('function');
     expect(typeof deps.loadConfig).toBe('function');
   });
 

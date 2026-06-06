@@ -16,7 +16,7 @@
     "@rith/git": "workspace:*",
     "@rith/isolation": "workspace:*",
     "@rith/paths": "workspace:*",
-    "@rith/providers": "workspace:*",
+    "@rith/pi": "workspace:*",
     "@rith/workflows": "workspace:*",
     "@clack/prompts": "^1.0.0",
     "dotenv": "^17.2.3"

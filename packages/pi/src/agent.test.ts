@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { beforeEach, describe, expect, mock, test } from 'bun:test';
 import type { AgentSessionEvent } from '@mariozechner/pi-coding-agent';
 
-import { createMockLogger } from '../test/mocks/logger';
+import { createMockLogger } from './test/mocks/logger';
 
 // ─── Mock @rith/paths logger so provider instantiation is quiet ───────
 
@@ -157,7 +157,7 @@ mock.module('@mariozechner/pi-coding-agent', () => ({
 }));
 
 // Import AFTER mocks are set — module resolution freezes the mocks.
-import { PiProvider } from './provider';
+import { PiCodingAgent } from './agent';
 
 // ─── Helpers ────────────────────────────────────────────────────────────
 
@@ -180,7 +180,7 @@ function resetScript(events: FakeEvent[]): void {
 
 // ─── Test suite ─────────────────────────────────────────────────────────
 
-describe('PiProvider', () => {
+describe('PiCodingAgent', () => {
   beforeEach(() => {
     mockLogger.fatal.mockClear();
     mockLogger.error.mockClear();
@@ -240,7 +240,7 @@ describe('PiProvider', () => {
     // asserting the env var was set regardless.
     delete process.env.PI_PACKAGE_DIR;
     expect(process.env.PI_PACKAGE_DIR).toBeUndefined();
-    await consume(new PiProvider().sendQuery('hi', '/tmp'));
+    await consume(new PiCodingAgent().sendQuery('hi', '/tmp'));
     expect(process.env.PI_PACKAGE_DIR).toBeDefined();
     expect(process.env.PI_PACKAGE_DIR).toContain('rith-pi-shim');
 
@@ -261,13 +261,13 @@ describe('PiProvider', () => {
   });
 
   test('throws when no model is configured', async () => {
-    const { error } = await consume(new PiProvider().sendQuery('hi', '/tmp'));
+    const { error } = await consume(new PiCodingAgent().sendQuery('hi', '/tmp'));
     expect(error?.message).toContain('Pi provider requires a model');
   });
 
   test('throws when model ref is malformed', async () => {
     const { error } = await consume(
-      new PiProvider().sendQuery('hi', '/tmp', undefined, { model: 'sonnet' })
+      new PiCodingAgent().sendQuery('hi', '/tmp', undefined, { model: 'sonnet' })
     );
     expect(error?.message).toContain('Invalid Pi model ref');
   });
@@ -276,7 +276,7 @@ describe('PiProvider', () => {
     // No env var, no auth.json entry → log hint, but continue, to support custom providers that don't use credentials or that use non-Pi means of providing credentials.
     resetScript(scriptedAgentEnd());
     const { error } = await consume(
-      new PiProvider().sendQuery('hi', '/tmp', undefined, {
+      new PiCodingAgent().sendQuery('hi', '/tmp', undefined, {
         model: 'unknownprovider/some-model',
       })
     );
@@ -301,7 +301,7 @@ describe('PiProvider', () => {
     resetScript(scriptedAgentEnd());
 
     await consume(
-      new PiProvider().sendQuery('hi', '/tmp', undefined, {
+      new PiCodingAgent().sendQuery('hi', '/tmp', undefined, {
         model: 'google/gemini-2.5-pro',
       })
     );
@@ -322,7 +322,7 @@ describe('PiProvider', () => {
     });
 
     const { error } = await consume(
-      new PiProvider().sendQuery('hi', '/tmp', undefined, {
+      new PiCodingAgent().sendQuery('hi', '/tmp', undefined, {
         model: 'google/gemini-2.5-pro',
       })
     );
@@ -350,7 +350,7 @@ describe('PiProvider', () => {
 
     resetScript(scriptedAgentEnd());
     const { error } = await consume(
-      new PiProvider().sendQuery('hi', '/tmp', undefined, {
+      new PiCodingAgent().sendQuery('hi', '/tmp', undefined, {
         model: 'lm-studio/some-model',
       })
     );
@@ -370,7 +370,7 @@ describe('PiProvider', () => {
   test('throws when env var missing AND auth.json has no entry', async () => {
     // GEMINI_API_KEY not set (beforeEach deletes it), fileCreds empty
     const { error } = await consume(
-      new PiProvider().sendQuery('hi', '/tmp', undefined, {
+      new PiCodingAgent().sendQuery('hi', '/tmp', undefined, {
         model: 'google/gemini-2.5-pro',
       })
     );
@@ -404,7 +404,7 @@ describe('PiProvider', () => {
     ]);
 
     const { error } = await consume(
-      new PiProvider().sendQuery('hi', '/tmp', undefined, {
+      new PiCodingAgent().sendQuery('hi', '/tmp', undefined, {
         model: 'anthropic/claude-haiku-4-5',
       })
     );
@@ -423,7 +423,7 @@ describe('PiProvider', () => {
     mockModelRegistryFind.mockImplementationOnce(() => undefined);
     resetScript(scriptedAgentEnd());
     const { error } = await consume(
-      new PiProvider().sendQuery('hi', '/tmp', undefined, {
+      new PiCodingAgent().sendQuery('hi', '/tmp', undefined, {
         model: 'google/unknown-model-id',
       })
     );
@@ -443,7 +443,7 @@ describe('PiProvider', () => {
     resetScript(scriptedAgentEnd());
 
     const { error } = await consume(
-      new PiProvider().sendQuery('hi', '/tmp', undefined, {
+      new PiCodingAgent().sendQuery('hi', '/tmp', undefined, {
         model: 'extension-provider/custom-model',
       })
     );
@@ -480,7 +480,7 @@ describe('PiProvider', () => {
     ]);
 
     await consume(
-      new PiProvider().sendQuery('hi', '/tmp', undefined, {
+      new PiCodingAgent().sendQuery('hi', '/tmp', undefined, {
         model: 'google/gemini-2.5-pro',
         env: { GEMINI_API_KEY: 'from-request-env' },
       })
@@ -518,7 +518,7 @@ describe('PiProvider', () => {
     ]);
 
     await consume(
-      new PiProvider().sendQuery('hi', '/tmp', undefined, {
+      new PiCodingAgent().sendQuery('hi', '/tmp', undefined, {
         model: 'anthropic/claude-haiku-4-5',
       })
     );
@@ -564,7 +564,7 @@ describe('PiProvider', () => {
     ]);
 
     const { chunks, error } = await consume(
-      new PiProvider().sendQuery('hi', '/tmp', undefined, {
+      new PiCodingAgent().sendQuery('hi', '/tmp', undefined, {
         model: 'google/gemini-2.5-pro',
       })
     );
@@ -613,7 +613,7 @@ describe('PiProvider', () => {
     ]);
 
     const { chunks } = await consume(
-      new PiProvider().sendQuery('hi', '/tmp', undefined, {
+      new PiCodingAgent().sendQuery('hi', '/tmp', undefined, {
         model: 'google/gemini-2.5-pro',
       })
     );
@@ -658,7 +658,7 @@ describe('PiProvider', () => {
     ]);
 
     const { chunks, error } = await consume(
-      new PiProvider().sendQuery('hi', '/tmp', 'nonexistent-id', {
+      new PiCodingAgent().sendQuery('hi', '/tmp', 'nonexistent-id', {
         model: 'google/gemini-2.5-pro',
       })
     );
@@ -702,7 +702,7 @@ describe('PiProvider', () => {
     ]);
 
     const { chunks, error } = await consume(
-      new PiProvider().sendQuery('hi', '/tmp', 'existing-id', {
+      new PiCodingAgent().sendQuery('hi', '/tmp', 'existing-id', {
         model: 'google/gemini-2.5-pro',
       })
     );
@@ -722,7 +722,7 @@ describe('PiProvider', () => {
     resetScript(scriptedAgentEnd());
 
     const { chunks } = await consume(
-      new PiProvider().sendQuery('hi', '/tmp', undefined, {
+      new PiCodingAgent().sendQuery('hi', '/tmp', undefined, {
         model: 'google/gemini-2.5-pro',
       })
     );
@@ -759,7 +759,7 @@ describe('PiProvider', () => {
     ]);
 
     await consume(
-      new PiProvider().sendQuery('hi', '/tmp', undefined, {
+      new PiCodingAgent().sendQuery('hi', '/tmp', undefined, {
         model: 'google/gemini-2.5-pro',
       })
     );
@@ -796,7 +796,7 @@ describe('PiProvider', () => {
     resetScript(scriptedAgentEnd());
 
     await consume(
-      new PiProvider().sendQuery('hi', '/tmp', undefined, {
+      new PiCodingAgent().sendQuery('hi', '/tmp', undefined, {
         model: 'google/gemini-2.5-pro',
         nodeConfig: { thinking: 'high' },
       })
@@ -811,7 +811,7 @@ describe('PiProvider', () => {
     resetScript(scriptedAgentEnd());
 
     await consume(
-      new PiProvider().sendQuery('hi', '/tmp', undefined, {
+      new PiCodingAgent().sendQuery('hi', '/tmp', undefined, {
         model: 'google/gemini-2.5-pro',
         nodeConfig: { effort: 'medium' },
       })
@@ -826,7 +826,7 @@ describe('PiProvider', () => {
     resetScript(scriptedAgentEnd());
 
     await consume(
-      new PiProvider().sendQuery('hi', '/tmp', undefined, {
+      new PiCodingAgent().sendQuery('hi', '/tmp', undefined, {
         model: 'google/gemini-2.5-pro',
         nodeConfig: { thinking: 'off' },
       })
@@ -841,7 +841,7 @@ describe('PiProvider', () => {
     resetScript(scriptedAgentEnd());
 
     const { chunks } = await consume(
-      new PiProvider().sendQuery('hi', '/tmp', undefined, {
+      new PiCodingAgent().sendQuery('hi', '/tmp', undefined, {
         model: 'google/gemini-2.5-pro',
         nodeConfig: { thinking: { type: 'enabled', budget_tokens: 4000 } },
       })
@@ -862,7 +862,7 @@ describe('PiProvider', () => {
     resetScript(scriptedAgentEnd());
 
     await consume(
-      new PiProvider().sendQuery('hi', '/tmp', undefined, {
+      new PiCodingAgent().sendQuery('hi', '/tmp', undefined, {
         model: 'google/gemini-2.5-pro',
         nodeConfig: { allowed_tools: ['read', 'grep'] },
       })
@@ -879,7 +879,7 @@ describe('PiProvider', () => {
     resetScript(scriptedAgentEnd());
 
     await consume(
-      new PiProvider().sendQuery('hi', '/tmp', undefined, {
+      new PiCodingAgent().sendQuery('hi', '/tmp', undefined, {
         model: 'google/gemini-2.5-pro',
         nodeConfig: { allowed_tools: [] },
       })
@@ -894,7 +894,7 @@ describe('PiProvider', () => {
     resetScript(scriptedAgentEnd());
 
     const { chunks } = await consume(
-      new PiProvider().sendQuery('hi', '/tmp', undefined, {
+      new PiCodingAgent().sendQuery('hi', '/tmp', undefined, {
         model: 'google/gemini-2.5-pro',
         nodeConfig: { allowed_tools: ['read', 'WebFetch'] },
       })
@@ -912,7 +912,7 @@ describe('PiProvider', () => {
     resetScript(scriptedAgentEnd());
 
     await consume(
-      new PiProvider().sendQuery('hi', '/tmp', undefined, {
+      new PiCodingAgent().sendQuery('hi', '/tmp', undefined, {
         model: 'google/gemini-2.5-pro',
         nodeConfig: { denied_tools: ['bash', 'write'] },
       })
@@ -931,7 +931,7 @@ describe('PiProvider', () => {
     resetScript(scriptedAgentEnd());
 
     await consume(
-      new PiProvider().sendQuery('hi', '/tmp', undefined, {
+      new PiCodingAgent().sendQuery('hi', '/tmp', undefined, {
         model: 'google/gemini-2.5-pro',
       })
     );
@@ -946,7 +946,7 @@ describe('PiProvider', () => {
     resetScript(scriptedAgentEnd());
 
     await consume(
-      new PiProvider().sendQuery('hi', '/tmp', undefined, {
+      new PiCodingAgent().sendQuery('hi', '/tmp', undefined, {
         model: 'google/gemini-2.5-pro',
         env: { DATABASE_URL: 'postgres://managed' },
       })
@@ -979,7 +979,7 @@ describe('PiProvider', () => {
     resetScript(scriptedAgentEnd());
 
     await consume(
-      new PiProvider().sendQuery('hi', '/tmp', undefined, {
+      new PiCodingAgent().sendQuery('hi', '/tmp', undefined, {
         model: 'google/gemini-2.5-pro',
         nodeConfig: { allowed_tools: ['read', 'bash'] },
         env: { STRIPE_KEY: 'sk_test_abc' },
@@ -1003,7 +1003,7 @@ describe('PiProvider', () => {
     resetScript(scriptedAgentEnd());
 
     await consume(
-      new PiProvider().sendQuery('hi', '/tmp', undefined, {
+      new PiCodingAgent().sendQuery('hi', '/tmp', undefined, {
         model: 'google/gemini-2.5-pro',
         env: {},
       })
@@ -1020,7 +1020,7 @@ describe('PiProvider', () => {
     resetScript(scriptedAgentEnd());
 
     await consume(
-      new PiProvider().sendQuery('hi', '/tmp', undefined, {
+      new PiCodingAgent().sendQuery('hi', '/tmp', undefined, {
         model: 'google/gemini-2.5-pro',
         systemPrompt: 'You are a careful investigator.',
       })
@@ -1040,7 +1040,7 @@ describe('PiProvider', () => {
     resetScript(scriptedAgentEnd());
 
     await consume(
-      new PiProvider().sendQuery('hi', '/tmp', undefined, {
+      new PiCodingAgent().sendQuery('hi', '/tmp', undefined, {
         model: 'google/gemini-2.5-pro',
         nodeConfig: { systemPrompt: 'node-level prompt' },
       })
@@ -1057,7 +1057,7 @@ describe('PiProvider', () => {
     resetScript(scriptedAgentEnd());
 
     await consume(
-      new PiProvider().sendQuery('hi', '/tmp', undefined, {
+      new PiCodingAgent().sendQuery('hi', '/tmp', undefined, {
         model: 'google/gemini-2.5-pro',
         systemPrompt: 'request-level wins',
         nodeConfig: { systemPrompt: 'node-level' },
@@ -1075,7 +1075,7 @@ describe('PiProvider', () => {
     resetScript(scriptedAgentEnd());
 
     await consume(
-      new PiProvider().sendQuery('hi', '/tmp', undefined, {
+      new PiCodingAgent().sendQuery('hi', '/tmp', undefined, {
         model: 'google/gemini-2.5-pro',
         systemPrompt: {
           type: 'preset',
@@ -1101,7 +1101,7 @@ describe('PiProvider', () => {
     resetScript(scriptedAgentEnd());
 
     await consume(
-      new PiProvider().sendQuery('hi', '/tmp', undefined, {
+      new PiCodingAgent().sendQuery('hi', '/tmp', undefined, {
         model: 'google/gemini-2.5-pro',
       })
     );
@@ -1125,7 +1125,7 @@ describe('PiProvider', () => {
     resetScript(scriptedAgentEnd());
 
     await consume(
-      new PiProvider().sendQuery('hi', '/tmp', undefined, {
+      new PiCodingAgent().sendQuery('hi', '/tmp', undefined, {
         model: 'google/gemini-2.5-pro',
         assistantConfig: { enableExtensions: true },
       })
@@ -1147,7 +1147,7 @@ describe('PiProvider', () => {
     resetScript(scriptedAgentEnd());
 
     await consume(
-      new PiProvider().sendQuery('hi', '/tmp', undefined, {
+      new PiCodingAgent().sendQuery('hi', '/tmp', undefined, {
         model: 'google/gemini-2.5-pro',
         assistantConfig: { enableExtensions: false },
       })
@@ -1164,7 +1164,7 @@ describe('PiProvider', () => {
     resetScript(scriptedAgentEnd());
 
     const { chunks, error } = await consume(
-      new PiProvider().sendQuery('hi', '/tmp/nonexistent-cwd', undefined, {
+      new PiCodingAgent().sendQuery('hi', '/tmp/nonexistent-cwd', undefined, {
         model: 'google/gemini-2.5-pro',
         nodeConfig: { skills: ['definitely-does-not-exist'] },
       })
@@ -1188,7 +1188,7 @@ describe('PiProvider', () => {
     resetScript(scriptedAgentEnd());
 
     await consume(
-      new PiProvider().sendQuery('hi', '/tmp', undefined, {
+      new PiCodingAgent().sendQuery('hi', '/tmp', undefined, {
         model: 'google/gemini-2.5-pro',
       })
     );
@@ -1209,7 +1209,7 @@ describe('PiProvider', () => {
     });
 
     const { error } = await consume(
-      new PiProvider().sendQuery('hi', '/tmp', undefined, {
+      new PiCodingAgent().sendQuery('hi', '/tmp', undefined, {
         model: 'google/gemini-2.5-pro',
       })
     );
@@ -1225,7 +1225,7 @@ describe('PiProvider', () => {
     controller.abort();
 
     await consume(
-      new PiProvider().sendQuery('hi', '/tmp', undefined, {
+      new PiCodingAgent().sendQuery('hi', '/tmp', undefined, {
         model: 'google/gemini-2.5-pro',
         abortSignal: controller.signal,
       })
@@ -1270,7 +1270,7 @@ describe('PiProvider', () => {
     });
 
     await consume(
-      new PiProvider().sendQuery('hi', '/tmp', undefined, {
+      new PiCodingAgent().sendQuery('hi', '/tmp', undefined, {
         model: 'google/gemini-2.5-pro',
         abortSignal: controller.signal,
       })
@@ -1288,7 +1288,7 @@ describe('PiProvider', () => {
     resetScript(scriptedAgentEnd());
 
     const { chunks } = await consume(
-      new PiProvider().sendQuery('hi', '/tmp', undefined, {
+      new PiCodingAgent().sendQuery('hi', '/tmp', undefined, {
         model: 'google/gemini-2.5-pro',
       })
     );
@@ -1324,7 +1324,7 @@ describe('PiProvider', () => {
     resetScript(scriptedAgentEnd());
 
     await consume(
-      new PiProvider().sendQuery('Summarize this bug.', '/tmp', undefined, {
+      new PiCodingAgent().sendQuery('Summarize this bug.', '/tmp', undefined, {
         model: 'google/gemini-2.5-pro',
         outputFormat: {
           type: 'json_schema',
@@ -1346,7 +1346,7 @@ describe('PiProvider', () => {
     resetScript(scriptedAgentEnd());
 
     await consume(
-      new PiProvider().sendQuery('do a thing', '/tmp', undefined, {
+      new PiCodingAgent().sendQuery('do a thing', '/tmp', undefined, {
         model: 'google/gemini-2.5-pro',
       })
     );
@@ -1361,7 +1361,7 @@ describe('PiProvider', () => {
     resetScript(scriptedAssistantThenEnd('{"area":"web","confidence":0.9}'));
 
     const { chunks } = await consume(
-      new PiProvider().sendQuery('classify', '/tmp', undefined, {
+      new PiCodingAgent().sendQuery('classify', '/tmp', undefined, {
         model: 'google/gemini-2.5-pro',
         outputFormat: {
           type: 'json_schema',
@@ -1383,7 +1383,7 @@ describe('PiProvider', () => {
     resetScript(scriptedAssistantThenEnd('```json\n{"ok":true}\n```'));
 
     const { chunks } = await consume(
-      new PiProvider().sendQuery('x', '/tmp', undefined, {
+      new PiCodingAgent().sendQuery('x', '/tmp', undefined, {
         model: 'google/gemini-2.5-pro',
         outputFormat: { type: 'json_schema', schema: {} },
       })
@@ -1401,7 +1401,7 @@ describe('PiProvider', () => {
     resetScript(scriptedAssistantThenEnd('Here is the JSON:\n{"ok":true}\nHope this helps!'));
 
     const { chunks, error } = await consume(
-      new PiProvider().sendQuery('x', '/tmp', undefined, {
+      new PiCodingAgent().sendQuery('x', '/tmp', undefined, {
         model: 'google/gemini-2.5-pro',
         outputFormat: { type: 'json_schema', schema: {} },
       })
@@ -1423,7 +1423,7 @@ describe('PiProvider', () => {
     resetScript(scriptedAssistantThenEnd('{"accidental":"json"}'));
 
     const { chunks } = await consume(
-      new PiProvider().sendQuery('x', '/tmp', undefined, {
+      new PiCodingAgent().sendQuery('x', '/tmp', undefined, {
         model: 'google/gemini-2.5-pro',
       })
     );
@@ -1442,7 +1442,7 @@ describe('PiProvider', () => {
     resetScript(scriptedAgentEnd());
 
     await consume(
-      new PiProvider().sendQuery('hi', '/tmp', undefined, {
+      new PiCodingAgent().sendQuery('hi', '/tmp', undefined, {
         model: 'google/gemini-2.5-pro',
       })
     );
@@ -1459,7 +1459,7 @@ describe('PiProvider', () => {
     resetScript(scriptedAgentEnd());
 
     await consume(
-      new PiProvider().sendQuery('hi', '/tmp', undefined, {
+      new PiCodingAgent().sendQuery('hi', '/tmp', undefined, {
         model: 'google/gemini-2.5-pro',
         assistantConfig: { enableExtensions: false },
       })
@@ -1490,7 +1490,7 @@ describe('PiProvider', () => {
     });
 
     await consume(
-      new PiProvider().sendQuery('hi', '/tmp', undefined, {
+      new PiCodingAgent().sendQuery('hi', '/tmp', undefined, {
         model: 'google/gemini-2.5-pro',
         assistantConfig: {
           enableExtensions: true,
@@ -1510,7 +1510,7 @@ describe('PiProvider', () => {
     resetScript(scriptedAgentEnd());
 
     await consume(
-      new PiProvider().sendQuery('hi', '/tmp', undefined, {
+      new PiCodingAgent().sendQuery('hi', '/tmp', undefined, {
         model: 'google/gemini-2.5-pro',
         assistantConfig: { enableExtensions: false, extensionFlags: { plan: true } },
       })
@@ -1527,7 +1527,7 @@ describe('PiProvider', () => {
     resetScript(scriptedAgentEnd());
 
     await consume(
-      new PiProvider().sendQuery('hi', '/tmp', undefined, {
+      new PiCodingAgent().sendQuery('hi', '/tmp', undefined, {
         model: 'google/gemini-2.5-pro',
         assistantConfig: { maxConcurrent: 2 },
       })
@@ -1543,7 +1543,7 @@ describe('PiProvider', () => {
     resetScript(scriptedAgentEnd());
 
     await consume(
-      new PiProvider().sendQuery('hi', '/tmp', undefined, {
+      new PiCodingAgent().sendQuery('hi', '/tmp', undefined, {
         model: 'google/gemini-2.5-pro',
       })
     );
@@ -1561,7 +1561,7 @@ describe('PiProvider', () => {
     mockSettingsManagerGetProjectSettings.mockImplementation(() => ({}));
 
     await consume(
-      new PiProvider().sendQuery('hi', '/tmp', undefined, { model: 'google/gemini-2.5-pro' })
+      new PiCodingAgent().sendQuery('hi', '/tmp', undefined, { model: 'google/gemini-2.5-pro' })
     );
 
     expect(mockSettingsManagerCreate).toHaveBeenCalledTimes(1);
@@ -1576,7 +1576,7 @@ describe('PiProvider', () => {
     mockSettingsManagerGetProjectSettings.mockImplementation(() => ({ retry: { enabled: true } }));
 
     await consume(
-      new PiProvider().sendQuery('hi', '/tmp', undefined, { model: 'google/gemini-2.5-pro' })
+      new PiCodingAgent().sendQuery('hi', '/tmp', undefined, { model: 'google/gemini-2.5-pro' })
     );
 
     expect(mockSettingsManagerInMemory).toHaveBeenCalledWith({ retry: { enabled: true } });
@@ -1605,7 +1605,7 @@ describe('PiProvider', () => {
     }));
 
     await consume(
-      new PiProvider().sendQuery('hi', '/tmp', undefined, { model: 'google/gemini-2.5-pro' })
+      new PiCodingAgent().sendQuery('hi', '/tmp', undefined, { model: 'google/gemini-2.5-pro' })
     );
 
     expect(mockSettingsManagerInMemory).toHaveBeenCalledWith({
@@ -1629,7 +1629,7 @@ describe('PiProvider', () => {
     ]);
 
     const { error } = await consume(
-      new PiProvider().sendQuery('hi', '/tmp', undefined, { model: 'google/gemini-2.5-pro' })
+      new PiCodingAgent().sendQuery('hi', '/tmp', undefined, { model: 'google/gemini-2.5-pro' })
     );
 
     expect(error).toBeUndefined();

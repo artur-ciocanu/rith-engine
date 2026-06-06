@@ -1,4 +1,4 @@
-import type { ProviderCapabilities } from '../types';
+import type { PiCapabilities } from './types';
 
 /**
  * Pi capabilities — intentionally conservative. Declared flags must reflect
@@ -16,7 +16,7 @@ import type { ProviderCapabilities } from '../types';
  * recent Qwen Coder, DeepSeek V3); parse failures degrade via the
  * dag-executor's existing dag.structured_output_missing path.
  */
-export const PI_CAPABILITIES: ProviderCapabilities = {
+export const PI_CAPABILITIES: PiCapabilities = {
   sessionResume: true,
   mcp: false,
   skills: true,

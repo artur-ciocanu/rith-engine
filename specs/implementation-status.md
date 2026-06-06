@@ -22,24 +22,46 @@ unplanned but enabling prerequisite for item 14: the workflows test suite now ru
 
 ## Progress at a glance
 
-| #   | Item                                                  | Source       | Status              |
-| --- | ----------------------------------------------------- | ------------ | ------------------- |
-| 1   | Bundled workflow model refs (14 files)                | config §5/§7 | ✅ Done             |
-| 2   | Provider "requires a model" error message             | config §7    | ✅ Done             |
-| 3   | Config schema `provider:` → `pi:` block               | config §2    | ✅ Done             |
-| 4   | Drop `env` + `interactive` config knobs               | user         | ✅ Done             |
-| 5   | Extension `notify()` forwarding (kept, unconditional) | user         | ✅ Done             |
-| 6   | Dead `w.provider` CLI display removed                 | arch/cleanup | ✅ Done             |
-| 7   | Pi-only docs alignment (`docs-web`, 23 files)         | config §6    | ✅ Done (#11)       |
-| 8   | `RITH_MODEL` env override (`applyEnvOverrides`)       | config §7    | ✅ Done             |
-| 9   | `rith doctor` (Pi-only port)                          | config §7    | ✅ Done             |
-| 10  | `rith setup` (Pi-trimmed port)                        | config §7    | ✅ Done             |
-| 11  | State-machine `cancelWorkflowRun` guard               | arch #3      | ✅ Done (#10)       |
-| 12  | Per-run throttle maps (de-globalize)                  | arch #4      | ✅ Done (#10)       |
-| 13  | Event-emitter guaranteed `unregisterRun` cleanup      | arch         | ✅ Done (#10)       |
-| 14  | `DagExecutionContext` param object + god-file split   | arch #1/#2   | ⬜ Deferred (large) |
-| 15  | Discriminate `WorkflowRun.metadata`; aggregate root   | arch         | ⬜ Deferred (large) |
-| 16  | Workflows single-process mock isolation               | test infra   | ✅ Done (#18)       |
+| #   | Item                                                   | Source       | Status              |
+| --- | ------------------------------------------------------ | ------------ | ------------------- |
+| 1   | Bundled workflow model refs (14 files)                 | config §5/§7 | ✅ Done             |
+| 2   | Provider "requires a model" error message              | config §7    | ✅ Done             |
+| 3   | Config schema `provider:` → `pi:` block                | config §2    | ✅ Done             |
+| 4   | Drop `env` + `interactive` config knobs                | user         | ✅ Done             |
+| 5   | Extension `notify()` forwarding (kept, unconditional)  | user         | ✅ Done             |
+| 6   | Dead `w.provider` CLI display removed                  | arch/cleanup | ✅ Done             |
+| 7   | Pi-only docs alignment (`docs-web`, 23 files)          | config §6    | ✅ Done (#11)       |
+| 8   | `RITH_MODEL` env override (`applyEnvOverrides`)        | config §7    | ✅ Done             |
+| 9   | `rith doctor` (Pi-only port)                           | config §7    | ✅ Done             |
+| 10  | `rith setup` (Pi-trimmed port)                         | config §7    | ✅ Done             |
+| 11  | State-machine `cancelWorkflowRun` guard                | arch #3      | ✅ Done (#10)       |
+| 12  | Per-run throttle maps (de-globalize)                   | arch #4      | ✅ Done (#10)       |
+| 13  | Event-emitter guaranteed `unregisterRun` cleanup       | arch         | ✅ Done (#10)       |
+| 14  | `DagExecutionContext` param object + god-file split    | arch #1/#2   | ⬜ Deferred (large) |
+| 15  | Discriminate `WorkflowRun.metadata`; aggregate root    | arch         | ⬜ Deferred (large) |
+| 16  | Workflows single-process mock isolation                | test infra   | ✅ Done (#18)       |
+| 17  | Collapse `@rith/providers` → `@rith/pi` (rename/reorg) | cleanup      | ✅ Done             |
+
+### Refactor (precedes items 14/15): `@rith/providers` → `@rith/pi`
+
+The single-AI-backend codebase no longer needs the multi-provider indirection
+inherited from Archon. Pure rename/reorg, **zero behavior change**:
+
+- Package `@rith/providers` → **`@rith/pi`**; dir `packages/providers` →
+  `packages/pi`. Flattened `src/pi/*` → `src/*` (`provider.ts` → `agent.ts`);
+  dropped the redundant `src/pi/index.ts` and the unused `./pi*` subpath exports.
+  Subpath exports are now just `.`, `./types`, `./mcp/config`.
+- Symbols: `IAgentProvider` → **`PiAgent`**, `PiProvider` → **`PiCodingAgent`**,
+  `AgentProviderFactory` → **`PiAgentFactory`**, `WorkflowDeps.getAgentProvider`
+  → **`getAgent`**, `ProviderCapabilities` → **`PiCapabilities`**,
+  `parseProviderConfig` → **`parsePiConfig`**.
+- **Deliberately kept** (correct domain language, not the killed abstraction):
+  `@rith/isolation`'s worktree/container _provider_ strategy, and the model-ref
+  backend `provider` field + `PI_PROVIDER_ENV_VARS` (the LLM vendor id).
+- `PI_PROVIDER_ENV_VARS` now lives in `packages/pi/src/agent.ts`.
+- Verified behind `type-check` ×7 + targeted pi/workflows/core suites + `rith
+doctor` smoke. This de-clutters the dag-executor surface that items 14/15 touch
+  but does not start that work.
 
 ## Decisions made (authoritative — do not re-litigate)
 

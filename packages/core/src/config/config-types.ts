@@ -7,9 +7,9 @@
  * Located at ~/.rith/config.yaml
  */
 
-// Pi config defaults — canonical definition lives in @rith/providers/types.
+// Pi config defaults — canonical definition lives in @rith/pi/types.
 // Imported and re-exported here so config consumers have one import site.
-import type { PiDefaults } from '@rith/providers/types';
+import type { PiDefaults } from '@rith/pi/types';
 
 export type { PiDefaults };
 

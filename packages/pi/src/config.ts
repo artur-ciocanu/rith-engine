@@ -1,4 +1,4 @@
-import type { PiDefaults } from '../types';
+import type { PiDefaults } from './types';
 
 export type { PiDefaults };
 
@@ -7,7 +7,7 @@ export type { PiDefaults };
  * Defensive: invalid fields are dropped silently so broken user config can't
  * prevent provider registration or workflow discovery.
  */
-export function parseProviderConfig(raw: Record<string, unknown>): PiDefaults {
+export function parsePiConfig(raw: Record<string, unknown>): PiDefaults {
   const result: PiDefaults = {};
 
   if (typeof raw.model === 'string') {

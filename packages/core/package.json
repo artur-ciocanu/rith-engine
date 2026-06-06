@@ -29,7 +29,7 @@
     "@rith/git": "workspace:*",
     "@rith/isolation": "workspace:*",
     "@rith/paths": "workspace:*",
-    "@rith/providers": "workspace:*",
+    "@rith/pi": "workspace:*",
     "@rith/workflows": "workspace:*",
     "pg": "^8.11.0",
     "zod": "^3"

@@ -13,7 +13,7 @@ Pi Coding Agent is the sole AI executor in Rith Engine. It drives all workflow n
 
 ## Install
 
-Pi is included as a dependency of `@rith/providers` — no separate install needed. It's available immediately after `bun install`.
+Pi is included as a dependency of `@rith/pi` — no separate install needed. It's available immediately after `bun install`.
 
 ## Authentication
 

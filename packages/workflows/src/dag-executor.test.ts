@@ -40,7 +40,7 @@ import {
   substituteNodeOutputRefs,
   executeDagWorkflow,
 } from './dag-executor';
-import { loadMcpConfig } from '@rith/providers/mcp/config';
+import { loadMcpConfig } from '@rith/pi/mcp/config';
 import type { DagNode, BashNode, ScriptNode, NodeOutput, WorkflowRun } from './schemas';
 import { discoverWorkflows } from './workflow-discovery';
 import { parseWorkflow } from './loader';
@@ -107,7 +107,7 @@ const mockSendQueryDag = mock(function* () {
   yield { type: 'result', sessionId: 'dag-session-id' };
 });
 
-const mockGetAgentProviderDag = mock(() => ({
+const mockGetAgentDag = mock(() => ({
   sendQuery: mockSendQueryDag,
 }));
 
@@ -115,7 +115,7 @@ function createMockDeps(storeOverride?: IWorkflowStore): WorkflowDeps {
   const store = storeOverride ?? createMockStore();
   return {
     store,
-    getAgentProvider: mockGetAgentProviderDag,
+    getAgent: mockGetAgentDag,
     loadConfig: mock(() =>
       Promise.resolve({
         commands: {},
@@ -971,7 +971,7 @@ describe('executeDagWorkflow -- tool restrictions', () => {
     await writeFile(join(commandsDir, 'my-cmd.md'), 'My command prompt for $USER_MESSAGE');
 
     mockSendQueryDag.mockClear();
-    mockGetAgentProviderDag.mockClear();
+    mockGetAgentDag.mockClear();
 
     mockSendQueryDag.mockImplementation(function* () {
       yield { type: 'assistant', content: 'DAG AI response' };
@@ -981,7 +981,7 @@ describe('executeDagWorkflow -- tool restrictions', () => {
 
   afterEach(async () => {
     // Restore default claude client
-    mockGetAgentProviderDag.mockImplementation(() => ({
+    mockGetAgentDag.mockImplementation(() => ({
       sendQuery: mockSendQueryDag,
     }));
     try {
@@ -1055,14 +1055,14 @@ describe('executeDagWorkflow -- bash nodes', () => {
     await mkdir(testDir, { recursive: true });
 
     mockSendQueryDag.mockClear();
-    mockGetAgentProviderDag.mockClear();
+    mockGetAgentDag.mockClear();
 
     mockSendQueryDag.mockImplementation(function* () {
       yield { type: 'assistant', content: 'DAG AI response' };
       yield { type: 'result', sessionId: 'dag-session-id' };
     });
 
-    mockGetAgentProviderDag.mockImplementation(() => ({
+    mockGetAgentDag.mockImplementation(() => ({
       sendQuery: mockSendQueryDag,
     }));
   });
@@ -1440,11 +1440,11 @@ describe('executeDagWorkflow -- output_format structured output', () => {
     await writeFile(join(commandsDir, 'classify.md'), 'Classify this: $USER_MESSAGE');
 
     mockSendQueryDag.mockClear();
-    mockGetAgentProviderDag.mockClear();
+    mockGetAgentDag.mockClear();
   });
 
   afterEach(async () => {
-    mockGetAgentProviderDag.mockImplementation(() => ({
+    mockGetAgentDag.mockImplementation(() => ({
       sendQuery: mockSendQueryDag,
     }));
     try {
@@ -1610,7 +1610,7 @@ describe('executeDagWorkflow -- output_format structured output', () => {
   it('passes outputFormat to Codex nodes and uses inline JSON response', async () => {
     // Codex provider normalizes inline JSON into structuredOutput on the result chunk
     const classifyJson = { run_code_review: 'true', run_tests: 'false' };
-    mockGetAgentProviderDag.mockImplementation(() => ({
+    mockGetAgentDag.mockImplementation(() => ({
       sendQuery: mockSendQueryDag,
     }));
     mockSendQueryDag.mockImplementation(function* () {
@@ -1678,7 +1678,7 @@ describe('executeDagWorkflow -- output_format structured output', () => {
 
   it('does not warn about missing structuredOutput for Codex nodes', async () => {
     // Codex provider normalizes inline JSON into structuredOutput on the result chunk
-    mockGetAgentProviderDag.mockImplementation(() => ({
+    mockGetAgentDag.mockImplementation(() => ({
       sendQuery: mockSendQueryDag,
     }));
     mockSendQueryDag.mockImplementation(function* () {
@@ -1735,8 +1735,8 @@ describe('executeDagWorkflow -- when condition parse errors (fail-closed)', () =
     await writeFile(join(commandsDir, 'my-cmd.md'), 'Do something for $USER_MESSAGE');
 
     mockSendQueryDag.mockClear();
-    mockGetAgentProviderDag.mockClear();
-    mockGetAgentProviderDag.mockImplementation(() => ({
+    mockGetAgentDag.mockClear();
+    mockGetAgentDag.mockImplementation(() => ({
       sendQuery: mockSendQueryDag,
     }));
     mockSendQueryDag.mockImplementation(function* () {
@@ -1746,7 +1746,7 @@ describe('executeDagWorkflow -- when condition parse errors (fail-closed)', () =
   });
 
   afterEach(async () => {
-    mockGetAgentProviderDag.mockImplementation(() => ({
+    mockGetAgentDag.mockImplementation(() => ({
       sendQuery: mockSendQueryDag,
     }));
     try {
@@ -1858,8 +1858,8 @@ describe('executeDagWorkflow -- node-level retry for transient errors', () => {
     await writeFile(join(commandsDir, 'my-cmd.md'), 'Do something for $USER_MESSAGE');
 
     mockSendQueryDag.mockClear();
-    mockGetAgentProviderDag.mockClear();
-    mockGetAgentProviderDag.mockImplementation(() => ({
+    mockGetAgentDag.mockClear();
+    mockGetAgentDag.mockImplementation(() => ({
       sendQuery: mockSendQueryDag,
     }));
     mockSendQueryDag.mockImplementation(function* () {
@@ -1869,7 +1869,7 @@ describe('executeDagWorkflow -- node-level retry for transient errors', () => {
   });
 
   afterEach(async () => {
-    mockGetAgentProviderDag.mockImplementation(() => ({
+    mockGetAgentDag.mockImplementation(() => ({
       sendQuery: mockSendQueryDag,
     }));
     try {
@@ -2041,8 +2041,8 @@ describe('executeDagWorkflow -- tool_called event persistence', () => {
     await writeFile(join(commandsDir, 'my-cmd.md'), 'My command prompt for $USER_MESSAGE');
 
     mockSendQueryDag.mockClear();
-    mockGetAgentProviderDag.mockClear();
-    mockGetAgentProviderDag.mockImplementation(() => ({
+    mockGetAgentDag.mockClear();
+    mockGetAgentDag.mockImplementation(() => ({
       sendQuery: mockSendQueryDag,
     }));
   });
@@ -2146,8 +2146,8 @@ describe('executeDagWorkflow -- tool_completed event emission', () => {
     await writeFile(join(commandsDir, 'my-cmd.md'), 'My command prompt for $USER_MESSAGE');
 
     mockSendQueryDag.mockClear();
-    mockGetAgentProviderDag.mockClear();
-    mockGetAgentProviderDag.mockImplementation(() => ({
+    mockGetAgentDag.mockClear();
+    mockGetAgentDag.mockImplementation(() => ({
       sendQuery: mockSendQueryDag,
     }));
   });
@@ -2533,7 +2533,7 @@ describe('executeDagWorkflow -- skills options', () => {
     await writeFile(join(commandsDir, 'my-cmd.md'), 'My command prompt for $USER_MESSAGE');
 
     mockSendQueryDag.mockClear();
-    mockGetAgentProviderDag.mockClear();
+    mockGetAgentDag.mockClear();
 
     mockSendQueryDag.mockImplementation(function* () {
       yield { type: 'assistant', content: 'DAG AI response' };
@@ -2542,7 +2542,7 @@ describe('executeDagWorkflow -- skills options', () => {
   });
 
   afterEach(async () => {
-    mockGetAgentProviderDag.mockImplementation(() => ({
+    mockGetAgentDag.mockImplementation(() => ({
       sendQuery: mockSendQueryDag,
     }));
     try {
@@ -2927,7 +2927,7 @@ describe('executeDagWorkflow -- resume with priorCompletedNodes', () => {
     await writeFile(join(commandsDir, 'step2.md'), 'Step 2 prompt using $step1.output');
 
     mockSendQueryDag.mockClear();
-    mockGetAgentProviderDag.mockClear();
+    mockGetAgentDag.mockClear();
 
     mockSendQueryDag.mockImplementation(function* () {
       yield { type: 'assistant', content: 'AI response' };
@@ -2936,7 +2936,7 @@ describe('executeDagWorkflow -- resume with priorCompletedNodes', () => {
   });
 
   afterEach(async () => {
-    mockGetAgentProviderDag.mockImplementation(() => ({
+    mockGetAgentDag.mockImplementation(() => ({
       sendQuery: mockSendQueryDag,
     }));
     try {
@@ -4520,7 +4520,7 @@ describe('executeDagWorkflow -- always_run resume opt-out', () => {
     await writeFile(join(commandsDir, 'consumer.md'), 'Consumer prompt $producer.output');
 
     mockSendQueryDag.mockClear();
-    mockGetAgentProviderDag.mockClear();
+    mockGetAgentDag.mockClear();
 
     mockSendQueryDag.mockImplementation(function* () {
       yield { type: 'assistant', content: 'fresh output' };
@@ -4529,7 +4529,7 @@ describe('executeDagWorkflow -- always_run resume opt-out', () => {
   });
 
   afterEach(async () => {
-    mockGetAgentProviderDag.mockImplementation(() => ({
+    mockGetAgentDag.mockImplementation(() => ({
       sendQuery: mockSendQueryDag,
     }));
     try {
@@ -4704,9 +4704,9 @@ describe('executeDagWorkflow -- break after result (no hang on subprocess exit)'
     await writeFile(join(commandsDir, 'my-cmd.md'), 'Command prompt $ARGUMENTS');
 
     mockSendQueryDag.mockClear();
-    mockGetAgentProviderDag.mockClear();
+    mockGetAgentDag.mockClear();
 
-    mockGetAgentProviderDag.mockImplementation(() => ({
+    mockGetAgentDag.mockImplementation(() => ({
       sendQuery: mockSendQueryDag,
     }));
   });
@@ -4717,7 +4717,7 @@ describe('executeDagWorkflow -- break after result (no hang on subprocess exit)'
       yield { type: 'assistant', content: 'DAG AI response' };
       yield { type: 'result', sessionId: 'dag-session-id' };
     });
-    mockGetAgentProviderDag.mockImplementation(() => ({
+    mockGetAgentDag.mockImplementation(() => ({
       sendQuery: mockSendQueryDag,
     }));
     try {
@@ -4822,9 +4822,9 @@ describe('executeDagWorkflow -- terminal node output selection', () => {
     await writeFile(join(commandsDir, 'my-cmd.md'), 'Command prompt $ARGUMENTS');
 
     mockSendQueryDag.mockClear();
-    mockGetAgentProviderDag.mockClear();
+    mockGetAgentDag.mockClear();
 
-    mockGetAgentProviderDag.mockImplementation(() => ({
+    mockGetAgentDag.mockImplementation(() => ({
       sendQuery: mockSendQueryDag,
     }));
   });
@@ -4834,7 +4834,7 @@ describe('executeDagWorkflow -- terminal node output selection', () => {
       yield { type: 'assistant', content: 'DAG AI response' };
       yield { type: 'result', sessionId: 'dag-session-id' };
     });
-    mockGetAgentProviderDag.mockImplementation(() => ({
+    mockGetAgentDag.mockImplementation(() => ({
       sendQuery: mockSendQueryDag,
     }));
     try {
@@ -5133,11 +5133,11 @@ describe('executeDagWorkflow -- credit exhaustion', () => {
     await mkdir(commandsDir, { recursive: true });
 
     mockSendQueryDag.mockClear();
-    mockGetAgentProviderDag.mockClear();
+    mockGetAgentDag.mockClear();
   });
 
   afterEach(async () => {
-    mockGetAgentProviderDag.mockImplementation(() => ({
+    mockGetAgentDag.mockImplementation(() => ({
       sendQuery: mockSendQueryDag,
     }));
     mockSendQueryDag.mockImplementation(function* () {
@@ -5156,7 +5156,7 @@ describe('executeDagWorkflow -- credit exhaustion', () => {
       yield { type: 'assistant', content: "You're out of extra usage · resets in 2h" };
       yield { type: 'result', sessionId: 'dag-session-credit' };
     });
-    mockGetAgentProviderDag.mockReturnValue({
+    mockGetAgentDag.mockReturnValue({
       sendQuery: creditExhaustedQuery,
     });
 
@@ -5204,14 +5204,14 @@ describe('executeDagWorkflow -- approval node', () => {
     );
     await mkdir(join(testDir, '.rith', 'commands'), { recursive: true });
     mockSendQueryDag.mockClear();
-    mockGetAgentProviderDag.mockClear();
-    mockGetAgentProviderDag.mockImplementation(() => ({
+    mockGetAgentDag.mockClear();
+    mockGetAgentDag.mockImplementation(() => ({
       sendQuery: mockSendQueryDag,
     }));
   });
 
   afterEach(async () => {
-    mockGetAgentProviderDag.mockImplementation(() => ({
+    mockGetAgentDag.mockImplementation(() => ({
       sendQuery: mockSendQueryDag,
     }));
     try {
@@ -5679,13 +5679,13 @@ describe('executeDagWorkflow -- env var injection', () => {
       await writeFile(join(testDir, '.rith', 'commands', 'my-cmd.md'), '# Test');
     });
     mockSendQueryDag.mockClear();
-    mockGetAgentProviderDag.mockImplementation(() => ({
+    mockGetAgentDag.mockImplementation(() => ({
       sendQuery: mockSendQueryDag,
     }));
   });
 
   afterEach(async () => {
-    mockGetAgentProviderDag.mockImplementation(() => ({
+    mockGetAgentDag.mockImplementation(() => ({
       sendQuery: mockSendQueryDag,
     }));
     try {
@@ -5759,14 +5759,14 @@ describe('executeDagWorkflow -- Claude SDK advanced options', () => {
     await writeFile(join(commandsDir, 'my-cmd.md'), 'My command prompt');
 
     mockSendQueryDag.mockClear();
-    mockGetAgentProviderDag.mockClear();
+    mockGetAgentDag.mockClear();
     mockLogFn.mockClear();
 
     mockSendQueryDag.mockImplementation(function* () {
       yield { type: 'assistant', content: 'DAG AI response' };
       yield { type: 'result', sessionId: 'dag-session-id' };
     });
-    mockGetAgentProviderDag.mockImplementation(() => ({
+    mockGetAgentDag.mockImplementation(() => ({
       sendQuery: mockSendQueryDag,
     }));
   });
@@ -5925,7 +5925,7 @@ describe('executeDagWorkflow -- Claude SDK advanced options', () => {
     // Regression test for #1425: stop_sequence terminations under the Claude
     // SDK contract carry is_error: true + subtype: 'success'. The provider
     // normalises this, but the executor keeps an explicit guard so a future
-    // provider regression or a third-party IAgentProvider that forwards the
+    // provider regression or a third-party PiAgent that forwards the
     // SDK pair raw cannot reintroduce the "SDK returned success" false-failure.
     mockSendQueryDag.mockImplementation(function* () {
       yield { type: 'assistant', content: 'classified output' };
@@ -6042,10 +6042,10 @@ describe('executeDagWorkflow -- cost tracking', () => {
     await writeFile(join(commandsDir, 'my-cmd.md'), 'My command prompt');
 
     mockSendQueryDag.mockClear();
-    mockGetAgentProviderDag.mockClear();
+    mockGetAgentDag.mockClear();
     mockLogFn.mockClear();
 
-    mockGetAgentProviderDag.mockImplementation(() => ({
+    mockGetAgentDag.mockImplementation(() => ({
       sendQuery: mockSendQueryDag,
     }));
   });
@@ -6237,14 +6237,14 @@ describe('executeDagWorkflow -- script nodes', () => {
     await mkdir(testDir, { recursive: true });
 
     mockSendQueryDag.mockClear();
-    mockGetAgentProviderDag.mockClear();
+    mockGetAgentDag.mockClear();
 
     mockSendQueryDag.mockImplementation(function* () {
       yield { type: 'assistant', content: 'DAG AI response' };
       yield { type: 'result', sessionId: 'dag-session-id' };
     });
 
-    mockGetAgentProviderDag.mockImplementation(() => ({
+    mockGetAgentDag.mockImplementation(() => ({
       sendQuery: mockSendQueryDag,
     }));
   });
@@ -6859,11 +6859,11 @@ describe('executeDagWorkflow -- MCP failure filtering', () => {
     await writeFile(join(commandsDir, 'my-cmd.md'), 'cmd prompt');
 
     mockSendQueryDag.mockClear();
-    mockGetAgentProviderDag.mockClear();
+    mockGetAgentDag.mockClear();
   });
 
   afterEach(async () => {
-    mockGetAgentProviderDag.mockImplementation(() => ({
+    mockGetAgentDag.mockImplementation(() => ({
       sendQuery: mockSendQueryDag,
     }));
     try {
@@ -7008,12 +7008,12 @@ describe('executeDagWorkflow -- final status derivation', () => {
     await mkdir(testDir, { recursive: true });
 
     mockSendQueryDag.mockClear();
-    mockGetAgentProviderDag.mockClear();
+    mockGetAgentDag.mockClear();
     mockSendQueryDag.mockImplementation(function* () {
       yield { type: 'assistant', content: 'DAG AI response' };
       yield { type: 'result', sessionId: 'dag-session-id' };
     });
-    mockGetAgentProviderDag.mockImplementation(() => ({
+    mockGetAgentDag.mockImplementation(() => ({
       sendQuery: mockSendQueryDag,
     }));
   });
