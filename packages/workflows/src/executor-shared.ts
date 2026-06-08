@@ -343,6 +343,21 @@ export const CONTEXT_VAR_PATTERN_STR =
   '\\$(?:CONTEXT|EXTERNAL_CONTEXT|ISSUE_CONTEXT)(?![A-Za-z0-9_])';
 
 /**
+ * The run-constant inputs to workflow variable substitution. Grouped because
+ * `{ workflowId, userMessage, artifactsDir, baseBranch, docsDir, issueContext }`
+ * travel together through `substituteWorkflowVariables` / `buildPromptWithContext`
+ * at every call site.
+ */
+export interface PromptContext {
+  readonly workflowId: string;
+  readonly userMessage: string;
+  readonly artifactsDir: string;
+  readonly baseBranch: string;
+  readonly docsDir: string;
+  readonly issueContext: string | undefined;
+}
+
+/**
  * Substitute workflow variables in a prompt.
  *
  * Supported variables:
@@ -363,18 +378,14 @@ export const CONTEXT_VAR_PATTERN_STR =
  * to avoid sending literal "$CONTEXT" to the AI.
  */
 export function substituteWorkflowVariables(
+  ctx: PromptContext,
   prompt: string,
-  workflowId: string,
-  userMessage: string,
-  artifactsDir: string,
-  baseBranch: string,
-  docsDir: string,
-  issueContext?: string,
   loopUserInput?: string,
   rejectionReason?: string,
   loopPrevOutput?: string,
   options?: { shellSafe?: boolean }
 ): { prompt: string; contextSubstituted: boolean } {
+  const { workflowId, userMessage, artifactsDir, baseBranch, docsDir, issueContext } = ctx;
   // Fail fast if the prompt references $BASE_BRANCH but no base branch could be resolved
   if (!baseBranch && prompt.includes('$BASE_BRANCH')) {
     throw new Error(
@@ -432,35 +443,18 @@ export function substituteWorkflowVariables(
  * Appends context only if it wasn't already substituted via $CONTEXT variables.
  * This prevents duplicate context being sent to the AI.
  *
+ * @param ctx - Run-constant substitution inputs (ids, user message, dirs, issue context)
  * @param template - The command prompt template with variable placeholders
- * @param workflowId - The workflow run ID for variable substitution
- * @param userMessage - The user's trigger message for variable substitution
- * @param artifactsDir - The external artifacts directory for $ARTIFACTS_DIR substitution
- * @param baseBranch - The resolved base branch for $BASE_BRANCH substitution
- * @param docsDir - The resolved docs directory for $DOCS_DIR substitution
- * @param issueContext - Optional GitHub issue/PR context to substitute or append
  * @param logLabel - Human-readable label for logging (e.g., 'workflow step prompt')
  * @returns The final prompt with variables substituted and context optionally appended
  */
 export function buildPromptWithContext(
+  ctx: PromptContext,
   template: string,
-  workflowId: string,
-  userMessage: string,
-  artifactsDir: string,
-  baseBranch: string,
-  docsDir: string,
-  issueContext: string | undefined,
   logLabel: string
 ): string {
-  const { prompt, contextSubstituted } = substituteWorkflowVariables(
-    template,
-    workflowId,
-    userMessage,
-    artifactsDir,
-    baseBranch,
-    docsDir,
-    issueContext
-  );
+  const { issueContext } = ctx;
+  const { prompt, contextSubstituted } = substituteWorkflowVariables(ctx, template);
 
   if (issueContext && !contextSubstituted) {
     getLog().debug({ logLabel }, 'issue_context_appended');

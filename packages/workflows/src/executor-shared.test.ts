@@ -32,132 +32,102 @@ import {
   classifyError,
   safeSendMessage,
   type UnknownErrorTracker,
+  type PromptContext,
 } from './executor-shared';
+
+const pc = (overrides: Partial<PromptContext> = {}): PromptContext => ({
+  workflowId: 'run-1',
+  userMessage: 'msg',
+  artifactsDir: '/tmp',
+  baseBranch: 'main',
+  docsDir: 'docs/',
+  issueContext: undefined,
+  ...overrides,
+});
 
 describe('substituteWorkflowVariables', () => {
   it('replaces $WORKFLOW_ID with the run ID', () => {
     const { prompt } = substituteWorkflowVariables(
-      'Run ID: $WORKFLOW_ID',
-      'run-123',
-      'hello',
-      '/tmp/artifacts',
-      'main',
-      'docs/'
+      pc({ workflowId: 'run-123' }),
+      'Run ID: $WORKFLOW_ID'
     );
     expect(prompt).toBe('Run ID: run-123');
   });
 
   it('replaces $ARTIFACTS_DIR with the resolved path', () => {
     const { prompt } = substituteWorkflowVariables(
-      'Save to $ARTIFACTS_DIR/output.txt',
-      'run-1',
-      'msg',
-      '/tmp/artifacts/runs/run-1',
-      'main',
-      'docs/'
+      pc({ artifactsDir: '/tmp/artifacts/runs/run-1' }),
+      'Save to $ARTIFACTS_DIR/output.txt'
     );
     expect(prompt).toBe('Save to /tmp/artifacts/runs/run-1/output.txt');
   });
 
   it('replaces $BASE_BRANCH with config value', () => {
     const { prompt } = substituteWorkflowVariables(
-      'Merge into $BASE_BRANCH',
-      'run-1',
-      'msg',
-      '/tmp',
-      'develop',
-      'docs/'
+      pc({ baseBranch: 'develop' }),
+      'Merge into $BASE_BRANCH'
     );
     expect(prompt).toBe('Merge into develop');
   });
 
   it('throws when $BASE_BRANCH is referenced but empty', () => {
     expect(() =>
-      substituteWorkflowVariables('Merge into $BASE_BRANCH', 'run-1', 'msg', '/tmp', '', 'docs/')
+      substituteWorkflowVariables(pc({ baseBranch: '' }), 'Merge into $BASE_BRANCH')
     ).toThrow('No base branch could be resolved');
   });
 
   it('does not throw when $BASE_BRANCH is not referenced and baseBranch is empty', () => {
     const { prompt } = substituteWorkflowVariables(
-      'No branch reference here',
-      'run-1',
-      'msg',
-      '/tmp',
-      '',
-      'docs/'
+      pc({ baseBranch: '' }),
+      'No branch reference here'
     );
     expect(prompt).toBe('No branch reference here');
   });
 
   it('replaces $USER_MESSAGE and $ARGUMENTS with user message', () => {
     const { prompt } = substituteWorkflowVariables(
-      'Goal: $USER_MESSAGE. Args: $ARGUMENTS',
-      'run-1',
-      'add dark mode',
-      '/tmp',
-      'main',
-      'docs/'
+      pc({ userMessage: 'add dark mode' }),
+      'Goal: $USER_MESSAGE. Args: $ARGUMENTS'
     );
     expect(prompt).toBe('Goal: add dark mode. Args: add dark mode');
   });
 
   it('replaces $DOCS_DIR with configured path', () => {
     const { prompt } = substituteWorkflowVariables(
-      'Check $DOCS_DIR for changes',
-      'run-1',
-      'msg',
-      '/tmp',
-      'main',
-      'packages/docs-web/src/content/docs'
+      pc({ docsDir: 'packages/docs-web/src/content/docs' }),
+      'Check $DOCS_DIR for changes'
     );
     expect(prompt).toBe('Check packages/docs-web/src/content/docs for changes');
   });
 
   it('replaces $DOCS_DIR with default docs/ when default passed', () => {
     const { prompt } = substituteWorkflowVariables(
-      'Check $DOCS_DIR for changes',
-      'run-1',
-      'msg',
-      '/tmp',
-      'main',
-      'docs/'
+      pc({ docsDir: 'docs/' }),
+      'Check $DOCS_DIR for changes'
     );
     expect(prompt).toBe('Check docs/ for changes');
   });
 
   it('does not affect prompts without $DOCS_DIR', () => {
     const { prompt } = substituteWorkflowVariables(
-      'No docs reference here',
-      'run-1',
-      'msg',
-      '/tmp',
-      'main',
-      'custom/docs/'
+      pc({ docsDir: 'custom/docs/' }),
+      'No docs reference here'
     );
     expect(prompt).toBe('No docs reference here');
   });
 
   it('falls back to docs/ when docsDir is empty string', () => {
     const { prompt } = substituteWorkflowVariables(
-      'Check $DOCS_DIR for changes',
-      'run-1',
-      'msg',
-      '/tmp',
-      'main',
-      ''
+      pc({ docsDir: '' }),
+      'Check $DOCS_DIR for changes'
     );
     expect(prompt).toBe('Check docs/ for changes');
   });
 
   it('replaces $CONTEXT when issueContext is provided', () => {
     const { prompt, contextSubstituted } = substituteWorkflowVariables(
-      'Fix this: $CONTEXT',
-      'run-1',
-      'msg',
-      '/tmp',
-      'main',
-      'docs/',
-      '## Issue #42\nBug report'
+      pc({ issueContext: '## Issue #42\nBug report' }),
+      'Fix this: $CONTEXT'
     );
     expect(prompt).toBe('Fix this: ## Issue #42\nBug report');
     expect(contextSubstituted).toBe(true);
@@ -165,26 +135,16 @@ describe('substituteWorkflowVariables', () => {
 
   it('replaces $ISSUE_CONTEXT and $EXTERNAL_CONTEXT with issueContext', () => {
     const { prompt } = substituteWorkflowVariables(
-      'Issue: $ISSUE_CONTEXT. External: $EXTERNAL_CONTEXT',
-      'run-1',
-      'msg',
-      '/tmp',
-      'main',
-      'docs/',
-      'context-data'
+      pc({ issueContext: 'context-data' }),
+      'Issue: $ISSUE_CONTEXT. External: $EXTERNAL_CONTEXT'
     );
     expect(prompt).toBe('Issue: context-data. External: context-data');
   });
 
   it('does not treat context variables as prefixes of longer identifiers', () => {
     const { prompt, contextSubstituted } = substituteWorkflowVariables(
-      'Context: $CONTEXT. File: $CONTEXT_FILE. External path: $EXTERNAL_CONTEXT_PATH. IssueId: $ISSUE_CONTEXT_ID',
-      'run-1',
-      'msg',
-      '/tmp',
-      'main',
-      'docs/',
-      'context-data'
+      pc({ issueContext: 'context-data' }),
+      'Context: $CONTEXT. File: $CONTEXT_FILE. External path: $EXTERNAL_CONTEXT_PATH. IssueId: $ISSUE_CONTEXT_ID'
     );
     expect(prompt).toBe(
       'Context: context-data. File: $CONTEXT_FILE. External path: $EXTERNAL_CONTEXT_PATH. IssueId: $ISSUE_CONTEXT_ID'
@@ -194,26 +154,16 @@ describe('substituteWorkflowVariables', () => {
 
   it('does not substitute $ISSUE_CONTEXT when followed by identifier characters', () => {
     const { prompt } = substituteWorkflowVariables(
-      'Issue: $ISSUE_CONTEXT. ID: $ISSUE_CONTEXT_ID. Type: $ISSUE_CONTEXT_TYPE',
-      'run-1',
-      'msg',
-      '/tmp',
-      'main',
-      'docs/',
-      'context-data'
+      pc({ issueContext: 'context-data' }),
+      'Issue: $ISSUE_CONTEXT. ID: $ISSUE_CONTEXT_ID. Type: $ISSUE_CONTEXT_TYPE'
     );
     expect(prompt).toBe('Issue: context-data. ID: $ISSUE_CONTEXT_ID. Type: $ISSUE_CONTEXT_TYPE');
   });
 
   it('does not set contextSubstituted when only suffix-extended context vars are present', () => {
     const { prompt, contextSubstituted } = substituteWorkflowVariables(
-      'Path: $CONTEXT_FILE',
-      'run-1',
-      'msg',
-      '/tmp',
-      'main',
-      'docs/',
-      'context-data'
+      pc({ issueContext: 'context-data' }),
+      'Path: $CONTEXT_FILE'
     );
     // $CONTEXT_FILE is not a context variable — should be left untouched
     expect(prompt).toBe('Path: $CONTEXT_FILE');
@@ -222,12 +172,8 @@ describe('substituteWorkflowVariables', () => {
 
   it('clears context variables when issueContext is undefined', () => {
     const { prompt, contextSubstituted } = substituteWorkflowVariables(
-      'Context: $CONTEXT here',
-      'run-1',
-      'msg',
-      '/tmp',
-      'main',
-      'docs/'
+      pc(),
+      'Context: $CONTEXT here'
     );
     expect(prompt).toBe('Context:  here');
     expect(contextSubstituted).toBe(false);
@@ -235,13 +181,8 @@ describe('substituteWorkflowVariables', () => {
 
   it('replaces $REJECTION_REASON with rejection reason', () => {
     const { prompt } = substituteWorkflowVariables(
+      pc(),
       'Fix based on: $REJECTION_REASON',
-      'run-1',
-      'msg',
-      '/tmp',
-      'main',
-      'docs/',
-      undefined,
       undefined,
       'Missing error handling'
     );
@@ -249,26 +190,14 @@ describe('substituteWorkflowVariables', () => {
   });
 
   it('clears $REJECTION_REASON when not provided', () => {
-    const { prompt } = substituteWorkflowVariables(
-      'Fix: $REJECTION_REASON',
-      'run-1',
-      'msg',
-      '/tmp',
-      'main',
-      'docs/'
-    );
+    const { prompt } = substituteWorkflowVariables(pc(), 'Fix: $REJECTION_REASON');
     expect(prompt).toBe('Fix: ');
   });
 
   it('replaces $LOOP_PREV_OUTPUT with the previous iteration output', () => {
     const { prompt } = substituteWorkflowVariables(
+      pc(),
       'Last pass said:\n$LOOP_PREV_OUTPUT',
-      'run-1',
-      'msg',
-      '/tmp',
-      'main',
-      'docs/',
-      undefined,
       undefined,
       undefined,
       'QA failed: 2 type errors in users.ts'
@@ -278,25 +207,16 @@ describe('substituteWorkflowVariables', () => {
 
   it('clears $LOOP_PREV_OUTPUT when not provided (first iteration)', () => {
     const { prompt } = substituteWorkflowVariables(
-      'Previous output: $LOOP_PREV_OUTPUT (end)',
-      'run-1',
-      'msg',
-      '/tmp',
-      'main',
-      'docs/'
+      pc(),
+      'Previous output: $LOOP_PREV_OUTPUT (end)'
     );
     expect(prompt).toBe('Previous output:  (end)');
   });
 
   it('does not affect prompts that omit $LOOP_PREV_OUTPUT', () => {
     const { prompt } = substituteWorkflowVariables(
+      pc(),
       'Plain prompt with no loop variable.',
-      'run-1',
-      'msg',
-      '/tmp',
-      'main',
-      'docs/',
-      undefined,
       undefined,
       undefined,
       'unused previous output'
@@ -306,13 +226,8 @@ describe('substituteWorkflowVariables', () => {
 
   it('skips user-controlled variables when shellSafe is true', () => {
     const { prompt } = substituteWorkflowVariables(
+      pc({ userMessage: 'dangerous; rm -rf /', issueContext: 'issue-context' }),
       'echo $USER_MESSAGE $ARGUMENTS $LOOP_USER_INPUT $REJECTION_REASON $LOOP_PREV_OUTPUT $CONTEXT',
-      'run-1',
-      'dangerous; rm -rf /',
-      '/tmp',
-      'main',
-      'docs/',
-      'issue-context',
       'loop-input',
       'rejection',
       'prev-output',
@@ -325,13 +240,8 @@ describe('substituteWorkflowVariables', () => {
 
   it('still replaces system-controlled variables when shellSafe is true', () => {
     const { prompt } = substituteWorkflowVariables(
+      pc({ artifactsDir: '/tmp/artifacts' }),
       'cd $ARTIFACTS_DIR && git checkout $BASE_BRANCH # $WORKFLOW_ID $DOCS_DIR',
-      'run-1',
-      'msg',
-      '/tmp/artifacts',
-      'main',
-      'docs/',
-      undefined,
       undefined,
       undefined,
       undefined,
@@ -344,13 +254,8 @@ describe('substituteWorkflowVariables', () => {
 describe('buildPromptWithContext', () => {
   it('appends issueContext when no context variable in template', () => {
     const result = buildPromptWithContext(
+      pc({ issueContext: '## Issue #42\nDetails here' }),
       'Do the thing',
-      'run-1',
-      'msg',
-      '/tmp',
-      'main',
-      'docs/',
-      '## Issue #42\nDetails here',
       'test prompt'
     );
     expect(result).toContain('Do the thing');
@@ -359,13 +264,8 @@ describe('buildPromptWithContext', () => {
 
   it('does not append issueContext when $CONTEXT was substituted', () => {
     const result = buildPromptWithContext(
+      pc({ issueContext: '## Issue #42\nDetails here' }),
       'Fix this: $CONTEXT',
-      'run-1',
-      'msg',
-      '/tmp',
-      'main',
-      'docs/',
-      '## Issue #42\nDetails here',
       'test prompt'
     );
     // Context was substituted inline, should not be appended again
@@ -374,16 +274,7 @@ describe('buildPromptWithContext', () => {
   });
 
   it('returns prompt unchanged when no issueContext provided', () => {
-    const result = buildPromptWithContext(
-      'Do the thing',
-      'run-1',
-      'msg',
-      '/tmp',
-      'main',
-      'docs/',
-      undefined,
-      'test prompt'
-    );
+    const result = buildPromptWithContext(pc(), 'Do the thing', 'test prompt');
     expect(result).toBe('Do the thing');
   });
 });

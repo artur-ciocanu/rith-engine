@@ -67,6 +67,7 @@ import {
   formatSubprocessFailure,
   safeSendMessage,
   type SendMessageContext,
+  type PromptContext,
 } from './executor-shared';
 
 /** Lazy-initialized logger (deferred so test mocks can intercept createLogger) */
@@ -165,7 +166,7 @@ export interface DagExecutionContext {
   readonly artifactsDir: string;
   readonly logDir: string;
   readonly baseBranch: string;
-  readonly docsDir: string;
+  readonly promptContext: PromptContext;
   readonly nodeOutputs: Map<string, NodeOutput>;
   readonly config: WorkflowConfig;
   readonly workflowModel: string | undefined;
@@ -523,13 +524,10 @@ async function executeNodeInternal(
     conversationId,
     cwd,
     workflowRun,
-    artifactsDir,
     logDir,
-    baseBranch,
-    docsDir,
     nodeOutputs,
     configuredCommandFolder,
-    issueContext,
+    promptContext,
   } = ctx;
   const nodeStartTime = Date.now();
   const nodeContext: SendMessageContext = { workflowId: workflowRun.id, nodeName: node.id };
@@ -601,13 +599,8 @@ async function executeNodeInternal(
   let substitutedPrompt: string;
   try {
     substitutedPrompt = buildPromptWithContext(
+      promptContext,
       rawPrompt,
-      workflowRun.id,
-      workflowRun.user_message,
-      artifactsDir,
-      baseBranch,
-      docsDir,
-      issueContext,
       `dag node '${node.id}' prompt`
     );
   } catch (error) {
@@ -1219,7 +1212,7 @@ async function executeBashNode(
     artifactsDir,
     logDir,
     baseBranch,
-    docsDir,
+    promptContext,
     nodeOutputs,
     issueContext,
   } = ctx;
@@ -1253,13 +1246,8 @@ async function executeBashNode(
 
   // Variable substitution on script
   const { prompt: substitutedScript } = substituteWorkflowVariables(
+    promptContext,
     node.bash,
-    workflowRun.id,
-    workflowRun.user_message,
-    artifactsDir,
-    baseBranch,
-    docsDir,
-    issueContext,
     undefined,
     undefined,
     undefined,
@@ -1401,9 +1389,8 @@ async function executeScriptNode(
     artifactsDir,
     logDir,
     baseBranch,
-    docsDir,
     nodeOutputs,
-    issueContext,
+    promptContext,
   } = ctx;
   const nodeStartTime = Date.now();
   const nodeContext: SendMessageContext = { workflowId: workflowRun.id, nodeName: node.id };
@@ -1434,15 +1421,7 @@ async function executeScriptNode(
   });
 
   // Variable substitution on script field
-  const { prompt: substitutedScript } = substituteWorkflowVariables(
-    node.script,
-    workflowRun.id,
-    workflowRun.user_message,
-    artifactsDir,
-    baseBranch,
-    docsDir,
-    issueContext
-  );
+  const { prompt: substitutedScript } = substituteWorkflowVariables(promptContext, node.script);
   const finalScript = substituteNodeOutputRefs(substitutedScript, nodeOutputs, false);
 
   const timeout = node.timeout ?? SUBPROCESS_DEFAULT_TIMEOUT;
@@ -1701,10 +1680,8 @@ async function executeLoopNode(
     conversationId,
     cwd,
     workflowRun,
-    artifactsDir,
     logDir,
-    baseBranch,
-    docsDir,
+    promptContext,
     nodeOutputs,
     config,
     workflowLevelOptions,
@@ -1800,13 +1777,8 @@ async function executeLoopNode(
       // executor starts a fresh `lastIterationOutput` variable, so the first iteration of
       // the resume also receives an empty $LOOP_PREV_OUTPUT.
       const { prompt: substitutedPrompt } = substituteWorkflowVariables(
+        promptContext,
         loop.prompt,
-        workflowRun.id,
-        workflowRun.user_message,
-        artifactsDir,
-        baseBranch,
-        docsDir,
-        issueContext,
         i === startIteration ? loopUserInput : '',
         undefined, // rejectionReason
         i === startIteration ? '' : lastIterationOutput
@@ -2078,13 +2050,8 @@ async function executeLoopNode(
     if (loop.until_bash) {
       try {
         const { prompt: bashPrompt } = substituteWorkflowVariables(
+          promptContext,
           loop.until_bash,
-          workflowRun.id,
-          workflowRun.user_message,
-          artifactsDir,
-          baseBranch,
-          docsDir,
-          issueContext,
           undefined,
           undefined,
           undefined,
@@ -2298,14 +2265,11 @@ async function executeApprovalNode(
     platform,
     conversationId,
     workflowRun,
-    artifactsDir,
-    baseBranch,
-    docsDir,
     nodeOutputs,
     config,
     workflowModel,
     workflowLevelOptions,
-    issueContext,
+    promptContext,
   } = ctx;
   const msgContext = { workflowId: workflowRun.id, nodeName: node.id };
 
@@ -2353,15 +2317,9 @@ async function executeApprovalNode(
       return { state: 'completed' as const, output: '' };
     }
 
-    // Run the on_reject prompt via AI
     const { prompt: substitutedPrompt } = substituteWorkflowVariables(
+      promptContext,
       node.approval.on_reject.prompt,
-      workflowRun.id,
-      workflowRun.user_message ?? '',
-      artifactsDir,
-      baseBranch,
-      docsDir,
-      issueContext,
       undefined, // loopUserInput
       rejectionReason
     );
@@ -2507,6 +2465,14 @@ export async function executeDagWorkflow(
   }
 
   // Per-run constants threaded to every DAG node executor (built once; see DagExecutionContext).
+  const promptContext: PromptContext = {
+    workflowId: workflowRun.id,
+    userMessage: workflowRun.user_message,
+    artifactsDir,
+    baseBranch,
+    docsDir,
+    issueContext,
+  };
   const ctx: DagExecutionContext = {
     deps,
     platform,
@@ -2516,7 +2482,7 @@ export async function executeDagWorkflow(
     artifactsDir,
     logDir,
     baseBranch,
-    docsDir,
+    promptContext,
     nodeOutputs,
     config,
     workflowModel,
