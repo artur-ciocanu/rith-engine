@@ -8,39 +8,50 @@ and what REMAINS — so future sessions continue from here instead of re-derivin
 items 11–13 (architectural-review hardening) in `#10`; item 7 (Pi-only docs) in `#11`;
 DX items 8–10 (`RITH_MODEL` override, `rith doctor`, `rith setup`) in `#15`; the web-UI /
 `serve` doc purge + a fully-green `bun run validate` (all pre-existing red tests fixed) in `#16`;
-the workflows single-process mock isolation (item 16) in `#18` (`ea66970`, current `main` HEAD).
-**Status as of:** 2026-06-05 — items 1–13, DX 8–10, and item 16 are merged; docs are Pi-only /
-CLI-only and `bun run validate` is green end-to-end on `main` (`check:bundled`,
+the workflows single-process mock isolation (item 16) in `#18`; the `@rith/providers` →
+`@rith/pi` collapse (item 17) in `#20`; the `DagExecutionContext` param-object seam
+(item 14, **step 1 of 2**) in `#21`; and a variable-substitution cohesion detour — a
+`PromptContext` value object plus the **ctx-first** parameter convention — in `#22`
+(`d9d177a`, current `main` HEAD).
+**Status as of:** 2026-06-06 — items 1–13, DX 8–10, items 16–17, **item 14 step 1** (the
+executor context seam), and the `#22` PromptContext / ctx-first cohesion pass are merged; docs
+are Pi-only / CLI-only and `bun run validate` is green end-to-end on `main` (`check:bundled`,
 `check:bundled-skill`, `type-check` ×7, `lint --max-warnings 0`, `format:check`, full test
 suite — 0 failures).
-**Remaining:** only the two deferred large refactors, items 14–15 — the next session starts
-there (see "REMAINING → From `architectural-review.md`" below). Item 16 (`#18`) was an
-unplanned but enabling prerequisite for item 14: the workflows test suite now runs in a single
-`bun test` process, so the dag-executor god-file split won't fight test serialization.
+**Remaining:** item 14 **step 2** (the dag-executor god-file split) and item 15 — the next
+session starts there (see "REMAINING → From `architectural-review.md`" below). The hard part of
+item 14 is de-risked: `#21` collapsed the five private node executors onto a single
+`DagExecutionContext` param object and `#22` grouped the prompt-substitution cluster into
+`PromptContext` and locked the **ctx-first** convention (the context object is always the first
+parameter), so the runner-class split is module-mechanical extraction rather than re-threading.
+Enabling prerequisites are also in place: item 16 (`#18`) made the workflows suite run in one
+`bun test` process so the split won't fight test serialization, and item 17 (`#20`) flattened the
+`@rith/pi` surface item 14 imports from. Item 14 still lands before item 15 (the
+`DagExecutionContext` seam is where the `WorkflowRun` metadata discriminant gets threaded).
 
 ---
 
 ## Progress at a glance
 
-| #   | Item                                                   | Source       | Status              |
-| --- | ------------------------------------------------------ | ------------ | ------------------- |
-| 1   | Bundled workflow model refs (14 files)                 | config §5/§7 | ✅ Done             |
-| 2   | Provider "requires a model" error message              | config §7    | ✅ Done             |
-| 3   | Config schema `provider:` → `pi:` block                | config §2    | ✅ Done             |
-| 4   | Drop `env` + `interactive` config knobs                | user         | ✅ Done             |
-| 5   | Extension `notify()` forwarding (kept, unconditional)  | user         | ✅ Done             |
-| 6   | Dead `w.provider` CLI display removed                  | arch/cleanup | ✅ Done             |
-| 7   | Pi-only docs alignment (`docs-web`, 23 files)          | config §6    | ✅ Done (#11)       |
-| 8   | `RITH_MODEL` env override (`applyEnvOverrides`)        | config §7    | ✅ Done             |
-| 9   | `rith doctor` (Pi-only port)                           | config §7    | ✅ Done             |
-| 10  | `rith setup` (Pi-trimmed port)                         | config §7    | ✅ Done             |
-| 11  | State-machine `cancelWorkflowRun` guard                | arch #3      | ✅ Done (#10)       |
-| 12  | Per-run throttle maps (de-globalize)                   | arch #4      | ✅ Done (#10)       |
-| 13  | Event-emitter guaranteed `unregisterRun` cleanup       | arch         | ✅ Done (#10)       |
-| 14  | `DagExecutionContext` param object + god-file split    | arch #1/#2   | ⬜ Deferred (large) |
-| 15  | Discriminate `WorkflowRun.metadata`; aggregate root    | arch         | ⬜ Deferred (large) |
-| 16  | Workflows single-process mock isolation                | test infra   | ✅ Done (#18)       |
-| 17  | Collapse `@rith/providers` → `@rith/pi` (rename/reorg) | cleanup      | ✅ Done             |
+| #   | Item                                                   | Source       | Status                                         |
+| --- | ------------------------------------------------------ | ------------ | ---------------------------------------------- |
+| 1   | Bundled workflow model refs (14 files)                 | config §5/§7 | ✅ Done                                        |
+| 2   | Provider "requires a model" error message              | config §7    | ✅ Done                                        |
+| 3   | Config schema `provider:` → `pi:` block                | config §2    | ✅ Done                                        |
+| 4   | Drop `env` + `interactive` config knobs                | user         | ✅ Done                                        |
+| 5   | Extension `notify()` forwarding (kept, unconditional)  | user         | ✅ Done                                        |
+| 6   | Dead `w.provider` CLI display removed                  | arch/cleanup | ✅ Done                                        |
+| 7   | Pi-only docs alignment (`docs-web`, 23 files)          | config §6    | ✅ Done (#11)                                  |
+| 8   | `RITH_MODEL` env override (`applyEnvOverrides`)        | config §7    | ✅ Done                                        |
+| 9   | `rith doctor` (Pi-only port)                           | config §7    | ✅ Done                                        |
+| 10  | `rith setup` (Pi-trimmed port)                         | config §7    | ✅ Done                                        |
+| 11  | State-machine `cancelWorkflowRun` guard                | arch #3      | ✅ Done (#10)                                  |
+| 12  | Per-run throttle maps (de-globalize)                   | arch #4      | ✅ Done (#10)                                  |
+| 13  | Event-emitter guaranteed `unregisterRun` cleanup       | arch         | ✅ Done (#10)                                  |
+| 14  | `DagExecutionContext` param object + god-file split    | arch #1/#2   | 🟡 Seam+cohesion done (#21/#22); split remains |
+| 15  | Discriminate `WorkflowRun.metadata`; aggregate root    | arch         | ⬜ Deferred (large)                            |
+| 16  | Workflows single-process mock isolation                | test infra   | ✅ Done (#18)                                  |
+| 17  | Collapse `@rith/providers` → `@rith/pi` (rename/reorg) | cleanup      | ✅ Done (#20)                                  |
 
 ### Refactor (precedes items 14/15): `@rith/providers` → `@rith/pi`
 
@@ -373,13 +384,45 @@ Items 1–3 (the low-risk hardening trio) are **done** — see DONE above. Remai
   metadata/aggregate-root notes (item 15). Land both behind the existing green
   `bun run validate`; they are pure refactors with heavy test surface, so keep each runner's
   observable behavior identical.
-  - **Item 14** — thread a `DagExecutionContext` param object through the executor and split
-    the `packages/workflows/src/dag-executor.ts` god file (~3150 lines) into focused runners:
-    `BashNodeRunner` / `ScriptNodeRunner` / `LoopNodeRunner` / `ApprovalNodeRunner`.
-    **Test surface is now friendlier** (item 16 / `#18`): `packages/workflows`'s suite runs in a
-    single `bun test` process with `mockModuleScoped` isolation, so new per-runner test files can
-    coexist without re-introducing serialized invocations. When adding runner modules, mock any
-    shared dep through `src/test-mock-module.ts`, never a bare `mock.module`.
+  - **Item 14, step 1 — ✅ Done (#21, refined in #22).** A single exported
+    `DagExecutionContext` interface carries the per-run constants: `deps`, `platform`,
+    `conversationId`, `cwd`, `workflowRun`, `artifactsDir`, `logDir`, `baseBranch`, `nodeOutputs`,
+    `config`, `workflowModel`, `workflowLevelOptions`, `configuredCommandFolder`, `issueContext`,
+    and `promptContext` (a `PromptContext` — see the cohesion detour below). The five module-private
+    executors (`executeNodeInternal`, `executeBashNode`, `executeScriptNode`, `executeLoopNode`,
+    `executeApprovalNode`) take `(ctx, …perNodeParams)` plus one destructure line each instead of
+    12–16 positional args; `ctx` is built once inside `executeDagWorkflow`, whose own 16-param
+    exported signature is **unchanged** (so `executor.ts` and most tests were untouched). Notes for
+    step 2: `executeLoopNode` keeps a per-node `workflowModel` param (the resolved
+    `node.model ?? workflowModel ?? config.pi?.model` loop model) and does **not** read
+    `ctx.workflowModel`; each executor destructures only the fields it uses directly (bash/loop keep
+    `artifactsDir`/`baseBranch`/`issueContext` flat only because they inject them as
+    `ARTIFACTS_DIR`/`BASE_BRANCH`/`CONTEXT` env vars). Pure refactor, `bun run validate` green
+    (workflows 906/906).
+  - **Cohesion detour — ✅ Done (#22, `d9d177a`, current `main` HEAD).** Two related cleanups on
+    top of the seam. (a) A `PromptContext` value object groups the run-constant inputs that
+    travelled together through `substituteWorkflowVariables` / `buildPromptWithContext` at every
+    call site — its fields are `workflowId`, `userMessage`, `artifactsDir`, `baseBranch`, `docsDir`,
+    `issueContext`. It is built once on `DagExecutionContext.promptContext`, which is why `docsDir`
+    is **no longer a flat ctx field** (it lives only in `promptContext`; `artifactsDir`/`baseBranch`
+    stay duplicated flat because env injection still needs them). (b) The **ctx-first parameter
+    convention** is now locked: the context object is always the first parameter — `fn(ctx, …)` for
+    the DAG executors and `substituteWorkflowVariables(ctx, prompt, …)` /
+    `buildPromptWithContext(ctx, template, logLabel)` for the prompt helpers. **Step 2 runners must
+    follow ctx-first.**
+  - **Item 14, step 2 — remaining (the next session starts here).** Split the
+    `packages/workflows/src/dag-executor.ts` god file (~3100 lines) into focused runner modules:
+    `BashNodeRunner` / `ScriptNodeRunner` / `LoopNodeRunner` / `ApprovalNodeRunner`. The `ctx`
+    seam from step 1 is the handle — each runner takes `DagExecutionContext` + its per-node args
+    (ctx-first), so extraction is module-mechanical, not a re-threading. `executeApprovalNode` is the
+    only executor that calls a sibling (`executeNodeInternal` on its `on_reject` branch), so factor
+    the shared internal-node path so the approval runner can still reach it. **Test surface is
+    friendly** (item 16 / `#18`): `packages/workflows`'s suite runs in a single `bun test` process
+    with `mockModuleScoped` isolation, so new per-runner test files coexist without re-introducing
+    serialized invocations. When adding runner modules, mock any shared dep through
+    `src/test-mock-module.ts`, never a bare `mock.module`. **Tooling note:** no LSP is configured for
+    this repo — use `ast-grep` for structural find/codemods (and note `f($A, $B, $$$REST)` only
+    matches 3+-arg calls; add a separate `f($A, $B)` pass for exactly-two-arg call sites).
   - **Item 15** — discriminate `WorkflowRun.metadata` by run status (replace the loose bag
     with a tagged union) and introduce an aggregate root for the run lifecycle.
 
@@ -424,7 +467,7 @@ in `provider.ts`, not `CLAUDE_CODE_*`). The stale "Agent SDK era" comment was re
 ### Pi env-var table — ✅ VERIFIED accurate (#16)
 
 `getting-started/ai-assistants.md` lists API-key env mappings for all 9 backends. Confirmed
-against `packages/providers/src/pi/provider.ts:119-129`: `PI_PROVIDER_ENV_VARS` maps **all
+against `packages/pi/src/agent.ts:119-129`: `PI_PROVIDER_ENV_VARS` maps **all
 nine** providers per request — anthropic, openai, google, groq, mistral, cerebras, xai,
 openrouter, huggingface. The earlier "anthropic/openai/google only" worry was **stale**; the
 docs table matches the runtime mapping, no edit needed.
@@ -448,8 +491,8 @@ bring-your-own-schema.
 
 Item 16 fixed the leak _within_ `packages/workflows`. The same class of leak still exists
 _across_ packages: a repo-root single-process `bun test` (all ~69 files) fails (~87 failures)
-because partial `mock.module` mocks in core/cli/providers tests leak (`PiProvider` missing from
-`@rith/providers`, `codebaseDb.*`/`workflowDb.*`/`isolationDb.*`/`adapter.*` undefined, etc.).
+because partial `mock.module` mocks in core/cli/pi tests leak (`PiCodingAgent` missing from
+`@rith/pi`, `codebaseDb.*`/`workflowDb.*`/`isolationDb.*`/`adapter.*` undefined, etc.).
 **Not a regression and not currently exercised** — the root `test` script runs each package in
 its own process (`bun --filter '*' --parallel`), so this only bites a deliberate single-process
 repo run. Fix (if ever wanted): apply the `mockModuleScoped` pattern from
@@ -469,13 +512,14 @@ fixed (product code untouched; tests reconciled to current behavior, no weakenin
   18/18 pass.
 - Prettier drift across touched packages normalized via `bun run format`.
 - `packages/core/src/workflows/store-adapter.test.ts` is **excluded** from core's `test`
-  script (its `mock.module('@rith/providers', …)` omits `PiProvider`, so it only loads
-  inside a batch). The migration's structural assertion there is covered by `tsc`.
+  script (which never runs `src/workflows/`); it mocks many `../db/*` modules plus `@rith/pi`
+  (now exports `PiCodingAgent`), so it only loads cleanly inside a batch. The migration's
+  structural assertion there is covered by `tsc`.
 
 ## Useful commands
 
 - Regenerate bundled workflows after editing `.rith/workflows/defaults/`:
   `bun run generate:bundled` then `bun run check:bundled`.
-- Targeted tests: `cd packages/providers && bun run test`;
+- Targeted tests: `cd packages/pi && bun run test`;
   `cd packages/core && bun test src/config/`;
   `cd packages/workflows && bun test src/executor.test.ts src/dag-executor.test.ts`.
