@@ -378,8 +378,8 @@ export interface PromptContext {
  * to avoid sending literal "$CONTEXT" to the AI.
  */
 export function substituteWorkflowVariables(
-  prompt: string,
   ctx: PromptContext,
+  prompt: string,
   loopUserInput?: string,
   rejectionReason?: string,
   loopPrevOutput?: string,
@@ -443,18 +443,18 @@ export function substituteWorkflowVariables(
  * Appends context only if it wasn't already substituted via $CONTEXT variables.
  * This prevents duplicate context being sent to the AI.
  *
- * @param template - The command prompt template with variable placeholders
  * @param ctx - Run-constant substitution inputs (ids, user message, dirs, issue context)
+ * @param template - The command prompt template with variable placeholders
  * @param logLabel - Human-readable label for logging (e.g., 'workflow step prompt')
  * @returns The final prompt with variables substituted and context optionally appended
  */
 export function buildPromptWithContext(
-  template: string,
   ctx: PromptContext,
+  template: string,
   logLabel: string
 ): string {
   const { issueContext } = ctx;
-  const { prompt, contextSubstituted } = substituteWorkflowVariables(template, ctx);
+  const { prompt, contextSubstituted } = substituteWorkflowVariables(ctx, template);
 
   if (issueContext && !contextSubstituted) {
     getLog().debug({ logLabel }, 'issue_context_appended');

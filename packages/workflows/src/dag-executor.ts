@@ -599,8 +599,8 @@ async function executeNodeInternal(
   let substitutedPrompt: string;
   try {
     substitutedPrompt = buildPromptWithContext(
-      rawPrompt,
       promptContext,
+      rawPrompt,
       `dag node '${node.id}' prompt`
     );
   } catch (error) {
@@ -1246,8 +1246,8 @@ async function executeBashNode(
 
   // Variable substitution on script
   const { prompt: substitutedScript } = substituteWorkflowVariables(
-    node.bash,
     promptContext,
+    node.bash,
     undefined,
     undefined,
     undefined,
@@ -1421,7 +1421,7 @@ async function executeScriptNode(
   });
 
   // Variable substitution on script field
-  const { prompt: substitutedScript } = substituteWorkflowVariables(node.script, promptContext);
+  const { prompt: substitutedScript } = substituteWorkflowVariables(promptContext, node.script);
   const finalScript = substituteNodeOutputRefs(substitutedScript, nodeOutputs, false);
 
   const timeout = node.timeout ?? SUBPROCESS_DEFAULT_TIMEOUT;
@@ -1777,8 +1777,8 @@ async function executeLoopNode(
       // executor starts a fresh `lastIterationOutput` variable, so the first iteration of
       // the resume also receives an empty $LOOP_PREV_OUTPUT.
       const { prompt: substitutedPrompt } = substituteWorkflowVariables(
-        loop.prompt,
         promptContext,
+        loop.prompt,
         i === startIteration ? loopUserInput : '',
         undefined, // rejectionReason
         i === startIteration ? '' : lastIterationOutput
@@ -2050,8 +2050,8 @@ async function executeLoopNode(
     if (loop.until_bash) {
       try {
         const { prompt: bashPrompt } = substituteWorkflowVariables(
-          loop.until_bash,
           promptContext,
+          loop.until_bash,
           undefined,
           undefined,
           undefined,
@@ -2318,8 +2318,8 @@ async function executeApprovalNode(
     }
 
     const { prompt: substitutedPrompt } = substituteWorkflowVariables(
-      node.approval.on_reject.prompt,
       promptContext,
+      node.approval.on_reject.prompt,
       undefined, // loopUserInput
       rejectionReason
     );
