@@ -423,6 +423,22 @@ Items 1–3 (the low-risk hardening trio) are **done** — see DONE above. Remai
     `src/test-mock-module.ts`, never a bare `mock.module`. **Tooling note:** no LSP is configured for
     this repo — use `ast-grep` for structural find/codemods (and note `f($A, $B, $$$REST)` only
     matches 3+-arg calls; add a separate `f($A, $B)` pass for exactly-two-arg call sites).
+    - **Update (2026-06-08) — structural core landed; see `specs/dag-executor-refactor.md`.**
+      A DDD/GRASP/SOLID pass shipped behind a green `bun run validate` (workflows 906/0): a
+      `NodeRunner` registry (`dag/node-runner.ts`) replaced the `isBashNode/isLoopNode/…`
+      type-switch dispatch; the per-run context is now `DagRunContext` (renamed from
+      `DagExecutionContext`) plus a `NodeRunContext` envelope (`dag/context.ts`); the
+      prior-success/trigger/`when` gates and the log+persist+emit boilerplate were extracted
+      (`evaluateNodeGates`, `recordNodeSkip`, `recordNodePreRunFailure`); and a
+      `WorkflowRunAggregate` (`dag/run-aggregate.ts`) is the **single mutator** of run status —
+      all four status writes (cancel node, approval pause, interactive-loop pause, on-reject
+      cancel) route through it. Runner classes/gate/sink still live in `dag-executor.ts` (the
+      `runners/` split is deferred — a `gate.ts` would cycle on `checkTriggerRule` until the
+      scheduler also moves). **Deferred by decision:** the `NodeRunResult` control-signal flip
+      (cancel/pause stay in-band; scheduler still breaks via the between-layer re-read) and
+      item 15's tagged-union metadata — the flip changes concurrent-cancel timing, so it is
+      not zero-behavior-change. Item 15's **aggregate-root half is effectively in place**
+      (`WorkflowRunAggregate`); only the discriminated `WorkflowRun.metadata` remains.
   - **Item 15** — discriminate `WorkflowRun.metadata` by run status (replace the loose bag
     with a tagged union) and introduce an aggregate root for the run lifecycle.
 

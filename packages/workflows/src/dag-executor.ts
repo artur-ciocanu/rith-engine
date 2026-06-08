@@ -21,6 +21,7 @@ import type {
   DagNode,
   ApprovalNode,
   BashNode,
+  CancelNode,
   CommandNode,
   PromptNode,
   LoopNode,
@@ -28,18 +29,8 @@ import type {
   NodeOutput,
   TriggerRule,
   WorkflowRun,
-  EffortLevel,
-  ThinkingConfig,
-  SandboxSettings,
 } from './schemas';
-import {
-  isBashNode,
-  isLoopNode,
-  isApprovalNode,
-  isCancelNode,
-  isScriptNode,
-  isApprovalContext,
-} from './schemas';
+import { isApprovalContext } from './schemas';
 import { formatToolCall } from './utils/tool-formatter';
 import { createLogger } from '@rith/paths';
 import { getWorkflowEventEmitter } from './event-emitter';
@@ -51,8 +42,6 @@ import {
   logNodeError,
   logAssistant,
   logTool,
-  logWorkflowComplete,
-  logWorkflowError,
 } from './logger';
 import { withIdleTimeout, STEP_IDLE_TIMEOUT_MS } from './utils/idle-timeout';
 import {
@@ -69,6 +58,9 @@ import {
   type SendMessageContext,
   type PromptContext,
 } from './executor-shared';
+import type { DagRunContext, NodeRunContext, WorkflowLevelOptions } from './dag/context';
+import { nodeKind, type NodeKind, type NodeRunner, type NodeRunResult } from './dag/node-runner';
+import { WorkflowRunAggregate } from './dag/run-aggregate';
 
 /** Lazy-initialized logger (deferred so test mocks can intercept createLogger) */
 let cachedLog: ReturnType<typeof createLogger> | undefined;
@@ -140,40 +132,8 @@ export async function loadConfiguredMcpServerNames(
   }
 }
 
-/** Workflow-level Claude SDK options — per-node overrides take precedence via ?? */
-interface WorkflowLevelOptions {
-  effort?: EffortLevel;
-  thinking?: ThinkingConfig;
-  fallbackModel?: string;
-  betas?: string[];
-  sandbox?: SandboxSettings;
-}
-
 /** Internal node execution result — extends NodeOutput with cost data for aggregation. */
 type NodeExecutionResult = NodeOutput & { costUsd?: number };
-
-/**
- * Per-run constants threaded to every DAG node executor. Built once in
- * `executeDagWorkflow`; fields are stable for the whole run. The `nodeOutputs`
- * Map reference is stable too — only its contents mutate as nodes complete.
- */
-export interface DagExecutionContext {
-  readonly deps: WorkflowDeps;
-  readonly platform: IWorkflowPlatform;
-  readonly conversationId: string;
-  readonly cwd: string;
-  readonly workflowRun: WorkflowRun;
-  readonly artifactsDir: string;
-  readonly logDir: string;
-  readonly baseBranch: string;
-  readonly promptContext: PromptContext;
-  readonly nodeOutputs: Map<string, NodeOutput>;
-  readonly config: WorkflowConfig;
-  readonly workflowModel: string | undefined;
-  readonly workflowLevelOptions: WorkflowLevelOptions;
-  readonly configuredCommandFolder: string | undefined;
-  readonly issueContext: string | undefined;
-}
 
 /** Throttle interval for the during-streaming cancel check (reads — no write contention in WAL mode). */
 const CANCEL_CHECK_INTERVAL_MS = 10_000;
@@ -513,7 +473,7 @@ export function buildTopologicalLayers(nodes: readonly DagNode[]): DagNode[][] {
  * Parallel nodes and context: 'fresh' nodes always receive fresh sessions (caller ensures resumeSessionId is undefined).
  */
 async function executeNodeInternal(
-  ctx: DagExecutionContext,
+  ctx: DagRunContext,
   node: CommandNode | PromptNode,
   nodeOptions: SendQueryOptions | undefined,
   resumeSessionId: string | undefined
@@ -1199,7 +1159,7 @@ const NODE_OUTPUT_FILE_THRESHOLD = 32_768;
  * No AI session is created — bash nodes are free/deterministic.
  */
 async function executeBashNode(
-  ctx: DagExecutionContext,
+  ctx: DagRunContext,
   node: BashNode,
   envVars?: Record<string, string>
 ): Promise<NodeOutput> {
@@ -1376,7 +1336,7 @@ async function executeBashNode(
  * stdout is captured and trimmed as the node output; stderr is logged as a warning.
  */
 async function executeScriptNode(
-  ctx: DagExecutionContext,
+  ctx: DagRunContext,
   node: ScriptNode,
   envVars?: Record<string, string>
 ): Promise<NodeOutput> {
@@ -1670,7 +1630,7 @@ function buildLoopNodeOptions(
  * - Does not write current_step_index (DAG tracks per-node completion)
  */
 async function executeLoopNode(
-  ctx: DagExecutionContext,
+  ctx: DagRunContext,
   node: LoopNode,
   workflowModel: string | undefined
 ): Promise<NodeExecutionResult> {
@@ -2215,7 +2175,7 @@ async function executeLoopNode(
         .catch((err: Error) => {
           logEventStoreError(err, i);
         });
-      await deps.store.pauseWorkflowRun(workflowRun.id, {
+      await ctx.runAggregate.pause({
         nodeId: node.id,
         message: loop.gate_message,
         type: 'interactive_loop',
@@ -2256,10 +2216,7 @@ async function executeLoopNode(
  * On rejection resume (when on_reject is configured): runs the on_reject prompt via AI,
  * then re-pauses at the approval gate. After max_attempts rejections, cancels normally.
  */
-async function executeApprovalNode(
-  ctx: DagExecutionContext,
-  node: ApprovalNode
-): Promise<NodeOutput> {
+async function executeApprovalNode(ctx: DagRunContext, node: ApprovalNode): Promise<NodeOutput> {
   const {
     deps,
     platform,
@@ -2292,26 +2249,7 @@ async function executeApprovalNode(
 
     // Check if max attempts exhausted
     if (rejectionCount >= maxAttempts) {
-      await deps.store.cancelWorkflowRun(workflowRun.id);
-      deps.store
-        .createWorkflowEvent({
-          workflow_run_id: workflowRun.id,
-          event_type: 'workflow_cancelled',
-          step_name: node.id,
-          data: { reason: `max_attempts (${String(maxAttempts)}) exhausted` },
-        })
-        .catch((err: Error) => {
-          getLog().error(
-            { err, workflowRunId: workflowRun.id, eventType: 'workflow_cancelled' },
-            'workflow.event_persist_failed'
-          );
-        });
-      getWorkflowEventEmitter().emit({
-        type: 'workflow_cancelled',
-        runId: workflowRun.id,
-        nodeId: node.id,
-        reason: `max_attempts (${String(maxAttempts)}) exhausted`,
-      });
+      await ctx.runAggregate.cancel(node.id, `max_attempts (${String(maxAttempts)}) exhausted`);
       const cancelMsg = `❌ Approval node \`${node.id}\` cancelled after ${String(maxAttempts)} rejections.`;
       await safeSendMessage(platform, conversationId, cancelMsg, msgContext);
       return { state: 'completed' as const, output: '' };
@@ -2388,7 +2326,7 @@ async function executeApprovalNode(
       );
     });
 
-  await deps.store.pauseWorkflowRun(workflowRun.id, {
+  await ctx.runAggregate.pause({
     message: renderedMessage,
     nodeId: node.id,
     type: 'approval',
@@ -2407,6 +2345,301 @@ async function executeApprovalNode(
   // Return completed — the between-layer status check will see 'paused' and break.
   // On resume, the approve endpoint writes a real node_completed event with the user's response.
   return { state: 'completed' as const, output: '' };
+}
+
+/**
+ * Execute a cancel node — terminates the workflow run with a reason string.
+ * Sends the cancellation message, then routes the status transition through the
+ * run aggregate. The between-layer status re-read sees 'cancelled' and stops the loop.
+ */
+async function executeCancelNode(ctx: DagRunContext, node: CancelNode): Promise<NodeOutput> {
+  const reason = substituteNodeOutputRefs(node.cancel, ctx.nodeOutputs);
+  await safeSendMessage(
+    ctx.platform,
+    ctx.conversationId,
+    `\u274c **Workflow cancelled** (node \`${node.id}\`): ${reason}`,
+    { workflowId: ctx.workflowRun.id, nodeName: node.id }
+  );
+  await ctx.runAggregate.cancel(node.id, reason);
+  return { state: 'completed', output: reason };
+}
+
+// ---------------------------------------------------------------------------
+// Node runners — one strategy per node kind, selected by `runnerRegistry` below
+// (replaces the former type-switch in executeDagWorkflow). Stateless; per-run
+// state arrives via NodeRunContext. Step 1: thin wrappers over the existing
+// executors with no logic change.
+// ---------------------------------------------------------------------------
+
+class BashNodeRunner implements NodeRunner {
+  async run(rc: NodeRunContext, node: DagNode): Promise<NodeRunResult> {
+    const output = await executeBashNode(rc.run, node as BashNode, rc.run.config.envVars);
+    return { control: 'continue', output };
+  }
+}
+
+class ScriptNodeRunner implements NodeRunner {
+  async run(rc: NodeRunContext, node: DagNode): Promise<NodeRunResult> {
+    const output = await executeScriptNode(rc.run, node as ScriptNode, rc.run.config.envVars);
+    return { control: 'continue', output };
+  }
+}
+
+class LoopNodeRunner implements NodeRunner {
+  async run(rc: NodeRunContext, node: DagNode): Promise<NodeRunResult> {
+    const loopNode = node as LoopNode;
+    const loopModel = loopNode.model ?? rc.run.workflowModel ?? rc.run.config.pi?.model;
+    const output = await executeLoopNode(rc.run, loopNode, loopModel);
+    return { control: 'continue', output, costUsd: output.costUsd };
+  }
+}
+
+class ApprovalNodeRunner implements NodeRunner {
+  async run(rc: NodeRunContext, node: DagNode): Promise<NodeRunResult> {
+    const output = await executeApprovalNode(rc.run, node as ApprovalNode);
+    return { control: 'continue', output };
+  }
+}
+
+class CancelNodeRunner implements NodeRunner {
+  async run(rc: NodeRunContext, node: DagNode): Promise<NodeRunResult> {
+    const output = await executeCancelNode(rc.run, node as CancelNode);
+    return { control: 'continue', output };
+  }
+}
+
+class AiNodeRunner implements NodeRunner {
+  async run(rc: NodeRunContext, node: DagNode): Promise<NodeRunResult> {
+    const ctx = rc.run;
+    const aiNode = node as CommandNode | PromptNode;
+
+    // Resolve per-node model/options.
+    const { options: nodeOptions } = await resolveNodeModelAndOptions(
+      aiNode,
+      ctx.workflowModel,
+      ctx.config,
+      ctx.workflowLevelOptions
+    );
+
+    // Execute with retry for transient failures.
+    const retryConfig = getEffectiveNodeRetryConfig(aiNode);
+    let output: NodeExecutionResult = {
+      state: 'failed',
+      output: '',
+      error: 'Node did not execute',
+    };
+
+    for (let attempt = 0; attempt <= retryConfig.maxRetries; attempt++) {
+      output = await executeNodeInternal(ctx, aiNode, nodeOptions, rc.resumeSessionId);
+
+      if (output.state !== 'failed') break;
+
+      // FATAL errors (auth, permissions, credit balance) are never retried even when on_error:all.
+      const isFatal = output.error ? classifyError(new Error(output.error)) === 'FATAL' : false;
+      const isTransient = output.error ? isTransientNodeError(output.error) : false;
+      const shouldRetry =
+        !isFatal &&
+        (retryConfig.onError === 'all' || (retryConfig.onError === 'transient' && isTransient));
+
+      if (!shouldRetry || attempt >= retryConfig.maxRetries) break;
+
+      const delayMs = retryConfig.delayMs * Math.pow(2, attempt);
+      getLog().warn(
+        {
+          nodeId: aiNode.id,
+          attempt: attempt + 1,
+          maxRetries: retryConfig.maxRetries,
+          delayMs,
+          error: output.error,
+        },
+        'dag_node_transient_retry'
+      );
+
+      const errorKind = isTransient ? 'transient error' : 'error';
+      await safeSendMessage(
+        ctx.platform,
+        ctx.conversationId,
+        `⚠️ Node \`${aiNode.id}\` failed with ${errorKind} (attempt ${String(attempt + 1)}/${String(retryConfig.maxRetries + 1)}). Retrying in ${String(Math.round(delayMs / 1000))}s...`,
+        { workflowId: ctx.workflowRun.id, nodeName: aiNode.id }
+      );
+
+      await new Promise(resolve => setTimeout(resolve, delayMs));
+    }
+
+    return { control: 'continue', output, costUsd: output.costUsd };
+  }
+}
+
+const runnerRegistry: Record<NodeKind, NodeRunner> = {
+  ai: new AiNodeRunner(),
+  bash: new BashNodeRunner(),
+  script: new ScriptNodeRunner(),
+  loop: new LoopNodeRunner(),
+  approval: new ApprovalNodeRunner(),
+  cancel: new CancelNodeRunner(),
+};
+
+/** Reason a node was skipped — drives the skip event type, log, and emitted event. */
+type NodeSkipReason =
+  | 'prior_success'
+  | 'trigger_rule'
+  | 'when_condition'
+  | 'when_condition_parse_error';
+
+/**
+ * Record a node skip: write the skip log file, persist a workflow event, and emit
+ * the node_skipped observability event. Dedupes the per-reason boilerplate that was
+ * copy-pasted across the gate checks. `prior_success` uses its own event type.
+ */
+async function recordNodeSkip(
+  ctx: DagRunContext,
+  node: DagNode,
+  reason: NodeSkipReason,
+  data?: Record<string, unknown>
+): Promise<void> {
+  const { deps, logDir, workflowRun } = ctx;
+  await logNodeSkip(logDir, workflowRun.id, node.id, reason).catch((err: Error) => {
+    getLog().warn({ err, nodeId: node.id }, 'dag.node_skip_log_write_failed');
+  });
+  const eventType = reason === 'prior_success' ? 'node_skipped_prior_success' : 'node_skipped';
+  deps.store
+    .createWorkflowEvent({
+      workflow_run_id: workflowRun.id,
+      event_type: eventType,
+      step_name: node.id,
+      data: { reason, ...data },
+    })
+    .catch((err: Error) => {
+      getLog().error(
+        { err, workflowRunId: workflowRun.id, eventType },
+        'workflow_event_persist_failed'
+      );
+    });
+  getWorkflowEventEmitter().emit({
+    type: 'node_skipped',
+    runId: workflowRun.id,
+    nodeId: node.id,
+    nodeName: node.command ?? node.id,
+    reason,
+  });
+}
+
+/**
+ * Record a node failure raised before/around dispatch (the layer lambda's catch
+ * path): persist a node_failed event, emit it, and notify the user.
+ */
+async function recordNodePreRunFailure(
+  ctx: DagRunContext,
+  node: DagNode,
+  err: Error
+): Promise<void> {
+  const { deps, platform, conversationId, workflowRun } = ctx;
+  getLog().error({ err, nodeId: node.id }, 'dag_node_pre_execution_failed');
+  deps.store
+    .createWorkflowEvent({
+      workflow_run_id: workflowRun.id,
+      event_type: 'node_failed',
+      step_name: node.id,
+      data: { error: err.message },
+    })
+    .catch((dbErr: Error) => {
+      getLog().error({ err: dbErr, nodeId: node.id }, 'workflow_event_persist_failed');
+    });
+  getWorkflowEventEmitter().emit({
+    type: 'node_failed',
+    runId: workflowRun.id,
+    nodeId: node.id,
+    nodeName: node.command ?? node.id,
+    error: err.message,
+  });
+  await safeSendMessage(
+    platform,
+    conversationId,
+    `Node '${node.id}' failed before execution: ${err.message}`,
+    { workflowId: workflowRun.id, nodeName: node.id }
+  );
+}
+
+/** A pre-execution gate decision: run the node, or skip it with a captured output. */
+type NodeGateDecision = { action: 'run' } | { action: 'skip'; output: NodeOutput };
+
+/**
+ * Evaluate the pre-execution gates in order: prior-run resume skip, trigger rule,
+ * then `when:` condition. Each gate records its own skip via the event sink; the
+ * caller only forwards the captured output. `always_run` opts a prior-completed
+ * node back into execution (emitting node_always_run_reset).
+ */
+async function evaluateNodeGates(
+  ctx: DagRunContext,
+  node: DagNode,
+  priorCompletedNodes: Map<string, string> | undefined
+): Promise<NodeGateDecision> {
+  const { deps, platform, conversationId, workflowRun, nodeOutputs } = ctx;
+
+  // 0. Prior-run resume skip (unless always_run forces re-execution).
+  if (priorCompletedNodes?.has(node.id)) {
+    if (node.always_run) {
+      getLog().info({ nodeId: node.id }, 'dag.node_always_run_resume_forced');
+      deps.store
+        .createWorkflowEvent({
+          workflow_run_id: workflowRun.id,
+          event_type: 'node_always_run_reset',
+          step_name: node.id,
+          data: { prior_output: priorCompletedNodes.get(node.id) ?? '' },
+        })
+        .catch((err: Error) => {
+          getLog().error(
+            { err, workflowRunId: workflowRun.id, eventType: 'node_always_run_reset' },
+            'workflow_event_persist_failed'
+          );
+        });
+      // falls through to re-execute the node
+    } else {
+      getLog().info({ nodeId: node.id }, 'dag.node_skipped_prior_success');
+      await recordNodeSkip(ctx, node, 'prior_success', {
+        node_output: priorCompletedNodes.get(node.id) ?? '',
+      });
+      return {
+        action: 'skip',
+        output: nodeOutputs.get(node.id) ?? { state: 'skipped', output: '' },
+      };
+    }
+  }
+
+  // 1. Trigger rule.
+  if (checkTriggerRule(node, nodeOutputs) === 'skip') {
+    getLog().info({ nodeId: node.id, reason: 'trigger_rule' }, 'dag_node_skipped');
+    await recordNodeSkip(ctx, node, 'trigger_rule');
+    return { action: 'skip', output: { state: 'skipped', output: '' } };
+  }
+
+  // 2. when: condition.
+  if (node.when !== undefined) {
+    const { result: conditionPasses, parsed: conditionParsed } = evaluateCondition(
+      node.when,
+      nodeOutputs
+    );
+    if (!conditionParsed) {
+      const parseErrMsg = `\u26a0\ufe0f Node '${node.id}': unparseable \`when:\` expression "${node.when}" \u2014 node skipped (fail-closed). Check syntax: \`$nodeId.output == 'VALUE'\`, \`$nodeId.output > '5'\`, or compound \`$a.output == 'X' && $b.output != 'Y'\`.`;
+      await safeSendMessage(platform, conversationId, parseErrMsg, {
+        workflowId: workflowRun.id,
+        nodeName: node.id,
+      });
+      getLog().error(
+        { nodeId: node.id, when: node.when },
+        'dag_node_skipped_condition_parse_error'
+      );
+      await recordNodeSkip(ctx, node, 'when_condition_parse_error', { expr: node.when });
+      return { action: 'skip', output: { state: 'skipped', output: '' } };
+    }
+    if (!conditionPasses) {
+      getLog().info({ nodeId: node.id, when: node.when }, 'dag_node_skipped_condition');
+      await recordNodeSkip(ctx, node, 'when_condition', { expr: node.when });
+      return { action: 'skip', output: { state: 'skipped', output: '' } };
+    }
+  }
+
+  return { action: 'run' };
 }
 
 /**
@@ -2464,7 +2697,7 @@ export async function executeDagWorkflow(
     );
   }
 
-  // Per-run constants threaded to every DAG node executor (built once; see DagExecutionContext).
+  // Per-run constants threaded to every DAG node runner (built once; see DagRunContext).
   const promptContext: PromptContext = {
     workflowId: workflowRun.id,
     userMessage: workflowRun.user_message,
@@ -2473,7 +2706,7 @@ export async function executeDagWorkflow(
     docsDir,
     issueContext,
   };
-  const ctx: DagExecutionContext = {
+  const ctx: DagRunContext = {
     deps,
     platform,
     conversationId,
@@ -2489,6 +2722,7 @@ export async function executeDagWorkflow(
     workflowLevelOptions,
     configuredCommandFolder,
     issueContext,
+    runAggregate: new WorkflowRunAggregate(deps, platform, conversationId, workflowRun, logDir),
   };
 
   getLog().info(
@@ -2521,335 +2755,25 @@ export async function executeDagWorkflow(
     const layerResults = await Promise.allSettled(
       layer.map(async (node): Promise<{ nodeId: string; output: NodeExecutionResult }> => {
         try {
-          // 0. Skip if this node completed successfully in a prior run (resume path).
-          // `always_run: true` opts the node out of resume caching — re-execute even
-          // when the prior run completed it.
-          if (priorCompletedNodes?.has(node.id)) {
-            if (node.always_run) {
-              getLog().info({ nodeId: node.id }, 'dag.node_always_run_resume_forced');
-              deps.store
-                .createWorkflowEvent({
-                  workflow_run_id: workflowRun.id,
-                  event_type: 'node_always_run_reset',
-                  step_name: node.id,
-                  data: { prior_output: priorCompletedNodes.get(node.id) ?? '' },
-                })
-                .catch((err: Error) => {
-                  getLog().error(
-                    { err, workflowRunId: workflowRun.id, eventType: 'node_always_run_reset' },
-                    'workflow_event_persist_failed'
-                  );
-                });
-              // falls through to re-execute the node
-            } else {
-              getLog().info({ nodeId: node.id }, 'dag.node_skipped_prior_success');
-              await logNodeSkip(logDir, workflowRun.id, node.id, 'prior_success').catch(
-                (err: Error) => {
-                  getLog().warn({ err, nodeId: node.id }, 'dag.node_skip_log_write_failed');
-                }
-              );
-              deps.store
-                .createWorkflowEvent({
-                  workflow_run_id: workflowRun.id,
-                  event_type: 'node_skipped_prior_success',
-                  step_name: node.id,
-                  data: {
-                    reason: 'prior_success',
-                    node_output: priorCompletedNodes.get(node.id) ?? '',
-                  },
-                })
-                .catch((err: Error) => {
-                  getLog().error(
-                    {
-                      err,
-                      workflowRunId: workflowRun.id,
-                      eventType: 'node_skipped_prior_success',
-                    },
-                    'workflow_event_persist_failed'
-                  );
-                });
-              const emitterPrior = getWorkflowEventEmitter();
-              emitterPrior.emit({
-                type: 'node_skipped',
-                runId: workflowRun.id,
-                nodeId: node.id,
-                nodeName: node.command ?? node.id,
-                reason: 'prior_success',
-              });
-              // Return the pre-populated output (already in nodeOutputs)
-              return {
-                nodeId: node.id,
-                output: nodeOutputs.get(node.id) ?? { state: 'skipped' as const, output: '' },
-              };
-            }
+          const gate = await evaluateNodeGates(ctx, node, priorCompletedNodes);
+          if (gate.action === 'skip') {
+            return { nodeId: node.id, output: gate.output };
           }
 
-          // 1. Evaluate trigger rule
-          const triggerDecision = checkTriggerRule(node, nodeOutputs);
-          if (triggerDecision === 'skip') {
-            getLog().info({ nodeId: node.id, reason: 'trigger_rule' }, 'dag_node_skipped');
-            await logNodeSkip(logDir, workflowRun.id, node.id, 'trigger_rule').catch(
-              (err: Error) => {
-                getLog().warn({ err, nodeId: node.id }, 'dag.node_skip_log_write_failed');
-              }
-            );
-            deps.store
-              .createWorkflowEvent({
-                workflow_run_id: workflowRun.id,
-                event_type: 'node_skipped',
-                step_name: node.id,
-                data: { reason: 'trigger_rule' },
-              })
-              .catch((err: Error) => {
-                getLog().error(
-                  { err, workflowRunId: workflowRun.id, eventType: 'node_skipped' },
-                  'workflow_event_persist_failed'
-                );
-              });
-            const emitter = getWorkflowEventEmitter();
-            emitter.emit({
-              type: 'node_skipped',
-              runId: workflowRun.id,
-              nodeId: node.id,
-              nodeName: node.command ?? node.id,
-              reason: 'trigger_rule',
-            });
-            return { nodeId: node.id, output: { state: 'skipped' as const, output: '' } };
-          }
-
-          // 2. Evaluate when: condition
-          if (node.when !== undefined) {
-            const { result: conditionPasses, parsed: conditionParsed } = evaluateCondition(
-              node.when,
-              nodeOutputs
-            );
-            if (!conditionParsed) {
-              const parseErrMsg = `\u26a0\ufe0f Node '${node.id}': unparseable \`when:\` expression "${node.when}" \u2014 node skipped (fail-closed). Check syntax: \`$nodeId.output == 'VALUE'\`, \`$nodeId.output > '5'\`, or compound \`$a.output == 'X' && $b.output != 'Y'\`.`;
-              await safeSendMessage(platform, conversationId, parseErrMsg, {
-                workflowId: workflowRun.id,
-                nodeName: node.id,
-              });
-              getLog().error(
-                { nodeId: node.id, when: node.when },
-                'dag_node_skipped_condition_parse_error'
-              );
-              await logNodeSkip(
-                logDir,
-                workflowRun.id,
-                node.id,
-                'when_condition_parse_error'
-              ).catch((err: Error) => {
-                getLog().warn({ err, nodeId: node.id }, 'dag.node_skip_log_write_failed');
-              });
-              deps.store
-                .createWorkflowEvent({
-                  workflow_run_id: workflowRun.id,
-                  event_type: 'node_skipped',
-                  step_name: node.id,
-                  data: { reason: 'when_condition_parse_error', expr: node.when },
-                })
-                .catch((err: Error) => {
-                  getLog().error(
-                    { err, workflowRunId: workflowRun.id, eventType: 'node_skipped' },
-                    'workflow_event_persist_failed'
-                  );
-                });
-              const emitter = getWorkflowEventEmitter();
-              emitter.emit({
-                type: 'node_skipped',
-                runId: workflowRun.id,
-                nodeId: node.id,
-                nodeName: node.command ?? node.id,
-                reason: 'when_condition_parse_error',
-              });
-              return { nodeId: node.id, output: { state: 'skipped' as const, output: '' } };
-            }
-            if (!conditionPasses) {
-              getLog().info({ nodeId: node.id, when: node.when }, 'dag_node_skipped_condition');
-              await logNodeSkip(logDir, workflowRun.id, node.id, 'when_condition').catch(
-                (err: Error) => {
-                  getLog().warn({ err, nodeId: node.id }, 'dag.node_skip_log_write_failed');
-                }
-              );
-              deps.store
-                .createWorkflowEvent({
-                  workflow_run_id: workflowRun.id,
-                  event_type: 'node_skipped',
-                  step_name: node.id,
-                  data: { reason: 'when_condition', expr: node.when },
-                })
-                .catch((err: Error) => {
-                  getLog().error(
-                    { err, workflowRunId: workflowRun.id, eventType: 'node_skipped' },
-                    'workflow_event_persist_failed'
-                  );
-                });
-              const emitter = getWorkflowEventEmitter();
-              emitter.emit({
-                type: 'node_skipped',
-                runId: workflowRun.id,
-                nodeId: node.id,
-                nodeName: node.command ?? node.id,
-                reason: 'when_condition',
-              });
-              return {
-                nodeId: node.id,
-                output: { state: 'skipped' as const, output: '' },
-              };
-            }
-          }
-
-          // 3. Bash node dispatch — no AI, no session
-          if (isBashNode(node)) {
-            const output = await executeBashNode(ctx, node, config.envVars);
-            return { nodeId: node.id, output };
-          }
-
-          // 3b. Loop node dispatch — manages its own AI sessions and iteration
-          if (isLoopNode(node)) {
-            // Resolve per-node model overrides for loop node.
-            const loopAssistantConfig = config.pi;
-            const loopModel: string | undefined =
-              node.model ?? workflowModel ?? loopAssistantConfig?.model;
-
-            const output = await executeLoopNode(ctx, node, loopModel);
-            return { nodeId: node.id, output };
-          }
-
-          // 3c. Approval node dispatch — pauses workflow for human review
-          if (isApprovalNode(node)) {
-            const output = await executeApprovalNode(ctx, node);
-            return { nodeId: node.id, output };
-          }
-
-          // 3d. Cancel node dispatch — terminates the workflow run
-          if (isCancelNode(node)) {
-            const reason = substituteNodeOutputRefs(node.cancel, nodeOutputs);
-            const cancelMsg = `\u274c **Workflow cancelled** (node \`${node.id}\`): ${reason}`;
-            await safeSendMessage(platform, conversationId, cancelMsg, {
-              workflowId: workflowRun.id,
-              nodeName: node.id,
-            });
-            deps.store
-              .createWorkflowEvent({
-                workflow_run_id: workflowRun.id,
-                event_type: 'workflow_cancelled',
-                step_name: node.id,
-                data: { reason },
-              })
-              .catch((err: Error) => {
-                getLog().error(
-                  { err, workflowRunId: workflowRun.id, eventType: 'workflow_cancelled' },
-                  'workflow.event_persist_failed'
-                );
-              });
-            await deps.store.cancelWorkflowRun(workflowRun.id);
-            getWorkflowEventEmitter().emit({
-              type: 'workflow_cancelled',
-              runId: workflowRun.id,
-              nodeId: node.id,
-              reason,
-            });
-            // Return completed — the between-layer status check will see 'cancelled' and break.
-            return { nodeId: node.id, output: { state: 'completed' as const, output: reason } };
-          }
-
-          // 3e. Script node dispatch — runs via bun or uv
-          if (isScriptNode(node)) {
-            const output = await executeScriptNode(ctx, node, config.envVars);
-            return { nodeId: node.id, output };
-          }
-
-          // 4. Resolve per-node model/options
-          const { options: nodeOptions } = await resolveNodeModelAndOptions(
-            node,
-            workflowModel,
-            config,
-            workflowLevelOptions
-          );
-
-          // 5. Determine session — parallel or context:fresh → always fresh
-          // Parallel layers always get fresh sessions; explicit 'fresh' context also forces it.
-          // 'shared' forces continuation. Default: fresh for parallel, inherited for sequential.
+          // Dispatch to the runner for this node kind (replaces the former type-switch).
+          // resumeSessionId/isParallelLayer are scheduler decisions the AI runner consumes;
+          // other runners ignore them.
           const isFresh = isParallelLayer || node.context === 'fresh';
-          const resumeSessionId = isFresh ? undefined : lastSequentialSessionId;
-
-          // 6. Execute with retry for transient failures
-          const retryConfig = getEffectiveNodeRetryConfig(node);
-          let output: NodeExecutionResult = {
-            state: 'failed',
-            output: '',
-            error: 'Node did not execute',
+          const rc: NodeRunContext = {
+            run: ctx,
+            resumeSessionId: isFresh ? undefined : lastSequentialSessionId,
+            isParallelLayer,
           };
-
-          for (let attempt = 0; attempt <= retryConfig.maxRetries; attempt++) {
-            output = await executeNodeInternal(ctx, node, nodeOptions, resumeSessionId);
-
-            if (output.state !== 'failed') break;
-
-            // Check if retryable.
-            // FATAL errors (auth, permissions, credit balance) are never retried even when on_error:all.
-            const isFatal = output.error
-              ? classifyError(new Error(output.error)) === 'FATAL'
-              : false;
-            const isTransient = output.error ? isTransientNodeError(output.error) : false;
-            const shouldRetry =
-              !isFatal &&
-              (retryConfig.onError === 'all' ||
-                (retryConfig.onError === 'transient' && isTransient));
-
-            if (!shouldRetry || attempt >= retryConfig.maxRetries) break;
-
-            const delayMs = retryConfig.delayMs * Math.pow(2, attempt);
-            getLog().warn(
-              {
-                nodeId: node.id,
-                attempt: attempt + 1,
-                maxRetries: retryConfig.maxRetries,
-                delayMs,
-                error: output.error,
-              },
-              'dag_node_transient_retry'
-            );
-
-            const errorKind = isTransient ? 'transient error' : 'error';
-            await safeSendMessage(
-              platform,
-              conversationId,
-              `⚠️ Node \`${node.id}\` failed with ${errorKind} (attempt ${String(attempt + 1)}/${String(retryConfig.maxRetries + 1)}). Retrying in ${String(Math.round(delayMs / 1000))}s...`,
-              { workflowId: workflowRun.id, nodeName: node.id }
-            );
-
-            await new Promise(resolve => setTimeout(resolve, delayMs));
-          }
-
-          return { nodeId: node.id, output };
+          const runResult = await runnerRegistry[nodeKind(node)].run(rc, node);
+          return { nodeId: node.id, output: runResult.output as NodeExecutionResult };
         } catch (error) {
           const err = error as Error;
-          getLog().error({ err, nodeId: node.id }, 'dag_node_pre_execution_failed');
-          deps.store
-            .createWorkflowEvent({
-              workflow_run_id: workflowRun.id,
-              event_type: 'node_failed',
-              step_name: node.id,
-              data: { error: err.message },
-            })
-            .catch((dbErr: Error) => {
-              getLog().error({ err: dbErr, nodeId: node.id }, 'workflow_event_persist_failed');
-            });
-          getWorkflowEventEmitter().emit({
-            type: 'node_failed',
-            runId: workflowRun.id,
-            nodeId: node.id,
-            nodeName: node.command ?? node.id,
-            error: err.message,
-          });
-          await safeSendMessage(
-            platform,
-            conversationId,
-            `Node '${node.id}' failed before execution: ${err.message}`,
-            { workflowId: workflowRun.id, nodeName: node.id }
-          );
+          await recordNodePreRunFailure(ctx, node, err);
           return {
             nodeId: node.id,
             output: { state: 'failed' as const, output: '', error: err.message },
@@ -2921,26 +2845,6 @@ export async function executeDagWorkflow(
     }
   }
 
-  /**
-   * Bail out of the final completion/failure write if the run was transitioned
-   * externally. Strict `!== 'running'` check is correct here because we don't
-   * want to mark a paused run as complete — the approval gate is still live.
-   *
-   * Emitter unregister is conditional: terminal states (cancelled / deleted /
-   * completed / failed) unregister to release subscription resources, but
-   * `paused` keeps the emitter registered so SSE stays connected while the
-   * approval gate awaits the user — crucial for resume observability.
-   */
-  async function skipIfStatusChanged(logEvent: string): Promise<boolean> {
-    const status = await deps.store.getWorkflowRunStatus(workflowRun.id);
-    if (status === 'running') return false;
-    getLog().info({ workflowRunId: workflowRun.id, status: status ?? 'deleted' }, logEvent);
-    if (status !== 'paused') {
-      getWorkflowEventEmitter().unregisterRun(workflowRun.id);
-    }
-    return true;
-  }
-
   // Single-pass: compute node outcome counts and derive success/failure booleans
   const nodeCounts = { completed: 0, failed: 0, skipped: 0, total: workflow.nodes.length };
   for (const o of nodeOutputs.values()) {
@@ -2957,7 +2861,7 @@ export async function executeDagWorkflow(
   );
 
   if (!anyCompleted) {
-    if (await skipIfStatusChanged('dag.skip_fail_status_changed')) return;
+    if (await ctx.runAggregate.skipIfStatusChanged('dag.skip_fail_status_changed')) return;
     const failedNodes: string[] = [];
     for (const [nodeId, o] of nodeOutputs) {
       if (o.state === 'failed') failedNodes.push(nodeId);
@@ -2970,105 +2874,27 @@ export async function executeDagWorkflow(
           'Check node conditions, trigger rules, and upstream failures.';
     // Note: nodeCounts not stored for failed runs — failWorkflowRun only stores { error }.
     // Frontend guards with isValidNodeCounts so missing node_counts is safe.
-    await deps.store.failWorkflowRun(workflowRun.id, failMsg).catch((dbErr: Error) => {
-      getLog().error({ err: dbErr, workflowRunId: workflowRun.id }, 'dag_db_fail_failed');
-    });
-    await logWorkflowError(logDir, workflowRun.id, failMsg).catch((logErr: Error) => {
-      getLog().error(
-        { err: logErr, workflowRunId: workflowRun.id },
-        'dag.workflow_error_log_write_failed'
-      );
-    });
-    const emitterForFail = getWorkflowEventEmitter();
-    emitterForFail.emit({
-      type: 'workflow_failed',
-      runId: workflowRun.id,
-      workflowName: workflow.name,
-      error: failMsg,
-    });
-    emitterForFail.unregisterRun(workflowRun.id);
-    await safeSendMessage(platform, conversationId, `\u274c ${failMsg}`, {
-      workflowId: workflowRun.id,
-    });
+    await ctx.runAggregate.fail(workflow.name, failMsg);
     // DO NOT throw — outer executor.ts catch would duplicate workflow_failed events
     return;
   }
 
   if (anyFailed) {
-    if (await skipIfStatusChanged('dag.skip_fail_status_changed')) return;
+    if (await ctx.runAggregate.skipIfStatusChanged('dag.skip_fail_status_changed')) return;
     const failedNodes = [...nodeOutputs.entries()]
       .filter(([, o]) => o.state === 'failed')
       .map(([id, o]) => `'${id}': ${o.state === 'failed' ? o.error : 'unknown'}`)
       .join('; ');
     const failMsg = `DAG workflow '${workflow.name}' completed with failures: ${failedNodes}`;
-    await deps.store.failWorkflowRun(workflowRun.id, failMsg).catch((dbErr: Error) => {
-      getLog().error({ err: dbErr, workflowRunId: workflowRun.id }, 'dag_db_fail_failed');
-    });
-    await logWorkflowError(logDir, workflowRun.id, failMsg).catch((logErr: Error) => {
-      getLog().error(
-        { err: logErr, workflowRunId: workflowRun.id },
-        'dag.workflow_error_log_write_failed'
-      );
-    });
-    const emitterForFail = getWorkflowEventEmitter();
-    emitterForFail.emit({
-      type: 'workflow_failed',
-      runId: workflowRun.id,
-      workflowName: workflow.name,
-      error: failMsg,
-    });
-    emitterForFail.unregisterRun(workflowRun.id);
-    await safeSendMessage(platform, conversationId, `\u274c ${failMsg}`, {
-      workflowId: workflowRun.id,
-    });
+    await ctx.runAggregate.fail(workflow.name, failMsg);
     // DO NOT throw — outer executor.ts catch would duplicate workflow_failed events
     return;
   }
 
   // Check if status was changed externally (e.g. cancelled) before marking complete.
-  if (await skipIfStatusChanged('dag.skip_complete_status_changed')) return;
+  if (await ctx.runAggregate.skipIfStatusChanged('dag.skip_complete_status_changed')) return;
 
-  // Update DB and emit completion
-  try {
-    await deps.store.completeWorkflowRun(workflowRun.id, {
-      node_counts: nodeCounts,
-      // totalCostUsd starts at 0; only write metadata when at least one node reported cost
-      ...(totalCostUsd > 0 ? { total_cost_usd: totalCostUsd } : {}),
-    });
-  } catch (dbErr) {
-    getLog().error(
-      { err: dbErr as Error, workflowRunId: workflowRun.id },
-      'dag_db_complete_failed'
-    );
-    await safeSendMessage(
-      platform,
-      conversationId,
-      'Warning: workflow completed but the run status could not be saved. The workflow result may appear inconsistent.',
-      { workflowId: workflowRun.id }
-    );
-  }
-  await logWorkflowComplete(logDir, workflowRun.id);
-  const duration = Date.now() - dagStartTime;
-  const emitter = getWorkflowEventEmitter();
-  emitter.emit({
-    type: 'workflow_completed',
-    runId: workflowRun.id,
-    workflowName: workflow.name,
-    duration,
-  });
-  deps.store
-    .createWorkflowEvent({
-      workflow_run_id: workflowRun.id,
-      event_type: 'workflow_completed',
-      data: { duration_ms: duration },
-    })
-    .catch((err: Error) => {
-      getLog().error(
-        { err, workflowRunId: workflowRun.id, eventType: 'workflow_completed' },
-        'workflow_event_persist_failed'
-      );
-    });
-  emitter.unregisterRun(workflowRun.id);
+  await ctx.runAggregate.complete(workflow.name, nodeCounts, totalCostUsd, dagStartTime);
 
   // Return the first terminal node's output (nodes with no dependents) for the parent
   // conversation summary. For the common single-terminal case this is unambiguous; for
