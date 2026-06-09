@@ -10,48 +10,43 @@ DX items 8–10 (`RITH_MODEL` override, `rith doctor`, `rith setup`) in `#15`; t
 `serve` doc purge + a fully-green `bun run validate` (all pre-existing red tests fixed) in `#16`;
 the workflows single-process mock isolation (item 16) in `#18`; the `@rith/providers` →
 `@rith/pi` collapse (item 17) in `#20`; the `DagExecutionContext` param-object seam
-(item 14, **step 1 of 2**) in `#21`; and a variable-substitution cohesion detour — a
-`PromptContext` value object plus the **ctx-first** parameter convention — in `#22`
-(`d9d177a`, current `main` HEAD).
-**Status as of:** 2026-06-06 — items 1–13, DX 8–10, items 16–17, **item 14 step 1** (the
-executor context seam), and the `#22` PromptContext / ctx-first cohesion pass are merged; docs
-are Pi-only / CLI-only and `bun run validate` is green end-to-end on `main` (`check:bundled`,
-`check:bundled-skill`, `type-check` ×7, `lint --max-warnings 0`, `format:check`, full test
-suite — 0 failures).
-**Remaining:** item 14 **step 2** (the dag-executor god-file split) and item 15 — the next
-session starts there (see "REMAINING → From `architectural-review.md`" below). The hard part of
-item 14 is de-risked: `#21` collapsed the five private node executors onto a single
-`DagExecutionContext` param object and `#22` grouped the prompt-substitution cluster into
-`PromptContext` and locked the **ctx-first** convention (the context object is always the first
-parameter), so the runner-class split is module-mechanical extraction rather than re-threading.
-Enabling prerequisites are also in place: item 16 (`#18`) made the workflows suite run in one
-`bun test` process so the split won't fight test serialization, and item 17 (`#20`) flattened the
-`@rith/pi` surface item 14 imports from. Item 14 still lands before item 15 (the
-`DagExecutionContext` seam is where the `WorkflowRun` metadata discriminant gets threaded).
+(item 14, step 1) in `#21`; a variable-substitution cohesion detour — a `PromptContext`
+value object plus the **ctx-first** parameter convention — in `#22`; the DDD/GRASP
+structural core (NodeRunner registry, `DagRunContext`/`NodeRunContext`, gate extraction,
+`WorkflowRunAggregate`) in `#24`; and the **item 14 step 2 per-runner file split** in `#25`
+(`c43472d`, current `main` HEAD), which completes item 14.
+**Status as of:** 2026-06-08 — items 1–13, DX 8–10, items 16–17, and **all of item 14**
+(step-1 context seam `#21`, `#22` PromptContext / ctx-first cohesion, `#24` structural core,
+`#25` per-runner file split) are merged; docs are Pi-only / CLI-only and `bun run validate`
+is green end-to-end on `main` (`check:bundled`, `check:bundled-skill`, `type-check` ×7,
+`lint --max-warnings 0`, `format:check`, full test suite — 0 failures).
+**Remaining:** only **item 15** (discriminate `WorkflowRun.metadata` by run status) — its
+aggregate-root half already shipped as `WorkflowRunAggregate` in `#24`, so just the
+tagged-union metadata is left. See "REMAINING → From `architectural-review.md`" below.
 
 ---
 
 ## Progress at a glance
 
-| #   | Item                                                   | Source       | Status                                         |
-| --- | ------------------------------------------------------ | ------------ | ---------------------------------------------- |
-| 1   | Bundled workflow model refs (14 files)                 | config §5/§7 | ✅ Done                                        |
-| 2   | Provider "requires a model" error message              | config §7    | ✅ Done                                        |
-| 3   | Config schema `provider:` → `pi:` block                | config §2    | ✅ Done                                        |
-| 4   | Drop `env` + `interactive` config knobs                | user         | ✅ Done                                        |
-| 5   | Extension `notify()` forwarding (kept, unconditional)  | user         | ✅ Done                                        |
-| 6   | Dead `w.provider` CLI display removed                  | arch/cleanup | ✅ Done                                        |
-| 7   | Pi-only docs alignment (`docs-web`, 23 files)          | config §6    | ✅ Done (#11)                                  |
-| 8   | `RITH_MODEL` env override (`applyEnvOverrides`)        | config §7    | ✅ Done                                        |
-| 9   | `rith doctor` (Pi-only port)                           | config §7    | ✅ Done                                        |
-| 10  | `rith setup` (Pi-trimmed port)                         | config §7    | ✅ Done                                        |
-| 11  | State-machine `cancelWorkflowRun` guard                | arch #3      | ✅ Done (#10)                                  |
-| 12  | Per-run throttle maps (de-globalize)                   | arch #4      | ✅ Done (#10)                                  |
-| 13  | Event-emitter guaranteed `unregisterRun` cleanup       | arch         | ✅ Done (#10)                                  |
-| 14  | `DagExecutionContext` param object + god-file split    | arch #1/#2   | 🟡 Seam+cohesion done (#21/#22); split remains |
-| 15  | Discriminate `WorkflowRun.metadata`; aggregate root    | arch         | ⬜ Deferred (large)                            |
-| 16  | Workflows single-process mock isolation                | test infra   | ✅ Done (#18)                                  |
-| 17  | Collapse `@rith/providers` → `@rith/pi` (rename/reorg) | cleanup      | ✅ Done (#20)                                  |
+| #   | Item                                                   | Source       | Status                                           |
+| --- | ------------------------------------------------------ | ------------ | ------------------------------------------------ |
+| 1   | Bundled workflow model refs (14 files)                 | config §5/§7 | ✅ Done                                          |
+| 2   | Provider "requires a model" error message              | config §7    | ✅ Done                                          |
+| 3   | Config schema `provider:` → `pi:` block                | config §2    | ✅ Done                                          |
+| 4   | Drop `env` + `interactive` config knobs                | user         | ✅ Done                                          |
+| 5   | Extension `notify()` forwarding (kept, unconditional)  | user         | ✅ Done                                          |
+| 6   | Dead `w.provider` CLI display removed                  | arch/cleanup | ✅ Done                                          |
+| 7   | Pi-only docs alignment (`docs-web`, 23 files)          | config §6    | ✅ Done (#11)                                    |
+| 8   | `RITH_MODEL` env override (`applyEnvOverrides`)        | config §7    | ✅ Done                                          |
+| 9   | `rith doctor` (Pi-only port)                           | config §7    | ✅ Done                                          |
+| 10  | `rith setup` (Pi-trimmed port)                         | config §7    | ✅ Done                                          |
+| 11  | State-machine `cancelWorkflowRun` guard                | arch #3      | ✅ Done (#10)                                    |
+| 12  | Per-run throttle maps (de-globalize)                   | arch #4      | ✅ Done (#10)                                    |
+| 13  | Event-emitter guaranteed `unregisterRun` cleanup       | arch         | ✅ Done (#10)                                    |
+| 14  | `DagExecutionContext` param object + god-file split    | arch #1/#2   | ✅ Done (#21/#22 seam, #24 core, #25 file split) |
+| 15  | Discriminate `WorkflowRun.metadata`; aggregate root    | arch         | ⬜ Deferred (large)                              |
+| 16  | Workflows single-process mock isolation                | test infra   | ✅ Done (#18)                                    |
+| 17  | Collapse `@rith/providers` → `@rith/pi` (rename/reorg) | cleanup      | ✅ Done (#20)                                    |
 
 ### Refactor (precedes items 14/15): `@rith/providers` → `@rith/pi`
 
@@ -379,11 +374,11 @@ drift below).
 
 Items 1–3 (the low-risk hardening trio) are **done** — see DONE above. Remaining:
 
-- **Deferred (large, explicitly NOT low-risk) — the only remaining work; the next session
-  starts here.** Source: `architectural-review.md` items #1/#2 (item 14) and the
-  metadata/aggregate-root notes (item 15). Land both behind the existing green
-  `bun run validate`; they are pure refactors with heavy test surface, so keep each runner's
-  observable behavior identical.
+- **Deferred (large) — item 15 is the only remaining work.** Source:
+  `architectural-review.md` items #1/#2 (item 14, now ✅ done via #21/#22/#24/#25) and the
+  metadata/aggregate-root notes (item 15). Land item 15 behind the existing green
+  `bun run validate`; like item 14 it is a pure refactor with heavy test surface, so keep
+  observable run behavior identical.
   - **Item 14, step 1 — ✅ Done (#21, refined in #22).** A single exported
     `DagExecutionContext` interface carries the per-run constants: `deps`, `platform`,
     `conversationId`, `cwd`, `workflowRun`, `artifactsDir`, `logDir`, `baseBranch`, `nodeOutputs`,
@@ -410,37 +405,42 @@ Items 1–3 (the low-risk hardening trio) are **done** — see DONE above. Remai
     the DAG executors and `substituteWorkflowVariables(ctx, prompt, …)` /
     `buildPromptWithContext(ctx, template, logLabel)` for the prompt helpers. **Step 2 runners must
     follow ctx-first.**
-  - **Item 14, step 2 — remaining (the next session starts here).** Split the
-    `packages/workflows/src/dag-executor.ts` god file (~3100 lines) into focused runner modules:
-    `BashNodeRunner` / `ScriptNodeRunner` / `LoopNodeRunner` / `ApprovalNodeRunner`. The `ctx`
-    seam from step 1 is the handle — each runner takes `DagExecutionContext` + its per-node args
-    (ctx-first), so extraction is module-mechanical, not a re-threading. `executeApprovalNode` is the
-    only executor that calls a sibling (`executeNodeInternal` on its `on_reject` branch), so factor
-    the shared internal-node path so the approval runner can still reach it. **Test surface is
-    friendly** (item 16 / `#18`): `packages/workflows`'s suite runs in a single `bun test` process
-    with `mockModuleScoped` isolation, so new per-runner test files coexist without re-introducing
-    serialized invocations. When adding runner modules, mock any shared dep through
-    `src/test-mock-module.ts`, never a bare `mock.module`. **Tooling note:** no LSP is configured for
-    this repo — use `ast-grep` for structural find/codemods (and note `f($A, $B, $$$REST)` only
-    matches 3+-arg calls; add a separate `f($A, $B)` pass for exactly-two-arg call sites).
-    - **Update (2026-06-08) — structural core landed; see `specs/dag-executor-refactor.md`.**
-      A DDD/GRASP/SOLID pass shipped behind a green `bun run validate` (workflows 906/0): a
+  - **Item 14, step 2 — ✅ Done (#24 structural core, #25 file split).** Two PRs completed the
+    god-file decomposition behind a green `bun run validate` (workflows 906/0, **zero behavior
+    change**):
+    - **`#24` — DDD/GRASP/SOLID structural core** (see `specs/dag-executor-refactor.md`). A
       `NodeRunner` registry (`dag/node-runner.ts`) replaced the `isBashNode/isLoopNode/…`
-      type-switch dispatch; the per-run context is now `DagRunContext` (renamed from
+      type-switch dispatch; the per-run context became `DagRunContext` (renamed from
       `DagExecutionContext`) plus a `NodeRunContext` envelope (`dag/context.ts`); the
       prior-success/trigger/`when` gates and the log+persist+emit boilerplate were extracted
       (`evaluateNodeGates`, `recordNodeSkip`, `recordNodePreRunFailure`); and a
-      `WorkflowRunAggregate` (`dag/run-aggregate.ts`) is the **single mutator** of run status —
-      all four status writes (cancel node, approval pause, interactive-loop pause, on-reject
-      cancel) route through it. Runner classes/gate/sink still live in `dag-executor.ts` (the
-      `runners/` split is deferred — a `gate.ts` would cycle on `checkTriggerRule` until the
-      scheduler also moves). **Deferred by decision:** the `NodeRunResult` control-signal flip
-      (cancel/pause stay in-band; scheduler still breaks via the between-layer re-read) and
-      item 15's tagged-union metadata — the flip changes concurrent-cancel timing, so it is
-      not zero-behavior-change. Item 15's **aggregate-root half is effectively in place**
-      (`WorkflowRunAggregate`); only the discriminated `WorkflowRun.metadata` remains.
-  - **Item 15** — discriminate `WorkflowRun.metadata` by run status (replace the loose bag
-    with a tagged union) and introduce an aggregate root for the run lifecycle.
+      `WorkflowRunAggregate` (`dag/run-aggregate.ts`) became the **single mutator** of run
+      status. Runner classes, gates, and the sink still lived in `dag-executor.ts`.
+    - **`#25` — per-runner file split** (`c43472d`). Each node runner moved to its own file
+      under `dag/runners/` (`ai`, `bash`, `script`, `loop`, `approval`, `cancel`), and the
+      shared helpers split into focused `dag/` modules: `log.ts` (`getLog`), `substitution.ts`
+      (`substituteNodeOutputRefs` + shell-quote helpers), `mcp.ts` (failure classification),
+      `node-shared.ts` (`shouldContinueStreamingForStatus`, `SUBPROCESS_DEFAULT_TIMEOUT`),
+      `gates.ts` (`checkTriggerRule` + the gate sequence), and `registry.ts`
+      (`nodeRunnerRegistry`). `dag-executor.ts` shrank from ~2910 to **337 lines** — only the
+      scheduler (`executeDagWorkflow` + `buildTopologicalLayers`) plus re-exports that keep the
+      public/test import surface **byte-identical** (tests still import everything from
+      `./dag-executor`). The one deliberate runner→runner import is `approval → ai-node-runner`
+      (its `on_reject` path keeps calling the **non-retrying** `executeNodeInternal` with a
+      fresh session, not `AiNodeRunner.run`); no runner imports `dag-executor.ts`, so the
+      scheduler stays an acyclic import sink. **Adding a node kind is now a four-spot change:** a
+      new `dag/runners/*.ts`, the `NodeKind` union + `nodeKind()` in `dag/node-runner.ts`, one
+      entry in `dag/registry.ts`, and the schema's `DagNode` union + type guard. Imports were
+      derived from the actually-moved source (caught e.g. `isApprovalContext` being a value, not
+      a type). Seam exercises confirmed: approval `on_reject` (5), MCP re-export (4), script
+      registry dispatch (7).
+    - **Still deferred by decision (carried over from #24):** the `NodeRunResult` control-signal
+      flip (cancel/pause stay in-band; the scheduler still breaks via the between-layer re-read)
+      and item 15's tagged-union metadata — the flip changes concurrent-cancel timing, so it is
+      not zero-behavior-change.
+  - **Item 15 — remaining.** Discriminate `WorkflowRun.metadata` by run status (replace the
+    loose bag with a tagged union). The **aggregate-root half is already in place**
+    (`WorkflowRunAggregate`, #24); only the discriminated metadata remains.
 
 ---
 
