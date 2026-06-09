@@ -98,6 +98,8 @@ export type {
   WorkflowRun,
   ArtifactType,
   ApprovalContext,
+  WorkflowRunMetadata,
+  NodeCounts,
 } from './workflow-run';
 
 // Result types (non-schema hand-written types)

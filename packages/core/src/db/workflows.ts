@@ -7,6 +7,7 @@ import type {
   WorkflowRun,
   WorkflowRunStatus,
   ApprovalContext,
+  WorkflowRunMetadata,
 } from '@rith/workflows/schemas/workflow-run';
 import { TERMINAL_WORKFLOW_STATUSES } from '@rith/workflows/schemas/workflow-run';
 import { createLogger } from '@rith/paths';
@@ -32,7 +33,7 @@ class WorkflowRunGuardError extends Error {}
 function normalizeWorkflowRun<T extends WorkflowRun>(row: T): T {
   if (typeof row.metadata === 'string') {
     try {
-      row.metadata = JSON.parse(row.metadata) as Record<string, unknown>;
+      row.metadata = JSON.parse(row.metadata) as WorkflowRunMetadata;
     } catch {
       row.metadata = {};
     }
@@ -52,7 +53,7 @@ export async function createWorkflowRun(data: {
   conversation_id: string;
   codebase_id?: string;
   user_message: string;
-  metadata?: Record<string, unknown>;
+  metadata?: WorkflowRunMetadata;
   working_path?: string;
   parent_conversation_id?: string;
 }): Promise<WorkflowRun> {
@@ -462,7 +463,7 @@ export async function updateWorkflowRun(
 
 export async function completeWorkflowRun(
   id: string,
-  metadata?: Record<string, unknown>
+  metadata?: WorkflowRunMetadata
 ): Promise<void> {
   const dialect = getDialect();
   let result: Awaited<ReturnType<IDatabase['query']>>;

@@ -5,7 +5,12 @@
  * Implementations live in @rith/core (backed by the real DB);
  * the workflow engine depends only on this narrow interface.
  */
-import type { WorkflowRun, WorkflowRunStatus, ApprovalContext } from './schemas';
+import type {
+  WorkflowRun,
+  WorkflowRunStatus,
+  ApprovalContext,
+  WorkflowRunMetadata,
+} from './schemas';
 
 export const WORKFLOW_EVENT_TYPES = [
   'workflow_started',
@@ -39,7 +44,7 @@ export interface IWorkflowStore {
     conversation_id: string;
     codebase_id?: string;
     user_message: string;
-    metadata?: Record<string, unknown>;
+    metadata?: WorkflowRunMetadata;
     working_path?: string;
     parent_conversation_id?: string;
   }): Promise<WorkflowRun>;
@@ -73,7 +78,7 @@ export interface IWorkflowStore {
   ): Promise<void>;
   updateWorkflowActivity(id: string): Promise<void>;
   getWorkflowRunStatus(id: string): Promise<WorkflowRunStatus | null>;
-  completeWorkflowRun(id: string, metadata?: Record<string, unknown>): Promise<void>;
+  completeWorkflowRun(id: string, metadata?: WorkflowRunMetadata): Promise<void>;
   failWorkflowRun(id: string, error: string): Promise<void>;
   pauseWorkflowRun(id: string, approvalContext: ApprovalContext): Promise<void>;
   cancelWorkflowRun(id: string): Promise<void>;

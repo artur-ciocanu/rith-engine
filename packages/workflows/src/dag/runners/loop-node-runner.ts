@@ -90,9 +90,7 @@ export async function executeLoopNode(
   const isLoopResume = loopGateMeta?.type === 'interactive_loop' && loopGateMeta.nodeId === node.id;
   const startIteration = isLoopResume ? (loopGateMeta.iteration ?? 0) + 1 : 1;
   let currentSessionId: string | undefined = isLoopResume ? loopGateMeta.sessionId : undefined;
-  const loopUserInput = isLoopResume
-    ? ((workflowRun.metadata?.loop_user_input as string | undefined) ?? '')
-    : '';
+  const loopUserInput = isLoopResume ? (workflowRun.metadata?.loop_user_input ?? '') : '';
 
   let lastIterationOutput = '';
   let lastIterationStructuredOutput: unknown;

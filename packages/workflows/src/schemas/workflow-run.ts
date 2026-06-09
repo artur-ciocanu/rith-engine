@@ -104,7 +104,7 @@ export const workflowRunSchema = z.object({
   codebase_id: z.string().nullable(),
   status: workflowRunStatusSchema,
   user_message: z.string(),
-  metadata: z.record(z.unknown()),
+  metadata: z.custom<WorkflowRunMetadata>(),
   started_at: z.date(),
   completed_at: z.date().nullable(),
   last_activity_at: z.date().nullable(),
@@ -129,6 +129,48 @@ export interface ApprovalContext {
   onRejectPrompt?: string;
   /** Max rejection attempts before cancellation (default 3). */
   onRejectMaxAttempts?: number;
+}
+
+/** Node outcome tally written to run metadata on completion. */
+export interface NodeCounts {
+  completed: number;
+  failed: number;
+  skipped: number;
+  total: number;
+}
+
+/**
+ * Structured metadata persisted on a WorkflowRun row.
+ *
+ * Fields ACCUMULATE across the lifecycle — the store JSON-merges metadata on
+ * every status transition instead of replacing it — so this is a flat record of
+ * optional, well-known keys, NOT a union discriminated on `status`. A single run
+ * legitimately carries keys from several phases at once: e.g. a `failed` run that
+ * was resumed from an approval gate holds `github_context` (from creation), the
+ * `approval` context (from the pause), and `rejection_reason`/`rejection_count`
+ * (from the reject). Readers narrow on presence.
+ */
+export interface WorkflowRunMetadata {
+  /** GitHub issue/PR context captured at creation; feeds $CONTEXT/$ISSUE_CONTEXT. */
+  github_context?: string;
+  /** Approval / interactive-loop gate state, written when the run pauses. */
+  approval?: ApprovalContext;
+  /** Set to 'approved' by the approve handler (clears prior rejection state). */
+  approval_response?: 'approved';
+  /** Rejection feedback recorded by the reject handler. */
+  rejection_reason?: string;
+  /** Rejection count so far, compared against `on_reject.max_attempts`. */
+  rejection_count?: number;
+  /** User feedback injected when resuming an interactive loop. */
+  loop_user_input?: string;
+  /** Node outcome tally, written on successful completion. */
+  node_counts?: NodeCounts;
+  /** Accumulated run cost in USD, written on completion when nonzero. */
+  total_cost_usd?: number;
+  /** Failure detail, written by failWorkflowRun. */
+  error?: string;
+  /** Marker written when a run is force-failed during server-restart recovery. */
+  failure_reason?: 'server_restart';
 }
 
 /**

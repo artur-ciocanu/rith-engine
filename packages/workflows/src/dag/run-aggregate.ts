@@ -9,19 +9,11 @@
  * gate.
  */
 import type { IWorkflowPlatform, WorkflowDeps } from '../deps';
-import type { ApprovalContext, WorkflowRun } from '../schemas';
+import type { ApprovalContext, NodeCounts, WorkflowRun } from '../schemas';
 import { getWorkflowEventEmitter } from '../event-emitter';
 import { logWorkflowComplete, logWorkflowError } from '../logger';
 import { safeSendMessage } from '../executor-shared';
 import { getLog } from './log';
-
-/** Node outcome tally written to run metadata on completion. */
-export interface NodeCounts {
-  completed: number;
-  failed: number;
-  skipped: number;
-  total: number;
-}
 
 export class WorkflowRunAggregate {
   constructor(

@@ -1,6 +1,6 @@
 import { mock, describe, test, expect, beforeEach } from 'bun:test';
 import { createQueryResult, mockPostgresDialect } from '../test/mocks/database';
-import type { WorkflowRun } from '@rith/workflows/schemas/workflow-run';
+import type { WorkflowRun, WorkflowRunMetadata } from '@rith/workflows/schemas/workflow-run';
 
 const mockQuery = mock(() => Promise.resolve(createQueryResult([])));
 
@@ -227,10 +227,10 @@ describe('workflows database', () => {
     test('updates metadata', async () => {
       mockQuery.mockResolvedValueOnce(createQueryResult([], 1));
 
-      await updateWorkflowRun('workflow-run-123', { metadata: { lastStep: 'plan' } });
+      await updateWorkflowRun('workflow-run-123', { metadata: { rejection_count: 1 } });
 
       expect(mockQuery).toHaveBeenCalledWith(expect.stringContaining('metadata = metadata ||'), [
-        JSON.stringify({ lastStep: 'plan' }),
+        JSON.stringify({ rejection_count: 1 }),
         'workflow-run-123',
       ]);
     });
@@ -240,13 +240,13 @@ describe('workflows database', () => {
 
       await updateWorkflowRun('workflow-run-123', {
         status: 'running',
-        metadata: { step: 'plan' },
+        metadata: { rejection_count: 2 },
       });
 
       const [query, params] = mockQuery.mock.calls[0] as [string, unknown[]];
       expect(query).toContain('status = $1');
       expect(query).toContain('metadata = metadata ||');
-      expect(params).toEqual(['running', '{"step":"plan"}', 'workflow-run-123']);
+      expect(params).toEqual(['running', '{"rejection_count":2}', 'workflow-run-123']);
     });
 
     test('does nothing when no updates provided', async () => {
@@ -426,7 +426,9 @@ describe('workflows database', () => {
   describe('metadata serialization', () => {
     test('throws when critical github_context metadata fails to serialize', async () => {
       // Create metadata with a circular reference
-      const circularObj: Record<string, unknown> = { github_context: 'Issue context' };
+      const circularObj: WorkflowRunMetadata & { self?: unknown } = {
+        github_context: 'Issue context',
+      };
       circularObj.self = circularObj;
 
       await expect(
@@ -441,7 +443,7 @@ describe('workflows database', () => {
 
     test('falls back to empty object for non-critical metadata serialization failure', async () => {
       // Create metadata WITHOUT github_context but with circular reference
-      const circularObj: Record<string, unknown> = { someKey: 'value' };
+      const circularObj: WorkflowRunMetadata & { self?: unknown } = {};
       circularObj.self = circularObj;
 
       mockQuery.mockResolvedValueOnce(createQueryResult([{ ...mockWorkflowRun, metadata: {} }]));
