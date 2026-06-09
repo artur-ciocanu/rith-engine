@@ -235,7 +235,7 @@ export async function rejectWorkflow(
     ? rawApproval
     : undefined;
   const rejectReason = reason ?? 'Rejected';
-  const currentCount = (run.metadata.rejection_count as number | undefined) ?? 0;
+  const currentCount = run.metadata.rejection_count ?? 0;
   const maxAttempts = approval?.onRejectMaxAttempts ?? 3;
 
   try {

@@ -57,7 +57,7 @@ export async function executeApprovalNode(
   // On rejection resume with on_reject configured: run the on_reject prompt via AI
   if (rejectionReason !== '' && node.approval.on_reject) {
     const maxAttempts = node.approval.on_reject.max_attempts ?? 3;
-    const rejectionCount = (workflowRun.metadata?.rejection_count as number | undefined) ?? 0;
+    const rejectionCount = workflowRun.metadata?.rejection_count ?? 0;
 
     // Check if max attempts exhausted
     if (rejectionCount >= maxAttempts) {

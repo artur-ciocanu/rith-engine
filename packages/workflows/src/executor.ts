@@ -182,9 +182,7 @@ export async function hydrateResumableRun(
   candidate: WorkflowRun
 ): Promise<{ preCreatedRun: WorkflowRun; priorCompletedNodes: Map<string, string> } | null> {
   const priorCompletedNodes = await deps.store.getCompletedDagNodeOutputs(candidate.id);
-  const hasInteractiveLoopState =
-    candidate.metadata?.approval !== undefined &&
-    (candidate.metadata.approval as Record<string, unknown>).type === 'interactive_loop';
+  const hasInteractiveLoopState = candidate.metadata.approval?.type === 'interactive_loop';
   if (priorCompletedNodes.size === 0 && !hasInteractiveLoopState) {
     getLog().info(
       { resumableRunId: candidate.id },

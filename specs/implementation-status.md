@@ -20,9 +20,10 @@ structural core (NodeRunner registry, `DagRunContext`/`NodeRunContext`, gate ext
 `#25` per-runner file split) are merged; docs are Pi-only / CLI-only and `bun run validate`
 is green end-to-end on `main` (`check:bundled`, `check:bundled-skill`, `type-check` ×7,
 `lint --max-warnings 0`, `format:check`, full test suite — 0 failures).
-**Remaining:** only **item 15** (discriminate `WorkflowRun.metadata` by run status) — its
-aggregate-root half already shipped as `WorkflowRunAggregate` in `#24`, so just the
-tagged-union metadata is left. See "REMAINING → From `architectural-review.md`" below.
+**Remaining:** **none of the tracked items.** Item 15 (typed `WorkflowRun.metadata`)
+is now done in the working tree — see "REMAINING → From `architectural-review.md`"
+below. Three non-blocking OPEN side-issues remain unscheduled (Postgres schema
+bootstrap gap, cross-package `mock.module` leakage, doc `migrations/` ref).
 
 ---
 
@@ -44,7 +45,7 @@ tagged-union metadata is left. See "REMAINING → From `architectural-review.md`
 | 12  | Per-run throttle maps (de-globalize)                   | arch #4      | ✅ Done (#10)                                    |
 | 13  | Event-emitter guaranteed `unregisterRun` cleanup       | arch         | ✅ Done (#10)                                    |
 | 14  | `DagExecutionContext` param object + god-file split    | arch #1/#2   | ✅ Done (#21/#22 seam, #24 core, #25 file split) |
-| 15  | Discriminate `WorkflowRun.metadata`; aggregate root    | arch         | ⬜ Deferred (large)                              |
+| 15  | Discriminate `WorkflowRun.metadata`; aggregate root    | arch         | ✅ Done (typed `WorkflowRunMetadata`)            |
 | 16  | Workflows single-process mock isolation                | test infra   | ✅ Done (#18)                                    |
 | 17  | Collapse `@rith/providers` → `@rith/pi` (rename/reorg) | cleanup      | ✅ Done (#20)                                    |
 
@@ -435,12 +436,24 @@ Items 1–3 (the low-risk hardening trio) are **done** — see DONE above. Remai
       a type). Seam exercises confirmed: approval `on_reject` (5), MCP re-export (4), script
       registry dispatch (7).
     - **Still deferred by decision (carried over from #24):** the `NodeRunResult` control-signal
-      flip (cancel/pause stay in-band; the scheduler still breaks via the between-layer re-read)
-      and item 15's tagged-union metadata — the flip changes concurrent-cancel timing, so it is
-      not zero-behavior-change.
-  - **Item 15 — remaining.** Discriminate `WorkflowRun.metadata` by run status (replace the
-    loose bag with a tagged union). The **aggregate-root half is already in place**
-    (`WorkflowRunAggregate`, #24); only the discriminated metadata remains.
+      flip — cancel/pause stay in-band; the scheduler still breaks via the between-layer re-read.
+      The flip changes concurrent-cancel timing, so it is not zero-behavior-change.
+  - **Item 15 — ✅ Done (typed `WorkflowRunMetadata`, working tree).** Replaced
+    `WorkflowRun.metadata: Record<string, unknown>` with a `WorkflowRunMetadata` interface of
+    typed optional fields (`packages/workflows/src/schemas/workflow-run.ts`), exported through
+    the schema barrel and consumed by the `IWorkflowStore` trait
+    (`createWorkflowRun`/`completeWorkflowRun` params), core `workflowDb`
+    (`normalizeWorkflowRun` cast + the two write-path params), and `WorkflowRunAggregate`
+    (`NodeCounts` moved into the schema). **Deviation from the review's "tagged union keyed on
+    `status`":** rejected as structurally false. The store JSON-`merge`s metadata on every status
+    transition, so fields accumulate across phases — a `failed` run resumed from an approval gate
+    holds `github_context` (create) + `approval` (pause) + `rejection_reason`/`rejection_count`
+    (reject) at once. A status-discriminated union would forbid reading `approval` off a `failed`
+    run, which the reject handler and approval/loop runners actually do. The flat typed interface
+    delivers item 15's real intent — kill the opaque bag and the scattered `as number`/`as string`
+    narrowing casts (dropped in `workflow-operations.ts`, `executor.ts` resume detection, and the
+    approval/loop runners) — without the lie. Pure refactor, `bun run validate` green end-to-end
+    (workflows 906/0, core/cli/pi/isolation suites all 0-fail).
 
 ---
 
