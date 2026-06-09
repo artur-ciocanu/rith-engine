@@ -39,6 +39,9 @@ export type NodeRunResult =
   | { control: 'cancel'; reason: string; output: NodeOutput }
   | { control: 'pause'; approval: ApprovalContext; output: NodeOutput };
 
+/** A node's `NodeOutput` plus the run cost the scheduler aggregates (AI/loop nodes only). */
+export type NodeExecutionResult = NodeOutput & { costUsd?: number };
+
 /** Strategy for executing one DAG node. Stateless; per-run state arrives via `rc`. */
 export interface NodeRunner {
   run(rc: NodeRunContext, node: DagNode): Promise<NodeRunResult>;

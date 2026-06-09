@@ -8,17 +8,12 @@
  * the emitter — except `paused`, which stays registered so SSE survives an approval
  * gate.
  */
-import { createLogger, type Logger } from '@rith/paths';
 import type { IWorkflowPlatform, WorkflowDeps } from '../deps';
 import type { ApprovalContext, WorkflowRun } from '../schemas';
 import { getWorkflowEventEmitter } from '../event-emitter';
 import { logWorkflowComplete, logWorkflowError } from '../logger';
 import { safeSendMessage } from '../executor-shared';
-
-// Test seam: per-call so test mocks of createLogger always intercept (see item 16).
-function getLog(): Logger {
-  return createLogger('workflow.dag-executor');
-}
+import { getLog } from './log';
 
 /** Node outcome tally written to run metadata on completion. */
 export interface NodeCounts {
