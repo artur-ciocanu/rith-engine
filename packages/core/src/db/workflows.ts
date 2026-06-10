@@ -387,7 +387,9 @@ export async function resumeWorkflowRun(id: string): Promise<WorkflowRun> {
  */
 export async function updateWorkflowRun(
   id: string,
-  updates: Partial<Pick<WorkflowRun, 'status' | 'metadata'>>
+  updates: Partial<Pick<WorkflowRun, 'status' | 'metadata'>> & {
+    fromStatus?: WorkflowRunStatus | WorkflowRunStatus[];
+  }
 ): Promise<void> {
   const dialect = getDialect();
   const setClauses: string[] = [];
@@ -428,9 +430,22 @@ export async function updateWorkflowRun(
   values.push(id);
   const idParam = `$${values.length}`;
 
+  // Optional status guard — reject transitions from unexpected states
+  let statusGuard = '';
+  if (updates.fromStatus !== undefined) {
+    const allowed = Array.isArray(updates.fromStatus) ? updates.fromStatus : [updates.fromStatus];
+    const placeholders = allowed
+      .map(s => {
+        values.push(s);
+        return `$${values.length}`;
+      })
+      .join(', ');
+    statusGuard = ` AND status IN (${placeholders})`;
+  }
+
   try {
     const result = await pool.query(
-      `UPDATE workflow_runs SET ${setClauses.join(', ')} WHERE id = ${idParam}`,
+      `UPDATE workflow_runs SET ${setClauses.join(', ')} WHERE id = ${idParam}${statusGuard}`,
       values
     );
     if (result.rowCount === 0) {
@@ -631,15 +646,15 @@ export async function deleteOldWorkflowRuns(olderThanDays: number): Promise<{ co
     await pool.query('BEGIN', []);
     // Delete events first (FK reference)
     await pool.query(
-      `DELETE FROM remote_agent_workflow_events WHERE workflow_run_id IN (
-        SELECT id FROM remote_agent_workflow_runs
+      `DELETE FROM workflow_events WHERE workflow_run_id IN (
+        SELECT id FROM workflow_runs
         WHERE status IN ('completed', 'failed', 'cancelled')
           AND started_at < ${cutoff}
       )`,
       []
     );
     const result = await pool.query(
-      `DELETE FROM remote_agent_workflow_runs
+      `DELETE FROM workflow_runs
        WHERE status IN ('completed', 'failed', 'cancelled')
          AND started_at < ${cutoff}`,
       []
@@ -663,7 +678,7 @@ export async function deleteWorkflowRun(id: string): Promise<void> {
     await pool.query('BEGIN', []);
     // Guard: verify run exists and is terminal before deleting
     const check = await pool.query<{ status: string }>(
-      'SELECT status FROM remote_agent_workflow_runs WHERE id = $1',
+      'SELECT status FROM workflow_runs WHERE id = $1',
       [id]
     );
     if (check.rows.length === 0) {
@@ -674,8 +689,8 @@ export async function deleteWorkflowRun(id: string): Promise<void> {
         `Cannot delete workflow run in '${check.rows[0].status}' status — cancel it first`
       );
     }
-    await pool.query('DELETE FROM remote_agent_workflow_events WHERE workflow_run_id = $1', [id]);
-    await pool.query('DELETE FROM remote_agent_workflow_runs WHERE id = $1', [id]);
+    await pool.query('DELETE FROM workflow_events WHERE workflow_run_id = $1', [id]);
+    await pool.query('DELETE FROM workflow_runs WHERE id = $1', [id]);
     await pool.query('COMMIT', []);
   } catch (error) {
     await rollback();

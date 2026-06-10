@@ -323,7 +323,7 @@ export async function executeWorkflow(
         // pending/running and blocks the path until the 5-min stale window
         // (or never, if we'd already promoted it to running via resume).
         await deps.store
-          .updateWorkflowRun(workflowRun.id, { status: 'cancelled' })
+          .updateWorkflowRun(workflowRun.id, { status: 'cancelled', fromStatus: 'pending' })
           .catch((cleanupErr: Error) => {
             getLog().warn(
               { err: cleanupErr, workflowRunId: workflowRun?.id, cwd },
@@ -379,7 +379,10 @@ export async function executeWorkflow(
       // running (e.g., resumed), nothing would clear it without manual
       // intervention.
       await deps.store
-        .updateWorkflowRun(workflowRun.id, { status: 'cancelled' })
+        .updateWorkflowRun(workflowRun.id, {
+          status: 'cancelled',
+          fromStatus: ['pending', 'running'],
+        })
         .catch((cleanupErr: Error) => {
           getLog().warn(
             { err: cleanupErr, workflowRunId: workflowRun?.id },
@@ -477,7 +480,10 @@ export async function executeWorkflow(
     // Set status to running now that execution has started (skip for resumed runs — already running)
     if (!dagPriorCompletedNodes) {
       try {
-        await deps.store.updateWorkflowRun(workflowRun.id, { status: 'running' });
+        await deps.store.updateWorkflowRun(workflowRun.id, {
+          status: 'running',
+          fromStatus: 'pending',
+        });
       } catch (dbError) {
         getLog().error(
           { err: dbError as Error, workflowRunId: workflowRun.id },

@@ -13,12 +13,22 @@ import {
 import type { WorkflowRun, ApprovalContext } from '@rith/workflows/schemas/workflow-run';
 import * as workflowDb from '../db/workflows';
 import * as workflowEventDb from '../db/workflow-events';
+import { pool } from '../db/connection';
 
 // Lazy logger — NEVER at module scope
 let cachedLog: ReturnType<typeof createLogger> | undefined;
 function getLog(): ReturnType<typeof createLogger> {
   if (!cachedLog) cachedLog = createLogger('operations.workflow');
   return cachedLog;
+}
+
+function rollback(): Promise<void> {
+  return pool.query('ROLLBACK', []).then(
+    () => undefined,
+    rollbackErr => {
+      getLog().warn({ err: rollbackErr as Error }, 'operations.rollback_failed');
+    }
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -149,6 +159,7 @@ export async function approveWorkflow(
   const approvalComment = comment ?? 'Approved';
 
   try {
+    await pool.query('BEGIN', []);
     // Interactive loop gate — store user input in metadata for the next iteration.
     // Note: node_completed is NOT written here. The executor writes it when the AI
     // emits the completion signal (meaning the user actually approved). Writing it
@@ -166,7 +177,9 @@ export async function approveWorkflow(
       await workflowDb.updateWorkflowRun(runId, {
         status: 'failed',
         metadata: { loop_user_input: approvalComment },
+        fromStatus: 'paused',
       });
+      await pool.query('COMMIT', []);
       return {
         workflowName: run.workflow_name,
         workingPath: run.working_path,
@@ -195,8 +208,11 @@ export async function approveWorkflow(
     await workflowDb.updateWorkflowRun(runId, {
       status: 'failed',
       metadata: { approval_response: 'approved', rejection_reason: '', rejection_count: 0 },
+      fromStatus: 'paused',
     });
+    await pool.query('COMMIT', []);
   } catch (error) {
+    await rollback();
     const err = error as Error;
     getLog().error(
       { err, errorType: err.constructor.name, runId },
@@ -239,6 +255,7 @@ export async function rejectWorkflow(
   const maxAttempts = approval?.onRejectMaxAttempts ?? 3;
 
   try {
+    await pool.query('BEGIN', []);
     await workflowEventDb.createWorkflowEvent({
       workflow_run_id: runId,
       event_type: 'approval_received',
@@ -249,6 +266,7 @@ export async function rejectWorkflow(
     if (approval?.onRejectPrompt !== undefined) {
       if (currentCount + 1 >= maxAttempts) {
         await workflowDb.cancelWorkflowRun(runId);
+        await pool.query('COMMIT', []);
         return {
           workflowName: run.workflow_name,
           workingPath: run.working_path,
@@ -262,7 +280,9 @@ export async function rejectWorkflow(
       await workflowDb.updateWorkflowRun(runId, {
         status: 'failed',
         metadata: { rejection_reason: rejectReason, rejection_count: currentCount + 1 },
+        fromStatus: 'paused',
       });
+      await pool.query('COMMIT', []);
       return {
         workflowName: run.workflow_name,
         workingPath: run.working_path,
@@ -275,7 +295,9 @@ export async function rejectWorkflow(
     }
 
     await workflowDb.cancelWorkflowRun(runId);
+    await pool.query('COMMIT', []);
   } catch (error) {
+    await rollback();
     const err = error as Error;
     getLog().error(
       { err, errorType: err.constructor.name, runId },
