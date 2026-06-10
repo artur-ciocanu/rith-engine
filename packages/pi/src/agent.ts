@@ -7,7 +7,7 @@ import { createLogger } from '@rith/paths';
 import type { PiAgent, MessageChunk, SendQueryOptions } from './types';
 
 import { parsePiConfig } from './config';
-import { parsePiModelRef } from './model-ref';
+import { parsePiModelRef, type PiModelRef } from './model-ref';
 
 // IMPORTANT: Do NOT add static `import { ... } from '@mariozechner/*'` here,
 // and do NOT statically import sibling modules that themselves import runtime
@@ -182,12 +182,11 @@ export class PiCodingAgent implements PiAgent {
       import('./session-resolver'),
       import('./ui-context-stub'),
     ]);
-    const { createAgentSession } = piCodingAgent;
 
     const assistantConfig = requestOptions?.assistantConfig ?? {};
     const piConfig = parsePiConfig(assistantConfig);
 
-    // 1. Resolve model ref: request (workflow node / chat) → config default
+    // Resolve model ref: request (workflow node / chat) → config default
     const modelRef = requestOptions?.model ?? piConfig.model;
     if (!modelRef) {
       throw new Error(
@@ -202,10 +201,106 @@ export class PiCodingAgent implements PiAgent {
       );
     }
 
-    // 2. Build AuthStorage + ModelRegistry. Both read on every sendQuery —
-    //    user edits to auth.json or models.json take effect without restart.
-    //    ModelRegistry.create() is mutable: extension providers can call registerProvider()
-    //    on it during bindExtensions() to add their models (phase 2 resolution).
+    // Phase 1: Auth — model ref, auth storage, credentials
+    const auth = this.resolveAuth(piCodingAgent, parsed, requestOptions);
+
+    // Phase 2: Options — thinking, tools, system prompt, skills
+    const opts = this.translateOptions(
+      cwd,
+      requestOptions,
+      resolvePiThinkingLevel,
+      resolvePiTools,
+      resolvePiSkills
+    );
+    for (const warning of opts.warnings) {
+      yield { type: 'system', content: warning };
+    }
+
+    // Phase 3: Session — session manager, settings, resource loader, agent session, extensions
+    const sess = await this.createSession(
+      piCodingAgent,
+      cwd,
+      resumeSessionId,
+      piConfig,
+      parsed,
+      auth,
+      opts,
+      resolvePiSession,
+      createNoopResourceLoader,
+      createRithUIBridge,
+      createRithUIContext
+    );
+    for (const warning of sess.warnings) {
+      yield { type: 'system', content: warning };
+    }
+
+    // 5. Structured output (best-effort). Pi has no SDK-level JSON schema
+    //    mode the way Claude and Codex do, so we implement it via prompt
+    //    engineering: append the schema + "JSON only, no fences" instruction,
+    //    and have the bridge parse the accumulated assistant text on
+    //    agent_end. Parse failures degrade gracefully — the executor's
+    //    existing dag.structured_output_missing warning path handles them.
+    const outputFormat = requestOptions?.outputFormat;
+    const effectivePrompt = outputFormat
+      ? augmentPromptForJsonSchema(prompt, outputFormat.schema)
+      : prompt;
+
+    // 6. Bridge callback-based events to the async generator contract.
+    //    bridgeSession owns dispose() and abort wiring.
+    //
+    //    The module-level semaphore is initialized lazily from the first
+    //    config that sets maxConcurrent and reused for the lifetime of the
+    //    process — this is a known v1 tradeoff. Pi concurrency is global
+    //    (one upstream backend) so a process-wide cap is the right scope.
+    const maxConcurrent = piConfig.maxConcurrent;
+    if (maxConcurrent !== undefined && piSemaphore === undefined) {
+      piSemaphore = new Semaphore(maxConcurrent);
+      getLog().info({ maxConcurrent }, 'pi.semaphore_initialized');
+    }
+
+    // Snapshot before the first await — if a concurrent call initializes the
+    // module-level piSemaphore after this point, sem stays undefined and the
+    // finally block correctly skips release (we never acquired).
+    const sem = piSemaphore;
+    if (sem !== undefined) {
+      getLog().debug('pi.semaphore_acquiring');
+      await sem.acquire();
+      getLog().debug('pi.semaphore_acquired');
+    }
+    try {
+      yield* bridgeSession(
+        sess.session,
+        effectivePrompt,
+        requestOptions?.abortSignal,
+        outputFormat?.schema,
+        sess.uiBridge
+      );
+      getLog().info({ piProvider: parsed.provider }, 'pi.prompt_completed');
+    } catch (err) {
+      getLog().error({ err, piProvider: parsed.provider }, 'pi.prompt_failed');
+      throw err;
+    } finally {
+      sem?.release();
+    }
+  }
+
+  // ─── Phase 1: Auth resolution ───────────────────────────────────────────────
+
+  /**
+   * Parse model ref, build auth/model registries, and resolve credentials.
+   * Returns the registries and initial model lookup (may be undefined for
+   * extension providers — deferred to post-bindExtensions).
+   */
+  // eslint-disable-next-line @typescript-eslint/explicit-function-return-type
+  private resolveAuth(
+    piCodingAgent: typeof import('@mariozechner/pi-coding-agent'),
+    parsed: PiModelRef,
+    requestOptions: SendQueryOptions | undefined
+  ) {
+    // Build AuthStorage + ModelRegistry. Both read on every sendQuery —
+    // user edits to auth.json or models.json take effect without restart.
+    // ModelRegistry.create() is mutable: extension providers can call registerProvider()
+    // on it during bindExtensions() to add their models (phase 2 resolution).
     let authStorage: ReturnType<typeof piCodingAgent.AuthStorage.create>;
     let modelRegistry: ReturnType<typeof piCodingAgent.ModelRegistry.create>;
     try {
@@ -220,9 +315,9 @@ export class PiCodingAgent implements PiAgent {
       );
     }
 
-    // 3. [LOOKUP-1] Check the static catalog first (phase 1 of 2).
-    //    Extension providers (e.g. kiro) aren't in the catalog — defer to LOOKUP-2 after bindExtensions().
-    let model = modelRegistry.find(parsed.provider, parsed.modelId);
+    // [LOOKUP-1] Check the static catalog first (phase 1 of 2).
+    // Extension providers (e.g. kiro) aren't in the catalog — defer to LOOKUP-2 after bindExtensions().
+    const model = modelRegistry.find(parsed.provider, parsed.modelId);
     if (!model) {
       // Surface any models.json load error as a warning — helps debug
       // custom-provider configs (e.g. missing baseUrl in models.json).
@@ -241,8 +336,8 @@ export class PiCodingAgent implements PiAgent {
       );
     }
 
-    // 4. Resolve credentials. Per-request env vars override auth.json entries via
-    //    setRuntimeApiKey — codebase-scoped env vars win over the user's global Pi login.
+    // Resolve credentials. Per-request env vars override auth.json entries via
+    // setRuntimeApiKey — codebase-scoped env vars win over the user's global Pi login.
     const envVarName = PI_PROVIDER_ENV_VARS[parsed.provider];
     const envOverride = envVarName
       ? (requestOptions?.env?.[envVarName] ?? process.env[envVarName])
@@ -251,12 +346,116 @@ export class PiCodingAgent implements PiAgent {
       authStorage.setRuntimeApiKey(parsed.provider, envOverride);
     }
 
+    return { authStorage, modelRegistry, model };
+  }
+
+  // ─── Phase 2: Option translation ────────────────────────────────────────────
+
+  /**
+   * Translate Rith Engine nodeConfig to Pi SDK options: thinking level, tools,
+   * system prompt, and skills. Returns the translated values plus any warnings
+   * to surface to the user.
+   */
+  // eslint-disable-next-line @typescript-eslint/explicit-function-return-type
+  private translateOptions(
+    cwd: string,
+    requestOptions: SendQueryOptions | undefined,
+    resolvePiThinkingLevel: (typeof import('./options-translator'))['resolvePiThinkingLevel'],
+    resolvePiTools: (typeof import('./options-translator'))['resolvePiTools'],
+    resolvePiSkills: (typeof import('./options-translator'))['resolvePiSkills']
+  ) {
+    const warnings: string[] = [];
+    const nodeConfig = requestOptions?.nodeConfig;
+
+    // thinkingLevel: covers `thinking`/`effort` nodeConfig fields.
+    const { level: thinkingLevel, warning: thinkingWarning } = resolvePiThinkingLevel(nodeConfig);
+    if (thinkingWarning) {
+      warnings.push(`⚠️ ${thinkingWarning}`);
+    }
+
+    // tools: covers allowed_tools / denied_tools. `undefined` leaves Pi
+    // defaults; an explicit empty array means "no tools" (valid idiom
+    // matching e2e-claude-smoke's `allowed_tools: []`).
+    // requestOptions.env (codebase-scoped env vars from .rith/config.yaml)
+    // is injected into bash subprocesses via a BashSpawnHook, mirroring
+    // Claude's options.env and Codex's constructor env.
+    const { tools: filteredTools, unknownTools } = resolvePiTools(
+      cwd,
+      nodeConfig,
+      requestOptions?.env
+    );
+    if (unknownTools.length > 0) {
+      warnings.push(
+        `⚠️ Pi ignored unknown tool names: ${unknownTools.join(', ')}. Pi's built-in tools: read, bash, edit, write, grep, find, ls.`
+      );
+    }
+
+    // systemPrompt: request-level (AgentRequestOptions) wins over
+    // node-level; either overrides Pi's default.
+    // Pi only supports string system prompts; ignore structured preset objects.
+    const rawSystemPrompt = requestOptions?.systemPrompt ?? nodeConfig?.systemPrompt;
+    const systemPrompt = typeof rawSystemPrompt === 'string' ? rawSystemPrompt : undefined;
+    if (rawSystemPrompt !== undefined && systemPrompt === undefined) {
+      getLog().warn(
+        { systemPromptType: typeof rawSystemPrompt },
+        'pi.system_prompt_dropped_non_string'
+      );
+    }
+
+    // skills: Rith Engine uses name references (e.g. `skills: [agent-browser]`).
+    // Resolve each name against .agents/skills and .claude/skills (project
+    // + user-global). Resolved paths go through Pi's additionalSkillPaths;
+    // Pi's buildSystemPrompt appends their agentskills.io XML block to
+    // the system prompt automatically, so the model sees them.
+    const { paths: skillPaths, missing: missingSkills } = resolvePiSkills(cwd, nodeConfig?.skills);
+    if (missingSkills.length > 0) {
+      warnings.push(
+        `⚠️ Pi could not resolve skill names: ${missingSkills.join(', ')}. Searched .agents/skills and .claude/skills (project + user-global). Each must be a directory containing SKILL.md.`
+      );
+    }
+
+    return {
+      thinkingLevel,
+      filteredTools,
+      systemPrompt,
+      skillPaths,
+      missingSkillCount: missingSkills.length,
+      warnings,
+    };
+  }
+
+  // ─── Phase 3: Session creation ──────────────────────────────────────────────
+
+  /**
+   * Create the Pi agent session: session manager, settings, resource loader,
+   * agent session, extension binding, and model fallback resolution.
+   */
+  // eslint-disable-next-line @typescript-eslint/explicit-function-return-type
+  private async createSession(
+    piCodingAgent: typeof import('@mariozechner/pi-coding-agent'),
+    cwd: string,
+    resumeSessionId: string | undefined,
+    piConfig: ReturnType<typeof parsePiConfig>,
+    parsed: PiModelRef,
+    auth: ReturnType<PiCodingAgent['resolveAuth']>,
+    opts: ReturnType<PiCodingAgent['translateOptions']>,
+    resolvePiSession: (typeof import('./session-resolver'))['resolvePiSession'],
+    createNoopResourceLoader: (typeof import('./resource-loader'))['createNoopResourceLoader'],
+    createRithUIBridge: (typeof import('./ui-context-stub'))['createRithUIBridge'],
+    createRithUIContext: (typeof import('./ui-context-stub'))['createRithUIContext']
+  ) {
+    const warnings: string[] = [];
+    let { model } = auth;
+    const { authStorage, modelRegistry } = auth;
+    const { thinkingLevel, filteredTools, systemPrompt, skillPaths } = opts;
+
     // Auth validation deferred for extension providers — they manage credentials
     // outside Pi's AuthStorage (e.g. kiro uses AWS SSO/OIDC via ~/.aws/sso/cache/).
     // Only validate early for static-catalog models where we can give actionable hints.
     if (model) {
       const resolvedKey = await authStorage.getApiKey(parsed.provider);
       if (!resolvedKey) {
+        const envVarName = PI_PROVIDER_ENV_VARS[parsed.provider];
         if (envVarName) {
           const envHint = `Set ${envVarName} in the environment or codebase env vars (.rith/config.yaml env: section).`;
           const loginHint = `Or run \`pi\` and type \`/login\` locally to authenticate '${parsed.provider}' via OAuth; credentials land in ~/.pi/agent/auth.json and are picked up automatically.`;
@@ -281,74 +480,16 @@ export class PiCodingAgent implements PiAgent {
       }
     }
 
-    // 4. Translate Rith Engine nodeConfig to Pi SDK options. All three translations
-    //    below correspond to capability flags declared `true` in
-    //    PI_CAPABILITIES; nodeConfig fields that don't map cleanly still
-    //    trigger a dag-executor warning upstream.
-    const nodeConfig = requestOptions?.nodeConfig;
-
-    //    4a. thinkingLevel: covers `thinking`/`effort` nodeConfig fields.
-    const { level: thinkingLevel, warning: thinkingWarning } = resolvePiThinkingLevel(nodeConfig);
-    if (thinkingWarning) {
-      yield { type: 'system', content: `⚠️ ${thinkingWarning}` };
-    }
-
-    //    4b. tools: covers allowed_tools / denied_tools. `undefined` leaves Pi
-    //        defaults; an explicit empty array means "no tools" (valid idiom
-    //        matching e2e-claude-smoke's `allowed_tools: []`).
-    //        requestOptions.env (codebase-scoped env vars from .rith/config.yaml)
-    //        is injected into bash subprocesses via a BashSpawnHook, mirroring
-    //        Claude's options.env and Codex's constructor env.
-    const { tools: filteredTools, unknownTools } = resolvePiTools(
-      cwd,
-      nodeConfig,
-      requestOptions?.env
-    );
-    if (unknownTools.length > 0) {
-      yield {
-        type: 'system',
-        content: `⚠️ Pi ignored unknown tool names: ${unknownTools.join(', ')}. Pi's built-in tools: read, bash, edit, write, grep, find, ls.`,
-      };
-    }
-
-    //    4c. systemPrompt: request-level (AgentRequestOptions) wins over
-    //        node-level; either overrides Pi's default.
-    //        Pi only supports string system prompts; ignore structured preset objects.
-    const rawSystemPrompt = requestOptions?.systemPrompt ?? nodeConfig?.systemPrompt;
-    const systemPrompt = typeof rawSystemPrompt === 'string' ? rawSystemPrompt : undefined;
-    if (rawSystemPrompt !== undefined && systemPrompt === undefined) {
-      getLog().warn(
-        { systemPromptType: typeof rawSystemPrompt },
-        'pi.system_prompt_dropped_non_string'
-      );
-    }
-
-    //    4d. skills: Rith Engine uses name references (e.g. `skills: [agent-browser]`).
-    //        Resolve each name against .agents/skills and .claude/skills (project
-    //        + user-global). Resolved paths go through Pi's additionalSkillPaths;
-    //        Pi's buildSystemPrompt appends their agentskills.io XML block to
-    //        the system prompt automatically, so the model sees them.
-    const { paths: skillPaths, missing: missingSkills } = resolvePiSkills(cwd, nodeConfig?.skills);
-    if (missingSkills.length > 0) {
-      yield {
-        type: 'system',
-        content: `⚠️ Pi could not resolve skill names: ${missingSkills.join(', ')}. Searched .agents/skills and .claude/skills (project + user-global). Each must be a directory containing SKILL.md.`,
-      };
-    }
-
-    // 5. Session management. Pi stores each session as a JSONL file under
-    //    ~/.pi/agent/sessions/<encoded-cwd>/<uuid>.jsonl. `resolvePiSession`
-    //    returns a SessionManager bound to either a new session (no resume
-    //    id) or an existing session (resume id matches a file); if the id
-    //    was provided but not found, it falls through to a new session and
-    //    the caller surfaces a resume_failed warning (matches the Codex
-    //    provider's fallback pattern for the same condition).
+    // Session management. Pi stores each session as a JSONL file under
+    // ~/.pi/agent/sessions/<encoded-cwd>/<uuid>.jsonl. `resolvePiSession`
+    // returns a SessionManager bound to either a new session (no resume
+    // id) or an existing session (resume id matches a file); if the id
+    // was provided but not found, it falls through to a new session and
+    // the caller surfaces a resume_failed warning (matches the Codex
+    // provider's fallback pattern for the same condition).
     const { sessionManager, resumeFailed } = await resolvePiSession(cwd, resumeSessionId);
     if (resumeFailed) {
-      yield {
-        type: 'system',
-        content: '⚠️ Could not resume Pi session. Starting fresh conversation.',
-      };
+      warnings.push('⚠️ Could not resume Pi session. Starting fresh conversation.');
     }
 
     // Load user's Pi settings from disk (~/.pi/agent/settings.json for global,
@@ -432,13 +573,14 @@ export class PiCodingAgent implements PiAgent {
         toolCount: filteredTools?.length,
         hasSystemPrompt: systemPrompt !== undefined,
         skillCount: skillPaths.length,
-        missingSkillCount: missingSkills.length,
+        missingSkillCount: opts.missingSkillCount,
         extensionsEnabled: enableExtensions,
         resumed: resumeSessionId !== undefined && !resumeFailed,
       },
       'pi.session_started'
     );
 
+    const { createAgentSession } = piCodingAgent;
     const { session, modelFallbackMessage } = await createAgentSession({
       cwd,
       // model is omitted when not yet resolved (extension provider path).
@@ -456,11 +598,11 @@ export class PiCodingAgent implements PiAgent {
 
     // Extension models aren't in the static catalog — skip the fallback warning.
     if (modelFallbackMessage && model) {
-      yield { type: 'system', content: `⚠️ ${modelFallbackMessage}` };
+      warnings.push(`⚠️ ${modelFallbackMessage}`);
     }
 
-    // 4e. Extension flag pass-through. Must happen before bindExtensions
-    //     below — extensions read flags inside their session_start handler.
+    // Extension flag pass-through. Must happen before bindExtensions
+    // below — extensions read flags inside their session_start handler.
     if (enableExtensions && piConfig.extensionFlags) {
       const runner = session.extensionRunner;
       if (runner) {
@@ -470,17 +612,17 @@ export class PiCodingAgent implements PiAgent {
       }
     }
 
-    // 4f. Fire session_start with a UI context that forwards extension `notify()`
-    //     output into the chunk stream. Binding a non-noop uiContext also flips
-    //     ctx.hasUI to true — the SDK couples them (hasUI === uiContext !== noOpUIContext),
-    //     so hasUI-gated extension flows (e.g. plannotator review URLs) engage.
-    //     Extension providers also register their models here (the LOOKUP-2 trigger).
+    // Fire session_start with a UI context that forwards extension `notify()`
+    // output into the chunk stream. Binding a non-noop uiContext also flips
+    // ctx.hasUI to true — the SDK couples them (hasUI === uiContext !== noOpUIContext),
+    // so hasUI-gated extension flows (e.g. plannotator review URLs) engage.
+    // Extension providers also register their models here (the LOOKUP-2 trigger).
     if (uiBridge) {
       await session.bindExtensions({ uiContext: createRithUIContext(uiBridge) });
     }
 
-    // 4g. [LOOKUP-2] Re-check the registry after bindExtensions() for extension-registered models.
-    //     Safe to call session.setModel() here — no prompt has been sent yet.
+    // [LOOKUP-2] Re-check the registry after bindExtensions() for extension-registered models.
+    // Safe to call session.setModel() here — no prompt has been sent yet.
     if (!model) {
       model = modelRegistry.find(parsed.provider, parsed.modelId);
       if (!model) {
@@ -500,53 +642,6 @@ export class PiCodingAgent implements PiAgent {
       }
     }
 
-    // 5. Structured output (best-effort). Pi has no SDK-level JSON schema
-    //    mode the way Claude and Codex do, so we implement it via prompt
-    //    engineering: append the schema + "JSON only, no fences" instruction,
-    //    and have the bridge parse the accumulated assistant text on
-    //    agent_end. Parse failures degrade gracefully — the executor's
-    //    existing dag.structured_output_missing warning path handles them.
-    const outputFormat = requestOptions?.outputFormat;
-    const effectivePrompt = outputFormat
-      ? augmentPromptForJsonSchema(prompt, outputFormat.schema)
-      : prompt;
-
-    // 6. Bridge callback-based events to the async generator contract.
-    //    bridgeSession owns dispose() and abort wiring.
-    //
-    //    The module-level semaphore is initialized lazily from the first
-    //    config that sets maxConcurrent and reused for the lifetime of the
-    //    process — this is a known v1 tradeoff. Pi concurrency is global
-    //    (one upstream backend) so a process-wide cap is the right scope.
-    const maxConcurrent = piConfig.maxConcurrent;
-    if (maxConcurrent !== undefined && piSemaphore === undefined) {
-      piSemaphore = new Semaphore(maxConcurrent);
-      getLog().info({ maxConcurrent }, 'pi.semaphore_initialized');
-    }
-
-    // Snapshot before the first await — if a concurrent call initializes the
-    // module-level piSemaphore after this point, sem stays undefined and the
-    // finally block correctly skips release (we never acquired).
-    const sem = piSemaphore;
-    if (sem !== undefined) {
-      getLog().debug('pi.semaphore_acquiring');
-      await sem.acquire();
-      getLog().debug('pi.semaphore_acquired');
-    }
-    try {
-      yield* bridgeSession(
-        session,
-        effectivePrompt,
-        requestOptions?.abortSignal,
-        outputFormat?.schema,
-        uiBridge
-      );
-      getLog().info({ piProvider: parsed.provider }, 'pi.prompt_completed');
-    } catch (err) {
-      getLog().error({ err, piProvider: parsed.provider }, 'pi.prompt_failed');
-      throw err;
-    } finally {
-      sem?.release();
-    }
+    return { session, uiBridge, warnings };
   }
 }
