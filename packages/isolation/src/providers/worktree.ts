@@ -9,6 +9,7 @@ import { access, rm } from 'fs/promises';
 import { isAbsolute, join, normalize as normalizePath, resolve, sep } from 'path';
 
 import { createLogger } from '@rith/paths';
+import type { Logger } from '@rith/paths';
 import {
   execFileAsync,
   findWorktreeByBranch,
@@ -16,7 +17,6 @@ import {
   getWorktreeBase,
   listWorktrees,
   mkdirAsync,
-  removeWorktree,
   syncWorkspace,
   verifyWorktreeOwnership,
   worktreeExists,
@@ -27,23 +27,29 @@ import {
 import type { WorktreeBaseOverride } from '@rith/git';
 import { getRithWorkspacesPath } from '@rith/paths';
 import type { RepoPath, WorktreeInfo } from '@rith/git';
-import { copyWorktreeFiles } from '../worktree-copy';
 import type {
   DestroyResult,
   IIsolationProvider,
   IsolatedEnvironment,
   IsolationRequest,
-  PRIsolationRequest,
   RepoConfigLoader,
   WorktreeDestroyOptions,
   WorktreeEnvironment,
 } from '../types';
 import { isPRIsolationRequest } from '../types';
 import type { WorktreeCreateConfig } from '../types';
+import { initSubmodules } from './worktree-submodules';
+import { copyConfiguredFiles } from './worktree-files';
+import {
+  createFromPR,
+  createNewBranch,
+  deleteBranchTracked,
+  deleteRemoteBranchTracked,
+} from './worktree-branches';
 
 /** Lazy-initialized logger (deferred so test mocks can intercept createLogger) */
-let cachedLog: ReturnType<typeof createLogger> | undefined;
-function getLog(): ReturnType<typeof createLogger> {
+let cachedLog: Logger | undefined;
+function getLog(): Logger {
   if (!cachedLog) cachedLog = createLogger('isolation.worktree');
   return cachedLog;
 }
@@ -285,11 +291,11 @@ export class WorktreeProvider implements IIsolationProvider {
 
     // Delete associated branch if provided (best-effort cleanup)
     if (options?.branchName) {
-      result.branchDeleted = await this.deleteBranchTracked(repoPath, options.branchName, result);
+      result.branchDeleted = await deleteBranchTracked(repoPath, options.branchName, result);
 
       // Delete remote branch if requested (e.g., after PR merge)
       if (options.deleteRemoteBranch) {
-        result.remoteBranchDeleted = await this.deleteRemoteBranchTracked(
+        result.remoteBranchDeleted = await deleteRemoteBranchTracked(
           repoPath,
           options.branchName,
           result
@@ -335,76 +341,6 @@ export class WorktreeProvider implements IIsolationProvider {
     } catch (_error) {
       // If we can't verify, assume it's gone (don't block on verification failure)
       return false;
-    }
-  }
-
-  /**
-   * Delete a branch and track the result. Never throws - branch deletion is best-effort.
-   * Returns true if branch was deleted or already gone, false if deletion failed.
-   */
-  private async deleteBranchTracked(
-    repoPath: string,
-    branchName: string,
-    result: DestroyResult
-  ): Promise<boolean> {
-    try {
-      await execFileAsync('git', ['-C', repoPath, 'branch', '-D', branchName], {
-        timeout: GIT_OPERATION_TIMEOUT_MS,
-      });
-      getLog().debug({ repoPath, branchName }, 'branch_deleted');
-      return true;
-    } catch (error) {
-      const err = error as Error & { stderr?: string };
-      const errorText = `${err.message} ${err.stderr ?? ''}`;
-
-      if (errorText.includes('not found') || errorText.includes('did not match any')) {
-        getLog().debug({ repoPath, branchName }, 'branch_already_deleted');
-        return true; // Already gone counts as success
-      } else if (errorText.includes('checked out at')) {
-        const warning = `Cannot delete branch '${branchName}': branch is checked out elsewhere`;
-        getLog().warn({ repoPath, branchName }, 'branch_checked_out_elsewhere');
-        result.warnings.push(warning);
-        return false;
-      } else {
-        const warning = `Unexpected error deleting branch '${branchName}': ${err.message}`;
-        getLog().error({ err: error, repoPath, branchName }, 'branch_delete_failed');
-        result.warnings.push(warning);
-        return false;
-      }
-    }
-  }
-
-  /**
-   * Delete a remote branch and track the result. Never throws - remote branch deletion is best-effort.
-   * Returns true if branch was deleted or already gone, false if deletion failed.
-   */
-  private async deleteRemoteBranchTracked(
-    repoPath: string,
-    branchName: string,
-    result: DestroyResult
-  ): Promise<boolean> {
-    try {
-      await execFileAsync('git', ['-C', repoPath, 'push', 'origin', '--delete', branchName], {
-        timeout: GIT_OPERATION_TIMEOUT_MS,
-      });
-      getLog().debug({ repoPath, branchName }, 'remote_branch_deleted');
-      return true;
-    } catch (error) {
-      const err = error as Error & { stderr?: string };
-      const errorText = `${err.message} ${err.stderr ?? ''}`;
-
-      if (
-        errorText.includes('remote ref does not exist') ||
-        errorText.includes("couldn't find remote ref")
-      ) {
-        getLog().debug({ repoPath, branchName }, 'remote_branch_already_deleted');
-        return true; // Already gone counts as success
-      } else {
-        const warning = `Failed to delete remote branch '${branchName}': ${err.message}`;
-        getLog().error({ err: error, repoPath, branchName }, 'remote_branch_delete_failed');
-        result.warnings.push(warning);
-        return false;
-      }
     }
   }
 
@@ -718,10 +654,10 @@ export class WorktreeProvider implements IIsolationProvider {
 
     if (isPRIsolationRequest(request)) {
       // For PRs: fetch and checkout the PR branch (actual or synthetic)
-      await this.createFromPR(request, worktreePath);
+      await createFromPR(request, worktreePath);
     } else {
       // For issues, tasks, threads: create new branch
-      await this.createNewBranch(request, repoPath, worktreePath, branchName, baseBranch);
+      await createNewBranch(request, repoPath, worktreePath, branchName, baseBranch);
     }
 
     // Initialize submodules unless explicitly opted out. The check is free
@@ -729,14 +665,15 @@ export class WorktreeProvider implements IIsolationProvider {
     // without submodules pay nothing. Default-on matches git's own intent
     // with `clone --recurse-submodules` / `submodule.recurse`.
     if (worktreeConfig?.initSubmodules !== false) {
-      await this.initSubmodules(worktreePath);
+      await initSubmodules(worktreePath);
     }
 
     // Copy git-ignored files based on repo config
-    const { configLoadFailed } = await this.copyConfiguredFiles(
+    const { configLoadFailed } = await copyConfiguredFiles(
       repoPath,
       worktreePath,
-      worktreeConfig
+      worktreeConfig,
+      this.loadConfig
     );
 
     const warnings: string[] = [];
@@ -816,328 +753,6 @@ export class WorktreeProvider implements IIsolationProvider {
   }
 
   /**
-   * Copy git-ignored files to worktree based on repo config.
-   * Returns `configLoadFailed: true` when no config was provided and the
-   * internal fallback load of the config fails — so the caller can surface
-   * a warning without blocking worktree creation.
-   */
-  private async copyConfiguredFiles(
-    canonicalRepoPath: string,
-    worktreePath: string,
-    worktreeConfig?: { baseBranch?: string; copyFiles?: string[] } | null
-  ): Promise<{ configLoadFailed: boolean }> {
-    // Default files to always copy
-    const defaultCopyFiles = ['.rith'];
-
-    // Load user config - log errors and set configLoadFailed, but don't fail worktree creation
-    let userCopyFiles: string[] = [];
-    let configLoadFailed = false;
-    if (worktreeConfig) {
-      userCopyFiles = worktreeConfig.copyFiles ?? [];
-    } else {
-      // Config not provided - try loading it
-      try {
-        const loadedConfig = await this.loadConfig(canonicalRepoPath);
-        userCopyFiles = loadedConfig?.copyFiles ?? [];
-      } catch (error) {
-        // Config errors are more serious - log as error, not warning
-        const err = error instanceof Error ? error : new Error(String(error));
-        getLog().error(
-          { err, errorType: err.constructor.name, canonicalRepoPath },
-          'repo_config_load_failed'
-        );
-        configLoadFailed = true;
-        // Continue with default files only — worktree is still usable
-      }
-    }
-
-    // Merge defaults with user config (Set deduplicates)
-    const copyFiles = [...new Set([...defaultCopyFiles, ...userCopyFiles])];
-
-    if (copyFiles.length === 0) {
-      return { configLoadFailed };
-    }
-
-    // Copy files - errors are handled inside copyWorktreeFiles, but wrap in
-    // try/catch for defense against unexpected errors
-    try {
-      const copied = await copyWorktreeFiles(canonicalRepoPath, worktreePath, copyFiles);
-      if (copied.length > 0) {
-        getLog().debug({ worktreePath, copiedCount: copied.length }, 'worktree_files_copied');
-      }
-
-      // Log summary if some files were configured but not all were copied
-      const attemptedCount = copyFiles.length;
-      const copiedCount = copied.length;
-      if (copiedCount < attemptedCount) {
-        getLog().warn({ worktreePath, copiedCount, attemptedCount }, 'worktree_file_copy_partial');
-      }
-    } catch (error) {
-      // Should not happen as copyWorktreeFiles handles errors internally,
-      // but guard against unexpected errors
-      getLog().error({ err: error, worktreePath }, 'worktree_file_copy_failed');
-    }
-
-    return { configLoadFailed };
-  }
-
-  /**
-   * Create worktree from PR
-   *
-   * For same-repo PRs: Use the actual branch name so changes push directly to PR
-   * For fork PRs: Use synthetic branch (pr-N-review) since we can't push to forks
-   *
-   * When prSha is provided, the worktree is initially created at the specific
-   * commit (detached HEAD), then a local tracking branch is created.
-   */
-  private async createFromPR(request: PRIsolationRequest, worktreePath: string): Promise<void> {
-    // Clean up any orphan directory before creating worktree
-    await this.cleanOrphanDirectoryIfExists(worktreePath);
-
-    const repoPath = request.canonicalRepoPath;
-    const prNumber = request.identifier;
-
-    try {
-      if (!request.isForkPR) {
-        // Same-repo PR: Use the actual branch so changes push directly to PR
-        await this.createFromSameRepoPR(repoPath, worktreePath, request.prBranch);
-      } else {
-        // Fork PR: Use synthetic review branch
-        await this.createFromForkPR(repoPath, worktreePath, prNumber, request.prSha);
-      }
-    } catch (error) {
-      // Clean up orphaned git-registered worktree from partial failure
-      // (e.g., worktree add succeeded but createBranchWithStaleRetry failed)
-      await this.cleanOrphanWorktreeIfExists(repoPath, worktreePath);
-      const err = error as Error;
-      throw new Error(`Failed to create worktree for PR #${prNumber}: ${err.message}`);
-    }
-  }
-
-  /**
-   * Create worktree for same-repo PR using the actual branch
-   */
-  private async createFromSameRepoPR(
-    repoPath: string,
-    worktreePath: string,
-    prBranch: string
-  ): Promise<void> {
-    // Fetch the PR's actual branch
-    await execFileAsync('git', ['-C', repoPath, 'fetch', 'origin', prBranch], {
-      timeout: GIT_OPERATION_TIMEOUT_MS,
-    });
-
-    // Try to create worktree with the branch
-    try {
-      // If branch doesn't exist locally, create it tracking remote
-      await execFileAsync(
-        'git',
-        ['-C', repoPath, 'worktree', 'add', worktreePath, '-b', prBranch, `origin/${prBranch}`],
-        { timeout: GIT_OPERATION_TIMEOUT_MS }
-      );
-    } catch (error) {
-      const err = error as Error & { stderr?: string };
-      // Branch already exists locally - use it directly
-      if (err.stderr?.includes('already exists')) {
-        await execFileAsync('git', ['-C', repoPath, 'worktree', 'add', worktreePath, prBranch], {
-          timeout: GIT_OPERATION_TIMEOUT_MS,
-        });
-      } else {
-        throw error;
-      }
-    }
-
-    // Set up tracking for push/pull (non-fatal - worktree is usable without it)
-    try {
-      await execFileAsync(
-        'git',
-        ['-C', worktreePath, 'branch', '--set-upstream-to', `origin/${prBranch}`],
-        { timeout: GIT_OPERATION_TIMEOUT_MS }
-      );
-    } catch (trackingError) {
-      getLog().warn({ err: trackingError, worktreePath, prBranch }, 'upstream_tracking_failed');
-      // Continue - the worktree was created successfully, tracking is just convenience
-    }
-  }
-
-  /**
-   * Create worktree for fork PR using synthetic review branch
-   *
-   * Handles stale branches: If a branch already exists from a previous worktree
-   * that was deleted, we delete the stale branch and retry.
-   */
-  private async createFromForkPR(
-    repoPath: string,
-    worktreePath: string,
-    prNumber: string,
-    prSha?: string
-  ): Promise<void> {
-    const reviewBranch = `pr-${prNumber}-review`;
-
-    if (prSha) {
-      // SHA provided: create at specific commit for reproducible reviews
-      await execFileAsync('git', ['-C', repoPath, 'fetch', 'origin', `pull/${prNumber}/head`], {
-        timeout: GIT_OPERATION_TIMEOUT_MS,
-      });
-
-      await execFileAsync('git', ['-C', repoPath, 'worktree', 'add', worktreePath, prSha], {
-        timeout: GIT_OPERATION_TIMEOUT_MS,
-      });
-
-      // Create a local tracking branch so it's not detached HEAD
-      await this.createBranchWithStaleRetry(
-        repoPath,
-        () =>
-          execFileAsync('git', ['-C', worktreePath, 'checkout', '-b', reviewBranch, prSha], {
-            timeout: GIT_OPERATION_TIMEOUT_MS,
-          }),
-        reviewBranch
-      );
-    } else {
-      // No SHA: fetch and create review branch
-      await this.createBranchWithStaleRetry(
-        repoPath,
-        () =>
-          execFileAsync(
-            'git',
-            ['-C', repoPath, 'fetch', 'origin', `pull/${prNumber}/head:${reviewBranch}`],
-            { timeout: GIT_OPERATION_TIMEOUT_MS }
-          ),
-        reviewBranch
-      );
-
-      await execFileAsync('git', ['-C', repoPath, 'worktree', 'add', worktreePath, reviewBranch], {
-        timeout: GIT_OPERATION_TIMEOUT_MS,
-      });
-    }
-  }
-
-  /**
-   * Execute a git command that creates a branch, with retry logic for stale branches.
-   * If the branch already exists, delete it and retry the command.
-   */
-  private async createBranchWithStaleRetry(
-    repoPath: string,
-    createCommand: () => Promise<{ stdout: string; stderr: string }>,
-    branchName: string
-  ): Promise<void> {
-    try {
-      await createCommand();
-    } catch (error) {
-      const err = error as Error & { stderr?: string };
-      if (err.stderr?.includes('already exists')) {
-        getLog().debug({ repoPath, branchName }, 'stale_branch_retry');
-        await execFileAsync('git', ['-C', repoPath, 'branch', '-D', branchName], {
-          timeout: GIT_OPERATION_TIMEOUT_MS,
-        });
-        await createCommand();
-      } else {
-        throw error;
-      }
-    }
-  }
-
-  /**
-   * Create worktree with new branch
-   */
-  private async createNewBranch(
-    request: IsolationRequest,
-    repoPath: string,
-    worktreePath: string,
-    branchName: string,
-    baseBranch: string
-  ): Promise<void> {
-    // Clean up any orphan directory before creating worktree
-    await this.cleanOrphanDirectoryIfExists(worktreePath);
-
-    // Determine start-point: explicit fromBranch overrides base branch
-    const startPoint =
-      request.workflowType === 'task' && request.fromBranch
-        ? request.fromBranch
-        : `origin/${baseBranch}`;
-
-    try {
-      // Try to create with new branch
-      await execFileAsync(
-        'git',
-        ['-C', repoPath, 'worktree', 'add', worktreePath, '-b', branchName, startPoint],
-        {
-          timeout: GIT_OPERATION_TIMEOUT_MS,
-        }
-      );
-    } catch (error) {
-      const err = error as Error & { stderr?: string };
-      // Branch already exists - reset to intended start-point and use it
-      if (err.stderr?.includes('already exists')) {
-        const taskFromBranch = request.workflowType === 'task' ? request.fromBranch : undefined;
-        if (taskFromBranch) {
-          // Branch already exists but caller specified an explicit start point.
-          // Adopting the existing branch would silently ignore the start point.
-          throw new Error(
-            `Branch "${branchName}" already exists. Cannot create it from "${taskFromBranch}". ` +
-              'Either choose a different --branch name or omit --from.'
-          );
-        }
-
-        // Branch exists but no explicit start-point override — reset it to the
-        // intended start-point before checking out, so we don't inherit stale
-        // commits from a previous run or external tool.
-        getLog().warn(
-          { branchName, startPoint, repoPath },
-          'worktree.branch_exists_resetting_to_start_point'
-        );
-        await execFileAsync('git', ['-C', repoPath, 'branch', '-f', branchName, startPoint], {
-          timeout: 10000,
-        });
-        await execFileAsync('git', ['-C', repoPath, 'worktree', 'add', worktreePath, branchName], {
-          timeout: GIT_OPERATION_TIMEOUT_MS,
-        });
-      } else {
-        throw error;
-      }
-    }
-  }
-
-  /**
-   * Initialize git submodules in a worktree when the repo uses them.
-   *
-   * ENOENT on `.gitmodules` → skip (zero-cost for non-submodule repos).
-   * Any other error (EACCES, EIO, git failure, timeout) → throw. Silent
-   * success on a half-initialized worktree is the exact class of bug this
-   * function exists to prevent; an unreadable `.gitmodules` is materially
-   * the same as a failed git op. The thrown error is classified by
-   * `classifyIsolationError` into an actionable message.
-   */
-  private async initSubmodules(worktreePath: string): Promise<void> {
-    try {
-      await access(join(worktreePath, '.gitmodules'));
-    } catch (error) {
-      const err = error as NodeJS.ErrnoException;
-      if (err.code === 'ENOENT') {
-        return;
-      }
-      getLog().error({ err, worktreePath }, 'worktree.submodule_check_failed');
-      throw new Error(
-        `Submodule initialization failed: cannot read .gitmodules (${err.code ?? 'unknown error'})`
-      );
-    }
-
-    try {
-      await execFileAsync(
-        'git',
-        ['-C', worktreePath, 'submodule', 'update', '--init', '--recursive'],
-        { timeout: 120000 }
-      );
-      getLog().info({ worktreePath }, 'worktree.submodule_init_completed');
-    } catch (error) {
-      const err = error as Error & { stderr?: string };
-      getLog().error({ err, worktreePath }, 'worktree.submodule_init_failed');
-      const detail = err.stderr?.trim() || err.message;
-      throw new Error(`Submodule initialization failed: ${detail}`);
-    }
-  }
-
-  /**
    * Check if a directory exists.
    * Returns true if directory exists, false if it doesn't exist (ENOENT).
    * Throws for other errors (permission denied, I/O errors, etc.)
@@ -1154,55 +769,6 @@ export class WorktreeProvider implements IIsolationProvider {
       throw new Error(
         `Failed to check directory at ${path}: ${err.message} (code: ${err.code ?? 'unknown'})`
       );
-    }
-  }
-
-  /**
-   * Clean up an orphan directory if it exists but is not a valid worktree.
-   * An orphan directory can occur when git worktree remove succeeds but leaves
-   * untracked files (like .rith/) behind.
-   */
-  private async cleanOrphanDirectoryIfExists(worktreePath: string): Promise<void> {
-    const dirExists = await this.directoryExists(worktreePath);
-    if (!dirExists) {
-      return;
-    }
-
-    const isValidWorktree = await worktreeExists(toWorktreePath(worktreePath));
-    if (isValidWorktree) {
-      return; // Not an orphan - it's a valid worktree
-    }
-
-    // Orphan directory - remove it before creating worktree
-    getLog().debug({ worktreePath }, 'orphan_directory_cleaning');
-    try {
-      await rm(worktreePath, { recursive: true, force: true });
-      getLog().debug({ worktreePath }, 'isolation.orphan_directory_removed');
-    } catch (error) {
-      const err = error as NodeJS.ErrnoException;
-      // Provide context for the error - orphan cleanup is critical for worktree creation
-      throw new Error(`Failed to clean orphan directory at ${worktreePath}: ${err.message}`);
-    }
-  }
-
-  /**
-   * Clean up a git-registered worktree that was left by a partial failure.
-   * Best-effort: logs errors but doesn't throw (the original error is more important).
-   */
-  private async cleanOrphanWorktreeIfExists(repoPath: string, worktreePath: string): Promise<void> {
-    try {
-      if (await worktreeExists(toWorktreePath(worktreePath))) {
-        getLog().warn({ repoPath, worktreePath }, 'isolation.orphan_cleanup_started');
-        await removeWorktree(toRepoPath(repoPath), toWorktreePath(worktreePath));
-        getLog().info({ repoPath, worktreePath }, 'isolation.orphan_cleanup_completed');
-      }
-    } catch (cleanupError) {
-      const err = cleanupError as Error;
-      getLog().error(
-        { repoPath, worktreePath, error: err.message, errorType: err.constructor.name, err },
-        'isolation.orphan_cleanup_failed'
-      );
-      // Don't throw — the original creation error is more important
     }
   }
 
