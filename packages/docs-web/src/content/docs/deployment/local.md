@@ -1,6 +1,6 @@
 ---
 title: Local Development
-description: Run Rith Engine locally with SQLite or PostgreSQL for development and personal use.
+description: Run Rith Engine locally with SQLite for development and personal use.
 category: deployment
 area: infra
 audience: [operator]
@@ -13,7 +13,7 @@ This guide covers running Rith Engine on your own machine. Rith is a CLI — the
 
 ## Local Development
 
-SQLite is the default store, so no database setup is needed.
+Rith Engine stores data in SQLite, so no database setup is needed.
 
 ### Prerequisites
 
@@ -48,21 +48,6 @@ rith workflow run rith-assist "Hello world"
 
 Run `rith doctor` to verify your environment (Pi auth, GitHub auth, database, workspace).
 
-## Using PostgreSQL Instead of SQLite
+## Database
 
-SQLite is fine for single-user CLI use. To use PostgreSQL instead, point `DATABASE_URL` at any Postgres instance in your `.env`:
-
-```bash
-DATABASE_URL=postgresql://user:password@host:5432/rith
-```
-
-The schema is created automatically on first run.
-
-## Database Options Summary
-
-| Option | Setup | Best For |
-|--------|-------|----------|
-| **SQLite** (default) | Zero config, just omit `DATABASE_URL` | Single-user, CLI usage, local development |
-| **PostgreSQL** | Set `DATABASE_URL` to any Postgres instance | Shared state, larger run history |
-
-SQLite stores data at `~/.rith/rith.db`. It is auto-initialized on first run.
+Rith Engine uses SQLite, stored at `~/.rith/rith.db` and auto-initialized on first run. There is no setup or configuration required.

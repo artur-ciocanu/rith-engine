@@ -1,5 +1,5 @@
 import { mock, describe, test, expect, beforeEach } from 'bun:test';
-import { createQueryResult, mockPostgresDialect } from '../test/mocks/database';
+import { createQueryResult, mockSqliteDialect } from '../test/mocks/database';
 import type { WorkflowRun, WorkflowRunMetadata } from '@rith/workflows/schemas/workflow-run';
 
 const mockQuery = mock(() => Promise.resolve(createQueryResult([])));
@@ -9,8 +9,7 @@ mock.module('./connection', () => ({
   pool: {
     query: mockQuery,
   },
-  getDialect: () => mockPostgresDialect,
-  getDatabaseType: () => 'postgresql' as const,
+  getDialect: () => mockSqliteDialect,
 }));
 
 import {
@@ -211,7 +210,7 @@ describe('workflows database', () => {
 
       const [query] = mockQuery.mock.calls[0] as [string, unknown[]];
       expect(query).toContain('status = $1');
-      expect(query).toContain('completed_at = NOW()');
+      expect(query).toContain("completed_at = datetime('now')");
     });
 
     test('updates status to failed', async () => {
@@ -221,7 +220,7 @@ describe('workflows database', () => {
 
       const [query] = mockQuery.mock.calls[0] as [string, unknown[]];
       expect(query).toContain('status = $1');
-      expect(query).toContain('completed_at = NOW()');
+      expect(query).toContain("completed_at = datetime('now')");
     });
 
     test('updates metadata', async () => {
@@ -229,10 +228,10 @@ describe('workflows database', () => {
 
       await updateWorkflowRun('workflow-run-123', { metadata: { rejection_count: 1 } });
 
-      expect(mockQuery).toHaveBeenCalledWith(expect.stringContaining('metadata = metadata ||'), [
-        JSON.stringify({ rejection_count: 1 }),
-        'workflow-run-123',
-      ]);
+      expect(mockQuery).toHaveBeenCalledWith(
+        expect.stringContaining('metadata = json_patch(metadata,'),
+        [JSON.stringify({ rejection_count: 1 }), 'workflow-run-123']
+      );
     });
 
     test('updates multiple fields', async () => {
@@ -245,7 +244,7 @@ describe('workflows database', () => {
 
       const [query, params] = mockQuery.mock.calls[0] as [string, unknown[]];
       expect(query).toContain('status = $1');
-      expect(query).toContain('metadata = metadata ||');
+      expect(query).toContain('metadata = json_patch(metadata,');
       expect(params).toEqual(['running', '{"rejection_count":2}', 'workflow-run-123']);
     });
 
@@ -265,9 +264,10 @@ describe('workflows database', () => {
       expect(mockQuery).toHaveBeenCalledWith(expect.stringContaining("status = 'completed'"), [
         'workflow-run-123',
       ]);
-      expect(mockQuery).toHaveBeenCalledWith(expect.stringContaining('completed_at = NOW()'), [
-        'workflow-run-123',
-      ]);
+      expect(mockQuery).toHaveBeenCalledWith(
+        expect.stringContaining("completed_at = datetime('now')"),
+        ['workflow-run-123']
+      );
       expect(mockQuery).toHaveBeenCalledWith(expect.stringContaining("AND status = 'running'"), [
         'workflow-run-123',
       ]);
@@ -289,7 +289,7 @@ describe('workflows database', () => {
 
       const [query, params] = mockQuery.mock.calls[0] as [string, unknown[]];
       expect(query).toContain("status = 'completed'");
-      expect(query).toContain('metadata = metadata ||');
+      expect(query).toContain('metadata = json_patch(metadata,');
       expect(params).toEqual(['workflow-run-123', JSON.stringify(metadata)]);
     });
 
@@ -315,7 +315,7 @@ describe('workflows database', () => {
         JSON.stringify({ error: 'Step not found: missing.md' }),
       ]);
       expect(mockQuery).toHaveBeenCalledWith(
-        expect.stringContaining('completed_at = NOW()'),
+        expect.stringContaining("completed_at = datetime('now')"),
         expect.any(Array)
       );
       expect(mockQuery).toHaveBeenCalledWith(
@@ -486,7 +486,7 @@ describe('workflows database', () => {
       await updateWorkflowActivity('workflow-run-123');
 
       expect(mockQuery).toHaveBeenCalledWith(
-        'UPDATE remote_agent_workflow_runs SET last_activity_at = NOW() WHERE id = $1',
+        "UPDATE remote_agent_workflow_runs SET last_activity_at = datetime('now') WHERE id = $1",
         ['workflow-run-123']
       );
     });
@@ -601,7 +601,7 @@ describe('workflows database', () => {
       expect(query).toContain("status = 'pending'");
       // Age window cutoff prevents orphaned pending rows (from crashed
       // dispatches) from permanently blocking a path.
-      expect(query).toMatch(/started_at >.*INTERVAL.*milliseconds/);
+      expect(query).toMatch(/started_at > datetime\('now', '-\d+ seconds'\)/);
     });
 
     test('excludes self and applies older-wins tiebreaker when self is provided', async () => {
@@ -612,12 +612,10 @@ describe('workflows database', () => {
 
       const [query, params] = mockQuery.mock.calls[0] as [string, unknown[]];
       expect(query).toContain('id != $2');
-      // PostgreSQL branch: explicit `::timestamptz` cast on the param so
-      // the comparison is chronological, not lexical. SQLite branch wraps
-      // both sides in datetime() — covered by tests in adapters/sqlite.test.ts
-      // because this suite mocks getDatabaseType as 'postgresql'.
-      expect(query).toContain('started_at < $3::timestamptz');
-      expect(query).toContain('started_at = $3::timestamptz AND id < $2');
+      // started_at is TEXT; both sides wrapped in datetime() so the comparison
+      // is chronological, not lexical (see getActiveWorkflowRunByPath).
+      expect(query).toContain('datetime(started_at) < datetime($3)');
+      expect(query).toContain('datetime(started_at) = datetime($3) AND id < $2');
       // selfStartedAt serialized to ISO — bun:sqlite rejects Date bindings.
       expect(params).toEqual(['/repo/path', 'self-id', startedAt.toISOString()]);
     });
@@ -710,7 +708,7 @@ describe('workflows database', () => {
       expect(result.count).toBe(2);
       const [query, params] = mockQuery.mock.calls[0] as [string, unknown[]];
       expect(query).toContain("status = 'failed'");
-      expect(query).toContain('completed_at = NOW()');
+      expect(query).toContain("completed_at = datetime('now')");
       expect(query).toContain("status = 'running'");
       expect(params).toContain(JSON.stringify({ failure_reason: 'server_restart' }));
     });
@@ -768,7 +766,7 @@ describe('workflows database', () => {
       await resumeWorkflowRun('workflow-run-123');
 
       const [updateQuery] = mockQuery.mock.calls[0] as [string, unknown[]];
-      expect(updateQuery).toContain('started_at = NOW()');
+      expect(updateQuery).toContain("started_at = datetime('now')");
     });
 
     test('throws when no row matched (run not found)', async () => {
@@ -833,13 +831,13 @@ describe('workflows database', () => {
       expect(commitSql).toBe('COMMIT');
     });
 
-    test('uses PostgreSQL INTERVAL syntax', async () => {
+    test('uses SQLite datetime cutoff', async () => {
       mockQuery.mockResolvedValue(createQueryResult([], 0));
 
       await deleteOldWorkflowRuns(7);
 
       const [eventsSql] = mockQuery.mock.calls[1] as [string, unknown[]];
-      expect(eventsSql).toContain("INTERVAL '7 days'");
+      expect(eventsSql).toContain("datetime('now', '-7 days')");
     });
 
     test('validates olderThanDays is a non-negative integer', async () => {

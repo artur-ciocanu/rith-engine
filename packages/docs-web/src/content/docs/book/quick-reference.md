@@ -248,7 +248,7 @@ hooks:
 ```
 ~/.rith/
 ├── config.yaml                        # Global configuration (non-secrets)
-├── rith.db                          # SQLite database (default; no DATABASE_URL needed)
+├── rith.db                          # SQLite database
 └── workspaces/
     └── <owner>/
         └── <repo>/

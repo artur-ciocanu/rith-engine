@@ -1,6 +1,6 @@
 import { mock, describe, test, expect, beforeEach } from 'bun:test';
 import { createMockLogger } from '../test/mocks/logger';
-import { createQueryResult, mockPostgresDialect } from '../test/mocks/database';
+import { createQueryResult, mockSqliteDialect } from '../test/mocks/database';
 import type { WorkflowEventRow } from './workflow-events';
 
 // Mock logger to suppress noisy output during tests
@@ -22,7 +22,7 @@ mock.module('./connection', () => ({
   pool: {
     query: mockQuery,
   },
-  getDialect: () => mockPostgresDialect,
+  getDialect: () => mockSqliteDialect,
 }));
 
 import {

@@ -1,5 +1,5 @@
 import { mock, describe, test, expect, beforeEach } from 'bun:test';
-import { createQueryResult, mockPostgresDialect } from '../test/mocks/database';
+import { createQueryResult, mockSqliteDialect } from '../test/mocks/database';
 import { Codebase } from '../types';
 
 const mockQuery = mock(() => Promise.resolve(createQueryResult([])));
@@ -9,7 +9,7 @@ mock.module('./connection', () => ({
   pool: {
     query: mockQuery,
   },
-  getDialect: () => mockPostgresDialect,
+  getDialect: () => mockSqliteDialect,
 }));
 
 import {
@@ -137,7 +137,7 @@ describe('codebases', () => {
       await updateCodebaseCommands('codebase-123', commands);
 
       expect(mockQuery).toHaveBeenCalledWith(
-        'UPDATE remote_agent_codebases SET commands = $1, updated_at = NOW() WHERE id = $2',
+        "UPDATE remote_agent_codebases SET commands = $1, updated_at = datetime('now') WHERE id = $2",
         [JSON.stringify(commands), 'codebase-123']
       );
     });
@@ -148,7 +148,7 @@ describe('codebases', () => {
       await updateCodebaseCommands('codebase-123', {});
 
       expect(mockQuery).toHaveBeenCalledWith(
-        'UPDATE remote_agent_codebases SET commands = $1, updated_at = NOW() WHERE id = $2',
+        "UPDATE remote_agent_codebases SET commands = $1, updated_at = datetime('now') WHERE id = $2",
         ['{}', 'codebase-123']
       );
     });
@@ -233,7 +233,7 @@ describe('codebases', () => {
       expect(mockQuery).toHaveBeenCalledTimes(2);
       expect(mockQuery).toHaveBeenNthCalledWith(
         2,
-        'UPDATE remote_agent_codebases SET commands = $1, updated_at = NOW() WHERE id = $2',
+        "UPDATE remote_agent_codebases SET commands = $1, updated_at = datetime('now') WHERE id = $2",
         [
           JSON.stringify({
             plan: { path: '.claude/commands/plan.md', description: 'Plan feature' },
@@ -257,7 +257,7 @@ describe('codebases', () => {
 
       expect(mockQuery).toHaveBeenNthCalledWith(
         2,
-        'UPDATE remote_agent_codebases SET commands = $1, updated_at = NOW() WHERE id = $2',
+        "UPDATE remote_agent_codebases SET commands = $1, updated_at = datetime('now') WHERE id = $2",
         [
           JSON.stringify({
             plan: { path: '.claude/commands/new-plan.md', description: 'New plan' },
@@ -281,7 +281,7 @@ describe('codebases', () => {
 
       expect(mockQuery).toHaveBeenNthCalledWith(
         2,
-        'UPDATE remote_agent_codebases SET commands = $1, updated_at = NOW() WHERE id = $2',
+        "UPDATE remote_agent_codebases SET commands = $1, updated_at = datetime('now') WHERE id = $2",
         [
           JSON.stringify({
             execute: { path: '.claude/commands/execute.md', description: 'Execute plan' },
@@ -378,7 +378,7 @@ describe('codebases', () => {
       await updateCodebase('codebase-123', { default_cwd: '/new/path' });
 
       expect(mockQuery).toHaveBeenCalledWith(
-        'UPDATE remote_agent_codebases SET default_cwd = $1, updated_at = NOW() WHERE id = $2',
+        "UPDATE remote_agent_codebases SET default_cwd = $1, updated_at = datetime('now') WHERE id = $2",
         ['/new/path', 'codebase-123']
       );
     });
@@ -389,7 +389,7 @@ describe('codebases', () => {
       await updateCodebase('codebase-123', { repository_url: 'https://github.com/owner/repo' });
 
       expect(mockQuery).toHaveBeenCalledWith(
-        'UPDATE remote_agent_codebases SET repository_url = $1, updated_at = NOW() WHERE id = $2',
+        "UPDATE remote_agent_codebases SET repository_url = $1, updated_at = datetime('now') WHERE id = $2",
         ['https://github.com/owner/repo', 'codebase-123']
       );
     });
@@ -403,7 +403,7 @@ describe('codebases', () => {
       });
 
       expect(mockQuery).toHaveBeenCalledWith(
-        'UPDATE remote_agent_codebases SET default_cwd = $1, repository_url = $2, updated_at = NOW() WHERE id = $3',
+        "UPDATE remote_agent_codebases SET default_cwd = $1, repository_url = $2, updated_at = datetime('now') WHERE id = $3",
         ['/new/path', 'https://github.com/owner/repo', 'codebase-123']
       );
     });

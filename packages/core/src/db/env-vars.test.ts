@@ -1,11 +1,11 @@
 import { mock, describe, test, expect, beforeEach } from 'bun:test';
-import { createQueryResult, mockPostgresDialect } from '../test/mocks/database';
+import { createQueryResult, mockSqliteDialect } from '../test/mocks/database';
 
 const mockQuery = mock(() => Promise.resolve(createQueryResult([])));
 
 mock.module('./connection', () => ({
   pool: { query: mockQuery },
-  getDialect: () => mockPostgresDialect,
+  getDialect: () => mockSqliteDialect,
 }));
 
 mock.module('@rith/paths', () => ({

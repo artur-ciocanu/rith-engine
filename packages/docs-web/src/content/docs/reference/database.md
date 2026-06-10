@@ -1,6 +1,6 @@
 ---
 title: Database
-description: Database setup, schema overview, and migration guide for SQLite and PostgreSQL backends.
+description: Database storage location, schema overview, and how Rith Engine initializes its SQLite database.
 category: reference
 area: database
 audience: [developer, operator]
@@ -9,68 +9,23 @@ sidebar:
   order: 5
 ---
 
-Rith Engine supports two database backends: **SQLite** (default, zero setup) and **PostgreSQL** (optional, for cloud/advanced deployments). The database backend is selected automatically based on whether the `DATABASE_URL` environment variable is set.
+Rith Engine uses SQLite at `~/.rith/rith.db`. The schema is auto-initialized on first run, so there is no setup required.
 
-## SQLite (Default - No Setup Required)
+## Storage Location
 
-Simply **omit the `DATABASE_URL` variable** from your `.env` file. The app will automatically:
-- Create a SQLite database at `~/.rith/rith.db`
-- Initialize the schema on first run
-- Use this database for all operations
+On first connect, Rith Engine automatically:
+- Creates a SQLite database at `~/.rith/rith.db`
+- Initializes the schema
+- Uses this database for all operations
 
-**Pros:**
-- Zero configuration required
-- No external database needed
-- Perfect for single-user CLI usage
-
-**Cons:**
-- Not suitable for multi-container deployments
-- No network access (CLI and server can't share database across different hosts)
-
-## Remote PostgreSQL (Supabase, Neon, etc.)
-
-Set your remote connection string in `.env`:
-
-```ini
-DATABASE_URL=postgresql://user:password@host:5432/dbname
-```
-
-**For fresh installations**, run the combined migration:
-
-```bash
-psql $DATABASE_URL < migrations/000_combined.sql
-```
-
-**For updates to existing installations**, run only the migrations you haven't applied yet:
-
-```bash
-# Check which migrations you've already run, then apply new ones:
-psql $DATABASE_URL < migrations/002_command_templates.sql
-psql $DATABASE_URL < migrations/003_add_worktree.sql
-psql $DATABASE_URL < migrations/004_worktree_sharing.sql
-psql $DATABASE_URL < migrations/005_isolation_abstraction.sql
-psql $DATABASE_URL < migrations/006_isolation_environments.sql
-psql $DATABASE_URL < migrations/007_drop_legacy_columns.sql
-psql $DATABASE_URL < migrations/008_workflow_runs.sql
-psql $DATABASE_URL < migrations/009_workflow_last_activity.sql
-psql $DATABASE_URL < migrations/010_immutable_sessions.sql
-psql $DATABASE_URL < migrations/011_partial_unique_constraint.sql
-psql $DATABASE_URL < migrations/012_workflow_events.sql
-psql $DATABASE_URL < migrations/013_conversation_titles.sql
-psql $DATABASE_URL < migrations/014_message_history.sql
-psql $DATABASE_URL < migrations/015_background_dispatch.sql
-psql $DATABASE_URL < migrations/016_session_ended_reason.sql
-psql $DATABASE_URL < migrations/017_drop_command_templates.sql
-psql $DATABASE_URL < migrations/018_fix_workflow_status_default.sql
-psql $DATABASE_URL < migrations/019_workflow_resume_path.sql
-psql $DATABASE_URL < migrations/020_codebase_env_vars.sql
-```
+No configuration, external service, or manual migration step is needed.
 
 ## Verifying the Database
 
-**List tables (PostgreSQL):**
+Inspect the database with the `sqlite3` CLI:
+
 ```bash
-psql $DATABASE_URL -c "\dt"
+sqlite3 ~/.rith/rith.db ".tables"
 ```
 
 ## Schema Overview
@@ -115,29 +70,3 @@ The database has 8 tables, all prefixed with `remote_agent_`:
    - Key-value pairs scoped to a codebase
    - Injected into Claude SDK subprocess environment at execution time
    - Managed via `env:` in `.rith/config.yaml`
-
-## Migration List
-
-| Migration | Description |
-|-----------|-------------|
-| `000_combined.sql` | Combined initial schema (use for fresh installs) |
-| `001_initial_schema.sql` | Initial schema (codebases, conversations, sessions) |
-| `002_command_templates.sql` | Command templates table |
-| `003_add_worktree.sql` | Add worktree columns |
-| `004_worktree_sharing.sql` | Worktree sharing support |
-| `005_isolation_abstraction.sql` | Isolation abstraction layer |
-| `006_isolation_environments.sql` | Isolation environments table |
-| `007_drop_legacy_columns.sql` | Drop legacy worktree columns |
-| `008_workflow_runs.sql` | Workflow runs table |
-| `009_workflow_last_activity.sql` | Workflow last activity tracking |
-| `010_immutable_sessions.sql` | Immutable session model |
-| `011_partial_unique_constraint.sql` | Partial unique constraint |
-| `012_workflow_events.sql` | Workflow events table |
-| `013_conversation_titles.sql` | Conversation titles |
-| `014_message_history.sql` | Message history table |
-| `015_background_dispatch.sql` | Background dispatch support |
-| `016_session_ended_reason.sql` | Session ended reason field |
-| `017_drop_command_templates.sql` | Drop command templates table |
-| `018_fix_workflow_status_default.sql` | Fix workflow status default value |
-| `019_workflow_resume_path.sql` | Workflow resume path support |
-| `020_codebase_env_vars.sql` | Per-project environment variables |

@@ -16,7 +16,7 @@ import { homedir } from 'os';
 import { execFileAsync } from '@rith/git';
 import { getRithHome, createLogger, isTelemetryDisabled } from '@rith/paths';
 import type { Logger } from '@rith/paths';
-import { pool, getDatabaseType } from '@rith/core';
+import { pool } from '@rith/core';
 import { BUNDLED_COMMANDS, BUNDLED_WORKFLOWS } from '@rith/workflows/defaults';
 
 // Env vars that indicate a Pi backend API key is configured. Mirrors
@@ -98,22 +98,20 @@ export async function checkPi(env: NodeJS.ProcessEnv): Promise<CheckResult> {
 
 export interface DatabaseDeps {
   pool: { query: (sql: string) => Promise<unknown> };
-  getDatabaseType: () => string;
 }
 
 // Static defaults — `@rith/core` is already in the CLI module graph (cli.ts
 // imports closeDatabase), so lazy-loading buys nothing. Injected in tests to
 // drive the reachable / not-reachable branches.
-const defaultDatabaseDeps: DatabaseDeps = { pool, getDatabaseType };
+const defaultDatabaseDeps: DatabaseDeps = { pool };
 
 export async function checkDatabase(
   deps: DatabaseDeps = defaultDatabaseDeps
 ): Promise<CheckResult> {
   const label = 'Database';
   try {
-    const dbType = deps.getDatabaseType();
     await deps.pool.query('SELECT 1');
-    return { label, status: 'pass', message: `reachable (${dbType})` };
+    return { label, status: 'pass', message: 'reachable (sqlite)' };
   } catch (err) {
     getLog().error({ err }, 'doctor.db_query_failed');
     return { label, status: 'fail', message: `not reachable: ${(err as Error).message}` };

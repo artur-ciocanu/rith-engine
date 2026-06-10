@@ -10,7 +10,6 @@ import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { execFileAsync } from '@rith/git';
 import { BUNDLED_GIT_COMMIT, BUNDLED_IS_BINARY, BUNDLED_VERSION, createLogger } from '@rith/paths';
-import { getDatabaseType } from '@rith/core';
 
 const log = createLogger('cli.version');
 
@@ -85,7 +84,7 @@ export async function versionCommand(): Promise<void> {
 
   const platform = process.platform;
   const arch = process.arch;
-  const dbType = getDatabaseType();
+  const dbType = 'sqlite';
   const buildType = BUNDLED_IS_BINARY ? 'binary' : 'source (bun)';
 
   console.log(`Rith Engine CLI v${version}`);

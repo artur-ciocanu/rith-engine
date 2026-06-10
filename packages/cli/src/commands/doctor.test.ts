@@ -116,21 +116,10 @@ describe('checkDatabase', () => {
   it('returns pass when query succeeds', async () => {
     const deps: DatabaseDeps = {
       pool: { query: async () => undefined },
-      getDatabaseType: () => 'sqlite',
     };
     const result = await checkDatabase(deps);
     expect(result.status).toBe('pass');
     expect(result.message).toContain('sqlite');
-  });
-
-  it('reports postgres dbType when configured', async () => {
-    const deps: DatabaseDeps = {
-      pool: { query: async () => undefined },
-      getDatabaseType: () => 'postgresql',
-    };
-    const result = await checkDatabase(deps);
-    expect(result.status).toBe('pass');
-    expect(result.message).toContain('postgresql');
   });
 
   it('returns fail with "not reachable" when query throws', async () => {
@@ -140,7 +129,6 @@ describe('checkDatabase', () => {
           throw new Error('connection refused');
         },
       },
-      getDatabaseType: () => 'postgresql',
     };
     const result = await checkDatabase(deps);
     expect(result.status).toBe('fail');

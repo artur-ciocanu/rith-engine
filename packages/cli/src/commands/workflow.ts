@@ -375,16 +375,6 @@ export async function workflowRunCommand(
     const err = error as Error;
     codebaseLookupError = err;
     getLog().warn({ err, cwd }, 'cli.codebase_lookup_failed');
-    if (
-      err.message.includes('connect') ||
-      err.message.includes('ECONNREFUSED') ||
-      err.message.includes('ETIMEDOUT')
-    ) {
-      getLog().warn(
-        { hint: 'Check DATABASE_URL and that the database is running.' },
-        'cli.db_connection_hint'
-      );
-    }
   }
 
   // If the caller supplied a codebase ID (e.g., from a stored run record on resume),

@@ -22,8 +22,10 @@ is green end-to-end on `main` (`check:bundled`, `check:bundled-skill`, `type-che
 `lint --max-warnings 0`, `format:check`, full test suite — 0 failures).
 **Remaining:** **none of the tracked items.** Item 15 (typed `WorkflowRun.metadata`)
 is now done in the working tree — see "REMAINING → From `architectural-review.md`"
-below. Three non-blocking OPEN side-issues remain unscheduled (Postgres schema
-bootstrap gap, cross-package `mock.module` leakage, doc `migrations/` ref).
+below. Two non-blocking OPEN side-issues remain unscheduled (cross-package
+`mock.module` leakage; the `NodeRunResult` control-signal flip). The former Postgres
+schema-bootstrap gap and the SQLite/PG dialect-divergence risk are both **resolved by
+removing PostgreSQL entirely** — Rith Engine is now SQLite-only.
 
 ---
 
@@ -507,14 +509,14 @@ docs table matches the runtime mapping, no edit needed.
 `rith serve`; both are absent from the codebase and were removed from the docs in `#16`
 (verified: no matches under `packages/`).
 
-### Postgres schema bootstrap gap — OPEN (not blocking; noted #16)
+### Postgres schema bootstrap gap — ✅ RESOLVED (PostgreSQL removed)
 
-`reference/database.md` references a non-existent `migrations/` dir. The Postgres adapter
-(`packages/core/src/db/adapters/postgres.ts`) does **not** auto-create schema — only SQLite's
-`initSchema()` / `createSchema()` does. So a fresh Postgres backend has no schema bootstrap
-path. This is a real product gap (not a doc bug); it was surfaced, not fixed, in `#16`.
-Decide: either add a Postgres bootstrap/migration path or document Postgres as
-bring-your-own-schema.
+PostgreSQL support was dropped entirely: deleted the `pg` adapter + dependency, collapsed
+`connection.ts`/`getDialect` to the single SQLite backend, removed `getDatabaseType` and the
+`DATABASE_URL` selection, and inlined the two `isPostgres` SQL branches in `workflows.ts` to
+their SQLite forms. SQLite (auto-initialized at `~/.rith/rith.db`) is the only backend, so the
+missing-PG-schema-bootstrap gap and the SQLite-vs-PG `jsonMerge` dialect divergence no longer
+exist. Docs (`reference/database.md` et al.) and the `migrations/` references were purged.
 
 ### Cross-package `mock.module` leakage — OPEN (not blocking; surfaced #18)
 
