@@ -5,7 +5,6 @@ import type { IWorkflowStore } from '@rith/workflows/store';
 const mockCreateWorkflowRun = mock(() => Promise.resolve({ id: 'run-1' }));
 const mockGetWorkflowRun = mock(() => Promise.resolve(null));
 const mockGetActiveWorkflowRunByPath = mock(() => Promise.resolve(null));
-const mockFailOrphanedRuns = mock(() => Promise.resolve({ count: 0 }));
 const mockFindResumableRun = mock(() => Promise.resolve(null));
 const mockResumeWorkflowRun = mock(() => Promise.resolve({ id: 'run-1' }));
 const mockUpdateWorkflowRun = mock(() => Promise.resolve());
@@ -20,7 +19,6 @@ mock.module('../db/workflows', () => ({
   createWorkflowRun: mockCreateWorkflowRun,
   getWorkflowRun: mockGetWorkflowRun,
   getActiveWorkflowRunByPath: mockGetActiveWorkflowRunByPath,
-  failOrphanedRuns: mockFailOrphanedRuns,
   findResumableRun: mockFindResumableRun,
   resumeWorkflowRun: mockResumeWorkflowRun,
   updateWorkflowRun: mockUpdateWorkflowRun,
@@ -61,7 +59,6 @@ describe('createWorkflowStore', () => {
       'createWorkflowRun',
       'getWorkflowRun',
       'getActiveWorkflowRunByPath',
-      'failOrphanedRuns',
       'findResumableRun',
       'resumeWorkflowRun',
       'updateWorkflowRun',

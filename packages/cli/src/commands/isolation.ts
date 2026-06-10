@@ -45,11 +45,10 @@ export async function isolationListCommand(): Promise<void> {
         env.days_since_activity !== null
           ? `${Math.floor(env.days_since_activity)}d ago`
           : 'unknown';
-      const platform = env.created_by_platform ?? 'unknown';
 
       console.log(`  ${env.branch_name ?? env.workflow_id}`);
       console.log(`    Path: ${env.working_path}`);
-      console.log(`    Type: ${env.workflow_type} | Platform: ${platform} | Last activity: ${age}`);
+      console.log(`    Type: ${env.workflow_type} | Last activity: ${age}`);
     }
   }
 

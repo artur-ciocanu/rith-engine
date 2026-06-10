@@ -573,7 +573,6 @@ export async function workflowRunCommand(
         provider: 'worktree',
         working_path: isolatedEnv.workingPath,
         branch_name: isolatedEnv.branchName,
-        created_by_platform: 'cli',
         metadata: {},
       });
 

@@ -160,8 +160,6 @@ export type ExecuteWorkflowOptions = ResumePayload & {
     prSha?: string;
     prBranch?: string;
   };
-  /** Parent conversation ID — enables approve/reject auto-resume from chat. */
-  parentConversationId?: string;
 };
 
 /**
@@ -216,14 +214,7 @@ export async function executeWorkflow(
   conversationDbId: string,
   opts: ExecuteWorkflowOptions = {}
 ): Promise<WorkflowExecutionResult> {
-  const {
-    codebaseId,
-    issueContext,
-    isolationContext,
-    parentConversationId,
-    preCreatedRun,
-    priorCompletedNodes,
-  } = opts;
+  const { codebaseId, issueContext, isolationContext, preCreatedRun, priorCompletedNodes } = opts;
   // Load config once for the entire workflow execution
   const fileConfig = await deps.loadConfig(cwd);
   const dbEnvVars = codebaseId ? await deps.store.getCodebaseEnvVars(codebaseId) : {};
@@ -293,7 +284,6 @@ export async function executeWorkflow(
         user_message: userMessage,
         working_path: cwd,
         metadata: issueContext ? { github_context: issueContext } : {},
-        parent_conversation_id: parentConversationId,
       });
     } catch (error) {
       const err = error as Error;

@@ -152,65 +152,30 @@ export class SqliteAdapter implements IDatabase {
    */
   private initSchema(): void {
     this.createSchema();
-    this.migrateColumns();
+    this.migrateLegacySchema();
   }
 
   /**
-   * Add columns to existing tables that predate newer schema additions.
-   * SQLite's CREATE TABLE IF NOT EXISTS skips entirely for existing tables,
-   * so new columns must be added via ALTER TABLE for databases created before
-   * the columns were added to createSchema().
-   */
-  private migrateColumns(): void {
-    // Workflow runs columns
-    try {
-      const wfCols = this.db.prepare("PRAGMA table_info('remote_agent_workflow_runs')").all() as {
-        name: string;
-      }[];
-      const wfColNames = new Set(wfCols.map(c => c.name));
-
-      if (!wfColNames.has('parent_conversation_id')) {
-        this.db.run(
-          'ALTER TABLE remote_agent_workflow_runs ADD COLUMN parent_conversation_id TEXT'
-        );
-      }
-
-      if (!wfColNames.has('working_path')) {
-        this.db.run('ALTER TABLE remote_agent_workflow_runs ADD COLUMN working_path TEXT');
-      }
-    } catch (e: unknown) {
-      getLog().warn({ err: e as Error }, 'db.sqlite_migration_workflow_runs_columns_failed');
-    }
-  }
-
-  /**
-   * Create all tables.
-   *
-   * NOTE: NOT NULL constraint changes on existing columns (e.g., branch_name in
-   * isolation_environments, user_message in workflow_runs, name in codebases) are only
-   * enforced for new databases. For existing databases, CREATE TABLE IF NOT EXISTS is a
-   * no-op so the old schema remains. SQLite lacks ALTER COLUMN support; enforcing new
-   * constraints on existing tables would require a table rebuild via migrateColumns().
+   * Create all tables. Idempotent (CREATE TABLE IF NOT EXISTS), so a fresh
+   * database comes up fully initialized. Changes to EXISTING tables are handled
+   * by migrateLegacySchema().
    */
   private createSchema(): void {
     this.db.run(`
-      -- Codebases table
-      CREATE TABLE IF NOT EXISTS remote_agent_codebases (
+      CREATE TABLE IF NOT EXISTS codebases (
         id TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))),
         name TEXT NOT NULL,
         repository_url TEXT,
         default_cwd TEXT NOT NULL,
         default_branch TEXT DEFAULT 'main',
-        ai_assistant_type TEXT DEFAULT 'pi',
         commands TEXT DEFAULT '{}',
         created_at TEXT DEFAULT (datetime('now')),
         updated_at TEXT DEFAULT (datetime('now'))
       );
 
-      -- Codebase env vars table
-      CREATE TABLE IF NOT EXISTS remote_agent_codebase_env_vars (
+      CREATE TABLE IF NOT EXISTS codebase_env_vars (
         id TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))),
-        codebase_id TEXT NOT NULL REFERENCES remote_agent_codebases(id) ON DELETE CASCADE,
+        codebase_id TEXT NOT NULL REFERENCES codebases(id) ON DELETE CASCADE,
         key TEXT NOT NULL,
         value TEXT NOT NULL,
         created_at TEXT DEFAULT (datetime('now')),
@@ -218,67 +183,42 @@ export class SqliteAdapter implements IDatabase {
         UNIQUE(codebase_id, key)
       );
 
-      -- Conversations table (retained for workflow_runs FK; will be removed in a future migration)
-      CREATE TABLE IF NOT EXISTS remote_agent_conversations (
+      CREATE TABLE IF NOT EXISTS isolation_environments (
         id TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))),
-        platform_type TEXT NOT NULL,
-        platform_conversation_id TEXT NOT NULL,
-        ai_assistant_type TEXT DEFAULT 'pi',
-        codebase_id TEXT REFERENCES remote_agent_codebases(id) ON DELETE SET NULL,
-        cwd TEXT,
-        isolation_env_id TEXT,
-        title TEXT,
-        deleted_at TEXT,
-        hidden INTEGER DEFAULT 0,
-        created_at TEXT DEFAULT (datetime('now')),
-        updated_at TEXT DEFAULT (datetime('now')),
-        last_activity_at TEXT DEFAULT (datetime('now')),
-        UNIQUE(platform_type, platform_conversation_id)
-      );
-
-      -- Isolation environments table
-      CREATE TABLE IF NOT EXISTS remote_agent_isolation_environments (
-        id TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))),
-        codebase_id TEXT NOT NULL REFERENCES remote_agent_codebases(id) ON DELETE CASCADE,
+        codebase_id TEXT NOT NULL REFERENCES codebases(id) ON DELETE CASCADE,
         workflow_type TEXT NOT NULL,
         workflow_id TEXT NOT NULL,
         provider TEXT NOT NULL DEFAULT 'worktree',
         working_path TEXT NOT NULL,
         branch_name TEXT NOT NULL,
-        created_by_platform TEXT,
         metadata TEXT DEFAULT '{}',
         status TEXT NOT NULL DEFAULT 'active',
         created_at TEXT DEFAULT (datetime('now')),
         updated_at TEXT DEFAULT (datetime('now'))
-        -- Note: uniqueness enforced via partial index below (only active environments)
       );
 
-      -- Partial unique index: only active environments need uniqueness
+      -- Only active environments need uniqueness (partial unique index).
       CREATE UNIQUE INDEX IF NOT EXISTS unique_active_workflow
-        ON remote_agent_isolation_environments (codebase_id, workflow_type, workflow_id)
+        ON isolation_environments (codebase_id, workflow_type, workflow_id)
         WHERE status = 'active';
 
-      -- Workflow runs table
-      CREATE TABLE IF NOT EXISTS remote_agent_workflow_runs (
+      CREATE TABLE IF NOT EXISTS workflow_runs (
         id TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))),
-        conversation_id TEXT NOT NULL REFERENCES remote_agent_conversations(id) ON DELETE CASCADE,
-        codebase_id TEXT REFERENCES remote_agent_codebases(id) ON DELETE SET NULL,
+        conversation_id TEXT NOT NULL,
+        codebase_id TEXT REFERENCES codebases(id) ON DELETE SET NULL,
         workflow_name TEXT NOT NULL,
         user_message TEXT NOT NULL,
         status TEXT NOT NULL DEFAULT 'pending',
-        current_step_index INTEGER,
         metadata TEXT DEFAULT '{}',
-        parent_conversation_id TEXT REFERENCES remote_agent_conversations(id) ON DELETE SET NULL,
         started_at TEXT DEFAULT (datetime('now')),
         completed_at TEXT,
         last_activity_at TEXT DEFAULT (datetime('now')),
         working_path TEXT
       );
 
-      -- Workflow events table
-      CREATE TABLE IF NOT EXISTS remote_agent_workflow_events (
+      CREATE TABLE IF NOT EXISTS workflow_events (
         id TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))),
-        workflow_run_id TEXT NOT NULL REFERENCES remote_agent_workflow_runs(id) ON DELETE CASCADE,
+        workflow_run_id TEXT NOT NULL REFERENCES workflow_runs(id) ON DELETE CASCADE,
         event_type TEXT NOT NULL,
         step_index INTEGER,
         step_name TEXT,
@@ -286,27 +226,71 @@ export class SqliteAdapter implements IDatabase {
         created_at TEXT DEFAULT (datetime('now'))
       );
 
-      -- NOTE: remote_agent_sessions and remote_agent_messages tables removed (dead code).
-      -- The remote_agent_ table prefix is inherited from Archon and will be renamed
-      -- in a future migration PR.
-
-      -- Indexes
-      CREATE INDEX IF NOT EXISTS idx_codebase_env_vars_codebase_id ON remote_agent_codebase_env_vars(codebase_id);
-      CREATE INDEX IF NOT EXISTS idx_isolation_codebase ON remote_agent_isolation_environments(codebase_id);
-      CREATE INDEX IF NOT EXISTS idx_isolation_workflow ON remote_agent_isolation_environments(workflow_type, workflow_id);
-      CREATE INDEX IF NOT EXISTS idx_workflow_runs_conversation ON remote_agent_workflow_runs(conversation_id);
-      CREATE INDEX IF NOT EXISTS idx_workflow_runs_status ON remote_agent_workflow_runs(status);
-      CREATE INDEX IF NOT EXISTS idx_workflow_events_run_id ON remote_agent_workflow_events(workflow_run_id);
-      CREATE INDEX IF NOT EXISTS idx_workflow_events_type ON remote_agent_workflow_events(event_type);
-      CREATE INDEX IF NOT EXISTS idx_workflow_runs_parent_conv ON remote_agent_workflow_runs(parent_conversation_id);
-      CREATE INDEX IF NOT EXISTS idx_isolation_env_status ON remote_agent_isolation_environments(status);
-
-      -- From PG migration 009: staleness detection for running workflows
+      CREATE INDEX IF NOT EXISTS idx_codebase_env_vars_codebase_id ON codebase_env_vars(codebase_id);
+      CREATE INDEX IF NOT EXISTS idx_isolation_codebase ON isolation_environments(codebase_id);
+      CREATE INDEX IF NOT EXISTS idx_isolation_workflow ON isolation_environments(workflow_type, workflow_id);
+      CREATE INDEX IF NOT EXISTS idx_isolation_status ON isolation_environments(status);
+      CREATE INDEX IF NOT EXISTS idx_workflow_runs_conversation ON workflow_runs(conversation_id);
+      CREATE INDEX IF NOT EXISTS idx_workflow_runs_status ON workflow_runs(status);
+      CREATE INDEX IF NOT EXISTS idx_workflow_runs_working_path ON workflow_runs(working_path);
+      CREATE INDEX IF NOT EXISTS idx_workflow_events_run_id ON workflow_events(workflow_run_id);
+      CREATE INDEX IF NOT EXISTS idx_workflow_events_type ON workflow_events(event_type);
       CREATE INDEX IF NOT EXISTS idx_workflow_runs_last_activity
-        ON remote_agent_workflow_runs(last_activity_at) WHERE status = 'running';
-
+        ON workflow_runs(last_activity_at) WHERE status = 'running';
     `);
     getLog().info('db.sqlite_schema_initialized');
+  }
+
+  /**
+   * One-time migration off the legacy Archon schema: the `remote_agent_*` table
+   * prefix, the vestigial `conversations` table (+ its FK), and the chat /
+   * multi-assistant columns (`ai_assistant_type`, `created_by_platform`,
+   * `parent_conversation_id`, `current_step_index`). Copies the kept data into
+   * the clean tables and drops the legacy ones. No-op once migrated.
+   */
+  private migrateLegacySchema(): void {
+    const legacy = this.db
+      .prepare(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='remote_agent_codebases'"
+      )
+      .get();
+    if (!legacy) return;
+
+    // foreign_keys must be toggled OUTSIDE a transaction (it is a no-op inside).
+    this.db.run('PRAGMA foreign_keys = OFF');
+    try {
+      this.db.transaction(() => {
+        this.db.run(
+          `INSERT OR IGNORE INTO codebases (id, name, repository_url, default_cwd, default_branch, commands, created_at, updated_at)
+           SELECT id, name, repository_url, default_cwd, default_branch, commands, created_at, updated_at FROM remote_agent_codebases`
+        );
+        this.db.run(
+          `INSERT OR IGNORE INTO codebase_env_vars (id, codebase_id, key, value, created_at, updated_at)
+           SELECT id, codebase_id, key, value, created_at, updated_at FROM remote_agent_codebase_env_vars`
+        );
+        this.db.run(
+          `INSERT OR IGNORE INTO isolation_environments (id, codebase_id, workflow_type, workflow_id, provider, working_path, branch_name, metadata, status, created_at, updated_at)
+           SELECT id, codebase_id, workflow_type, workflow_id, provider, working_path, branch_name, metadata, status, created_at, updated_at FROM remote_agent_isolation_environments`
+        );
+        this.db.run(
+          `INSERT OR IGNORE INTO workflow_runs (id, conversation_id, codebase_id, workflow_name, user_message, status, metadata, started_at, completed_at, last_activity_at, working_path)
+           SELECT id, conversation_id, codebase_id, workflow_name, user_message, status, metadata, started_at, completed_at, last_activity_at, working_path FROM remote_agent_workflow_runs`
+        );
+        this.db.run(
+          `INSERT OR IGNORE INTO workflow_events (id, workflow_run_id, event_type, step_index, step_name, data, created_at)
+           SELECT id, workflow_run_id, event_type, step_index, step_name, data, created_at FROM remote_agent_workflow_events`
+        );
+        this.db.run('DROP TABLE IF EXISTS remote_agent_workflow_events');
+        this.db.run('DROP TABLE IF EXISTS remote_agent_workflow_runs');
+        this.db.run('DROP TABLE IF EXISTS remote_agent_isolation_environments');
+        this.db.run('DROP TABLE IF EXISTS remote_agent_codebase_env_vars');
+        this.db.run('DROP TABLE IF EXISTS remote_agent_codebases');
+        this.db.run('DROP TABLE IF EXISTS remote_agent_conversations');
+      })();
+      getLog().info('db.sqlite_legacy_schema_migrated');
+    } finally {
+      this.db.run('PRAGMA foreign_keys = ON');
+    }
   }
 }
 

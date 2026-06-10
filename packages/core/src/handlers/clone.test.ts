@@ -19,7 +19,6 @@ const mockCreateCodebase = mock(() =>
     name: 'owner/repo',
     repository_url: 'https://github.com/owner/repo',
     default_cwd: '/home/test/.rith/workspaces/owner/repo/source',
-    ai_assistant_type: 'pi',
     commands: {},
     created_at: new Date(),
     updated_at: new Date(),
@@ -139,7 +138,6 @@ function makeCodebase(
     name: string;
     repository_url: string | null;
     default_cwd: string;
-    ai_assistant_type: string;
   }> = {}
 ): object {
   return {
@@ -147,7 +145,6 @@ function makeCodebase(
     name: 'owner/repo',
     repository_url: 'https://github.com/owner/repo',
     default_cwd: '/home/test/.rith/workspaces/owner/repo/source',
-    ai_assistant_type: 'pi',
     commands: {},
     created_at: new Date(),
     updated_at: new Date(),
@@ -741,34 +738,6 @@ describe('cloneRepository', () => {
 
       expect(result.commandCount).toBe(0);
       expect(mockUpdateCodebaseCommands.mock.calls.length).toBe(0);
-    });
-  });
-
-  // ── Assistant type detection ───────────────────────────────────────────
-  describe('assistant type detection', () => {
-    test('always uses pi as the assistant type', async () => {
-      spyFsAccess.mockRejectedValue(Object.assign(new Error('ENOENT'), { code: 'ENOENT' }));
-      mockCreateCodebase.mockResolvedValueOnce(
-        makeCodebase({ ai_assistant_type: 'pi' }) as ReturnType<typeof makeCodebase>
-      );
-
-      await cloneRepository('https://github.com/owner/repo');
-
-      const createCall = mockCreateCodebase.mock.calls[0] as [{ ai_assistant_type: string }];
-      expect(createCall[0].ai_assistant_type).toBe('pi');
-    });
-
-    test('uses pi even when loadConfig fails', async () => {
-      mockLoadConfig.mockRejectedValue(new Error('config load failed'));
-      spyFsAccess.mockRejectedValue(Object.assign(new Error('ENOENT'), { code: 'ENOENT' }));
-      mockCreateCodebase.mockResolvedValueOnce(
-        makeCodebase({ ai_assistant_type: 'pi' }) as ReturnType<typeof makeCodebase>
-      );
-
-      await cloneRepository('https://github.com/owner/repo');
-
-      const createCall = mockCreateCodebase.mock.calls[0] as [{ ai_assistant_type: string }];
-      expect(createCall[0].ai_assistant_type).toBe('pi');
     });
   });
 });

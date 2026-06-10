@@ -233,7 +233,6 @@ export interface IsolationEnvironmentRow {
   branch_name: string;
   status: EnvironmentStatus;
   created_at: Date;
-  created_by_platform: string | null;
   metadata: Record<string, unknown>;
 }
 
@@ -290,7 +289,6 @@ export interface CreateEnvironmentParams {
   provider?: IsolationProviderType;
   working_path: string;
   branch_name: BranchName;
-  created_by_platform?: string;
   metadata?: Record<string, unknown>;
 }
 

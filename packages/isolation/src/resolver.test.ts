@@ -30,7 +30,6 @@ function makeEnvRow(overrides?: Partial<IsolationEnvironmentRow>): IsolationEnvi
     branch_name: 'issue-42',
     status: 'active',
     created_at: new Date(),
-    created_by_platform: 'web',
     metadata: {},
     ...overrides,
   };

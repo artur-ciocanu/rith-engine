@@ -38,7 +38,6 @@ describe('isolation-environments', () => {
     branch_name: 'issue-42',
     status: 'active',
     created_at: new Date(),
-    created_by_platform: 'github',
     metadata: {},
   };
 
@@ -49,10 +48,9 @@ describe('isolation-environments', () => {
       const result = await getById('env-123');
 
       expect(result).toEqual(sampleEnv);
-      expect(mockQuery).toHaveBeenCalledWith(
-        'SELECT * FROM remote_agent_isolation_environments WHERE id = $1',
-        ['env-123']
-      );
+      expect(mockQuery).toHaveBeenCalledWith('SELECT * FROM isolation_environments WHERE id = $1', [
+        'env-123',
+      ]);
     });
 
     test('returns null when not found', async () => {
@@ -123,7 +121,7 @@ describe('isolation-environments', () => {
 
       expect(result).toEqual(sampleEnv);
       expect(mockQuery).toHaveBeenCalledWith(
-        expect.stringContaining('INSERT INTO remote_agent_isolation_environments'),
+        expect.stringContaining('INSERT INTO isolation_environments'),
         expect.arrayContaining(['codebase-456', 'issue', '42', 'worktree'])
       );
     });
@@ -139,12 +137,11 @@ describe('isolation-environments', () => {
         provider: 'container',
         working_path: '/workspace/worktrees/project/issue-42',
         branch_name: 'issue-42',
-        created_by_platform: 'slack',
         metadata: { custom: true },
       });
 
       expect(mockQuery).toHaveBeenCalledWith(
-        expect.stringContaining('INSERT INTO remote_agent_isolation_environments'),
+        expect.stringContaining('INSERT INTO isolation_environments'),
         [
           'codebase-456',
           'issue',
@@ -152,7 +149,6 @@ describe('isolation-environments', () => {
           'container',
           '/workspace/worktrees/project/issue-42',
           'issue-42',
-          'slack',
           '{"custom":true}',
         ]
       );
@@ -201,7 +197,7 @@ describe('isolation-environments', () => {
       await updateStatus('env-123', 'destroyed');
 
       expect(mockQuery).toHaveBeenCalledWith(
-        'UPDATE remote_agent_isolation_environments SET status = $1 WHERE id = $2',
+        'UPDATE isolation_environments SET status = $1 WHERE id = $2',
         ['destroyed', 'env-123']
       );
     });
@@ -212,7 +208,7 @@ describe('isolation-environments', () => {
       await updateStatus('env-123', 'active');
 
       expect(mockQuery).toHaveBeenCalledWith(
-        'UPDATE remote_agent_isolation_environments SET status = $1 WHERE id = $2',
+        'UPDATE isolation_environments SET status = $1 WHERE id = $2',
         ['active', 'env-123']
       );
     });
@@ -268,15 +264,6 @@ describe('isolation-environments', () => {
 
       const [, params] = mockQuery.mock.calls[0] as [string, number[]];
       expect(params[0]).toBe(7);
-    });
-
-    test('excludes telegram environments in query', async () => {
-      mockQuery.mockResolvedValueOnce(createQueryResult([]));
-
-      await findStaleEnvironments();
-
-      const [query] = mockQuery.mock.calls[0] as [string, unknown[]];
-      expect(query).toContain("created_by_platform != 'telegram'");
     });
 
     test('returns environments with codebase info', async () => {

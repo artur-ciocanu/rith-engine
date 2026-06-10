@@ -173,21 +173,13 @@ export class IsolationResolver {
         canonicalPath,
         hints,
         workflowType,
-        workflowId,
-        request.platformType
+        workflowId
       );
       if (adopted) return adopted;
     }
 
     // 6. Create new environment
-    return this.createNewEnvironment(
-      codebase,
-      workflowType,
-      workflowId,
-      hints,
-      canonicalPath,
-      request.platformType
-    );
+    return this.createNewEnvironment(codebase, workflowType, workflowId, hints, canonicalPath);
   }
 
   /**
@@ -371,8 +363,7 @@ export class IsolationResolver {
     canonicalRepoPath: RepoPath,
     hints: IsolationHints,
     workflowType: IsolationWorkflowType,
-    workflowId: string,
-    platformType: string
+    workflowId: string
   ): Promise<IsolationResolution | null> {
     const prBranch = hints.prBranch;
     if (!prBranch) return null;
@@ -393,7 +384,6 @@ export class IsolationResolver {
         workflow_id: workflowId,
         working_path: adoptedPath,
         branch_name: prBranch,
-        created_by_platform: platformType,
         metadata: { adopted: true, adopted_from: 'skill' },
       });
       return {
@@ -430,8 +420,7 @@ export class IsolationResolver {
     workflowType: IsolationWorkflowType,
     workflowId: string,
     hints: IsolationHints | undefined,
-    canonicalPath: RepoPath,
-    platformType: string
+    canonicalPath: RepoPath
   ): Promise<IsolationResolution> {
     // Construct request based on workflow type
     const baseRequest = {
@@ -505,7 +494,6 @@ export class IsolationResolver {
         workflow_id: workflowId,
         working_path: isolatedEnv.workingPath,
         branch_name: isolatedEnv.branchName,
-        created_by_platform: platformType,
         metadata: {
           related_issues: hints?.linkedIssues ?? [],
           related_prs: hints?.linkedPRs ?? [],

@@ -100,7 +100,6 @@ export const workflowRunSchema = z.object({
   id: z.string(),
   workflow_name: z.string(),
   conversation_id: z.string(),
-  parent_conversation_id: z.string().nullable(),
   codebase_id: z.string().nullable(),
   status: workflowRunStatusSchema,
   user_message: z.string(),
@@ -169,8 +168,6 @@ export interface WorkflowRunMetadata {
   total_cost_usd?: number;
   /** Failure detail, written by failWorkflowRun. */
   error?: string;
-  /** Marker written when a run is force-failed during server-restart recovery. */
-  failure_reason?: 'server_restart';
 }
 
 /**
