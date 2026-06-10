@@ -46,7 +46,6 @@ export interface IWorkflowStore {
     user_message: string;
     metadata?: WorkflowRunMetadata;
     working_path?: string;
-    parent_conversation_id?: string;
   }): Promise<WorkflowRun>;
   getWorkflowRun(id: string): Promise<WorkflowRun | null>;
   /**
@@ -70,7 +69,6 @@ export interface IWorkflowStore {
     self?: { id: string; startedAt: Date }
   ): Promise<WorkflowRun | null>;
   findResumableRun(workflowName: string, workingPath: string): Promise<WorkflowRun | null>;
-  failOrphanedRuns(): Promise<{ count: number }>;
   resumeWorkflowRun(id: string): Promise<WorkflowRun>;
   updateWorkflowRun(
     id: string,

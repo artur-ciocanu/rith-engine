@@ -43,7 +43,7 @@ export async function createWorkflowEvent(data: {
     const dialect = getDialect();
     const id = dialect.generateUuid();
     await pool.query(
-      `INSERT INTO remote_agent_workflow_events (id, workflow_run_id, event_type, step_index, step_name, data)
+      `INSERT INTO workflow_events (id, workflow_run_id, event_type, step_index, step_name, data)
        VALUES ($1, $2, $3, $4, $5, $6)`,
       [
         id,
@@ -69,7 +69,7 @@ export async function createWorkflowEvent(data: {
 export async function listWorkflowEvents(workflowRunId: string): Promise<WorkflowEventRow[]> {
   try {
     const result = await pool.query<WorkflowEventRow>(
-      `SELECT * FROM remote_agent_workflow_events
+      `SELECT * FROM workflow_events
        WHERE workflow_run_id = $1
        ORDER BY created_at ASC`,
       [workflowRunId]
@@ -94,7 +94,7 @@ export async function listRecentEvents(
   try {
     if (since) {
       const result = await pool.query<WorkflowEventRow>(
-        `SELECT * FROM remote_agent_workflow_events
+        `SELECT * FROM workflow_events
          WHERE workflow_run_id = $1 AND created_at > $2
          ORDER BY created_at ASC`,
         [workflowRunId, since.toISOString()]
@@ -126,7 +126,7 @@ export async function getCompletedDagNodeOutputs(
     step_name: string | null;
     data: string | Record<string, unknown>;
   }>(
-    `SELECT step_name, data FROM remote_agent_workflow_events
+    `SELECT step_name, data FROM workflow_events
      WHERE workflow_run_id = $1 AND event_type IN ('node_completed', 'node_skipped_prior_success')
      ORDER BY created_at ASC`,
     [workflowRunId]

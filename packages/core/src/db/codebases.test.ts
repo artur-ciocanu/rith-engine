@@ -35,7 +35,6 @@ describe('codebases', () => {
     name: 'test-project',
     repository_url: 'https://github.com/user/repo',
     default_cwd: '/workspace/test-project',
-    ai_assistant_type: 'pi',
     commands: { plan: { path: '.claude/commands/plan.md', description: 'Plan feature' } },
     created_at: new Date(),
     updated_at: new Date(),
@@ -49,13 +48,12 @@ describe('codebases', () => {
         name: 'test-project',
         repository_url: 'https://github.com/user/repo',
         default_cwd: '/workspace/test-project',
-        ai_assistant_type: 'pi',
       });
 
       expect(result).toEqual(mockCodebase);
       expect(mockQuery).toHaveBeenCalledWith(
-        'INSERT INTO remote_agent_codebases (name, repository_url, default_cwd, ai_assistant_type) VALUES ($1, $2, $3, $4) RETURNING *',
-        ['test-project', 'https://github.com/user/repo', '/workspace/test-project', 'pi']
+        'INSERT INTO codebases (name, repository_url, default_cwd) VALUES ($1, $2, $3) RETURNING *',
+        ['test-project', 'https://github.com/user/repo', '/workspace/test-project']
       );
     });
 
@@ -73,34 +71,9 @@ describe('codebases', () => {
 
       expect(result).toEqual(codebaseWithoutOptional);
       expect(mockQuery).toHaveBeenCalledWith(
-        'INSERT INTO remote_agent_codebases (name, repository_url, default_cwd, ai_assistant_type) VALUES ($1, $2, $3, $4) RETURNING *',
-        ['test-project', null, '/workspace/test-project', 'pi']
+        'INSERT INTO codebases (name, repository_url, default_cwd) VALUES ($1, $2, $3) RETURNING *',
+        ['test-project', null, '/workspace/test-project']
       );
-    });
-
-    test('defaults ai_assistant_type to pi', async () => {
-      mockQuery.mockResolvedValueOnce(createQueryResult([mockCodebase]));
-
-      await createCodebase({
-        name: 'test-project',
-        default_cwd: '/workspace/test-project',
-      });
-
-      expect(mockQuery).toHaveBeenCalledWith(expect.any(String), expect.arrayContaining(['pi']));
-    });
-
-    test('explicit ai_assistant_type is passed through', async () => {
-      mockQuery.mockResolvedValueOnce(
-        createQueryResult([{ ...mockCodebase, ai_assistant_type: 'pi' }])
-      );
-
-      await createCodebase({
-        name: 'test-project',
-        default_cwd: '/workspace/test-project',
-        ai_assistant_type: 'pi',
-      });
-
-      expect(mockQuery).toHaveBeenCalledWith(expect.any(String), expect.arrayContaining(['pi']));
     });
   });
 
@@ -111,7 +84,7 @@ describe('codebases', () => {
       const result = await getCodebase('codebase-123');
 
       expect(result).toEqual(mockCodebase);
-      expect(mockQuery).toHaveBeenCalledWith('SELECT * FROM remote_agent_codebases WHERE id = $1', [
+      expect(mockQuery).toHaveBeenCalledWith('SELECT * FROM codebases WHERE id = $1', [
         'codebase-123',
       ]);
     });
@@ -137,7 +110,7 @@ describe('codebases', () => {
       await updateCodebaseCommands('codebase-123', commands);
 
       expect(mockQuery).toHaveBeenCalledWith(
-        "UPDATE remote_agent_codebases SET commands = $1, updated_at = datetime('now') WHERE id = $2",
+        "UPDATE codebases SET commands = $1, updated_at = datetime('now') WHERE id = $2",
         [JSON.stringify(commands), 'codebase-123']
       );
     });
@@ -148,7 +121,7 @@ describe('codebases', () => {
       await updateCodebaseCommands('codebase-123', {});
 
       expect(mockQuery).toHaveBeenCalledWith(
-        "UPDATE remote_agent_codebases SET commands = $1, updated_at = datetime('now') WHERE id = $2",
+        "UPDATE codebases SET commands = $1, updated_at = datetime('now') WHERE id = $2",
         ['{}', 'codebase-123']
       );
     });
@@ -164,10 +137,9 @@ describe('codebases', () => {
       const result = await getCodebaseCommands('codebase-123');
 
       expect(result).toEqual(commands);
-      expect(mockQuery).toHaveBeenCalledWith(
-        'SELECT commands FROM remote_agent_codebases WHERE id = $1',
-        ['codebase-123']
-      );
+      expect(mockQuery).toHaveBeenCalledWith('SELECT commands FROM codebases WHERE id = $1', [
+        'codebase-123',
+      ]);
     });
 
     test('returns empty object for non-existent codebase', async () => {
@@ -233,7 +205,7 @@ describe('codebases', () => {
       expect(mockQuery).toHaveBeenCalledTimes(2);
       expect(mockQuery).toHaveBeenNthCalledWith(
         2,
-        "UPDATE remote_agent_codebases SET commands = $1, updated_at = datetime('now') WHERE id = $2",
+        "UPDATE codebases SET commands = $1, updated_at = datetime('now') WHERE id = $2",
         [
           JSON.stringify({
             plan: { path: '.claude/commands/plan.md', description: 'Plan feature' },
@@ -257,7 +229,7 @@ describe('codebases', () => {
 
       expect(mockQuery).toHaveBeenNthCalledWith(
         2,
-        "UPDATE remote_agent_codebases SET commands = $1, updated_at = datetime('now') WHERE id = $2",
+        "UPDATE codebases SET commands = $1, updated_at = datetime('now') WHERE id = $2",
         [
           JSON.stringify({
             plan: { path: '.claude/commands/new-plan.md', description: 'New plan' },
@@ -281,7 +253,7 @@ describe('codebases', () => {
 
       expect(mockQuery).toHaveBeenNthCalledWith(
         2,
-        "UPDATE remote_agent_codebases SET commands = $1, updated_at = datetime('now') WHERE id = $2",
+        "UPDATE codebases SET commands = $1, updated_at = datetime('now') WHERE id = $2",
         [
           JSON.stringify({
             execute: { path: '.claude/commands/execute.md', description: 'Execute plan' },
@@ -300,10 +272,9 @@ describe('codebases', () => {
       const result = await findCodebaseByRepoUrl('https://github.com/user/repo');
 
       expect(result).toEqual(mockCodebase);
-      expect(mockQuery).toHaveBeenCalledWith(
-        'SELECT * FROM remote_agent_codebases WHERE repository_url = $1',
-        ['https://github.com/user/repo']
-      );
+      expect(mockQuery).toHaveBeenCalledWith('SELECT * FROM codebases WHERE repository_url = $1', [
+        'https://github.com/user/repo',
+      ]);
     });
 
     test('returns null when not found', async () => {
@@ -323,7 +294,6 @@ describe('codebases', () => {
             id: 'cb-123',
             name: 'test-repo',
             default_cwd: '/workspace/test-repo',
-            ai_assistant_type: 'pi',
             repository_url: null,
             commands: {},
             created_at: new Date(),
@@ -336,7 +306,7 @@ describe('codebases', () => {
       expect(result).toBeDefined();
       expect(result?.name).toBe('test-repo');
       expect(mockQuery).toHaveBeenCalledWith(
-        'SELECT * FROM remote_agent_codebases WHERE default_cwd = $1 ORDER BY created_at DESC LIMIT 1',
+        'SELECT * FROM codebases WHERE default_cwd = $1 ORDER BY created_at DESC LIMIT 1',
         ['/workspace/test-repo']
       );
     });
@@ -357,7 +327,7 @@ describe('codebases', () => {
 
       expect(result).toEqual(mockCodebase);
       expect(mockQuery).toHaveBeenCalledWith(
-        'SELECT * FROM remote_agent_codebases WHERE name = $1 ORDER BY created_at DESC LIMIT 1',
+        'SELECT * FROM codebases WHERE name = $1 ORDER BY created_at DESC LIMIT 1',
         ['test-project']
       );
     });
@@ -378,7 +348,7 @@ describe('codebases', () => {
       await updateCodebase('codebase-123', { default_cwd: '/new/path' });
 
       expect(mockQuery).toHaveBeenCalledWith(
-        "UPDATE remote_agent_codebases SET default_cwd = $1, updated_at = datetime('now') WHERE id = $2",
+        "UPDATE codebases SET default_cwd = $1, updated_at = datetime('now') WHERE id = $2",
         ['/new/path', 'codebase-123']
       );
     });
@@ -389,7 +359,7 @@ describe('codebases', () => {
       await updateCodebase('codebase-123', { repository_url: 'https://github.com/owner/repo' });
 
       expect(mockQuery).toHaveBeenCalledWith(
-        "UPDATE remote_agent_codebases SET repository_url = $1, updated_at = datetime('now') WHERE id = $2",
+        "UPDATE codebases SET repository_url = $1, updated_at = datetime('now') WHERE id = $2",
         ['https://github.com/owner/repo', 'codebase-123']
       );
     });
@@ -403,7 +373,7 @@ describe('codebases', () => {
       });
 
       expect(mockQuery).toHaveBeenCalledWith(
-        "UPDATE remote_agent_codebases SET default_cwd = $1, repository_url = $2, updated_at = datetime('now') WHERE id = $3",
+        "UPDATE codebases SET default_cwd = $1, repository_url = $2, updated_at = datetime('now') WHERE id = $3",
         ['/new/path', 'https://github.com/owner/repo', 'codebase-123']
       );
     });
@@ -430,7 +400,7 @@ describe('codebases', () => {
       await deleteCodebase('codebase-123');
 
       expect(mockQuery).toHaveBeenCalledTimes(1);
-      expect(mockQuery).toHaveBeenCalledWith('DELETE FROM remote_agent_codebases WHERE id = $1', [
+      expect(mockQuery).toHaveBeenCalledWith('DELETE FROM codebases WHERE id = $1', [
         'codebase-123',
       ]);
     });

@@ -60,7 +60,7 @@ describe('workflow-events', () => {
       });
 
       expect(mockQuery).toHaveBeenCalledWith(
-        `INSERT INTO remote_agent_workflow_events (id, workflow_run_id, event_type, step_index, step_name, data)
+        `INSERT INTO workflow_events (id, workflow_run_id, event_type, step_index, step_name, data)
        VALUES ($1, $2, $3, $4, $5, $6)`,
         [
           expect.any(String), // generated UUID
@@ -114,7 +114,7 @@ describe('workflow-events', () => {
 
       expect(result).toEqual(events);
       expect(mockQuery).toHaveBeenCalledWith(
-        `SELECT * FROM remote_agent_workflow_events
+        `SELECT * FROM workflow_events
        WHERE workflow_run_id = $1
        ORDER BY created_at ASC`,
         ['run-456']
@@ -148,7 +148,7 @@ describe('workflow-events', () => {
 
       expect(result).toEqual(events);
       expect(mockQuery).toHaveBeenCalledWith(
-        `SELECT * FROM remote_agent_workflow_events
+        `SELECT * FROM workflow_events
          WHERE workflow_run_id = $1 AND created_at > $2
          ORDER BY created_at ASC`,
         ['run-456', since.toISOString()]
@@ -164,7 +164,7 @@ describe('workflow-events', () => {
       expect(result).toEqual(events);
       // Should use the same query as listWorkflowEvents (no created_at filter)
       expect(mockQuery).toHaveBeenCalledWith(
-        `SELECT * FROM remote_agent_workflow_events
+        `SELECT * FROM workflow_events
        WHERE workflow_run_id = $1
        ORDER BY created_at ASC`,
         ['run-456']

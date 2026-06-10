@@ -103,14 +103,6 @@ mock.module('@rith/git', () => ({
   isAncestorOf: mock(() => Promise.resolve(true)),
 }));
 
-mock.module('@rith/core/db/conversations', () => ({
-  getOrCreateConversation: mock(() =>
-    Promise.resolve({ id: 'conv-123', platform_type: 'cli', platform_conversation_id: 'cli-123' })
-  ),
-  getConversationById: mock(() => Promise.resolve(null)),
-  updateConversation: mock(() => Promise.resolve()),
-}));
-
 mock.module('@rith/core/db/codebases', () => ({
   findCodebaseByDefaultCwd: mock(() => Promise.resolve(null)),
   getCodebase: mock(() => Promise.resolve(null)),
@@ -185,16 +177,6 @@ const queueableMockDefaults: Record<string, Record<string, (...args: unknown[]) 
     toBranchName: (...a: unknown[]) => a[0],
     getDefaultBranch: () => Promise.resolve('dev'),
     isAncestorOf: () => Promise.resolve(true),
-  },
-  '@rith/core/db/conversations': {
-    getOrCreateConversation: () =>
-      Promise.resolve({
-        id: 'conv-123',
-        platform_type: 'cli',
-        platform_conversation_id: 'cli-123',
-      }),
-    getConversationById: () => Promise.resolve(null),
-    updateConversation: () => Promise.resolve(),
   },
   '@rith/core/db/codebases': {
     findCodebaseByDefaultCwd: () => Promise.resolve(null),
@@ -498,7 +480,6 @@ describe('workflowRunCommand', () => {
 
   it('should resolve workflow by suffix match', async () => {
     const { discoverWorkflowsWithConfig } = await import('@rith/workflows/workflow-discovery');
-    const conversationDb = await import('@rith/core/db/conversations');
     const codebaseDb = await import('@rith/core/db/codebases');
 
     (discoverWorkflowsWithConfig as ReturnType<typeof mock>).mockResolvedValueOnce({
@@ -507,14 +488,6 @@ describe('workflowRunCommand', () => {
         makeTestWorkflowWithSource({ name: 'rith-plan', description: 'Plan' }),
       ],
       errors: [],
-    });
-    (conversationDb.getOrCreateConversation as ReturnType<typeof mock>).mockResolvedValueOnce({
-      id: 'conv-1',
-      platform: 'cli',
-      platform_conversation_id: 'cli-123',
-      title: null,
-      is_active: true,
-      codebase_id: null,
     });
     (codebaseDb.findCodebaseByDefaultCwd as ReturnType<typeof mock>).mockResolvedValueOnce({
       id: 'cb-1',
@@ -555,7 +528,6 @@ describe('workflowRunCommand', () => {
 
   it('should prefer case-insensitive exact match over suffix match', async () => {
     const { discoverWorkflowsWithConfig } = await import('@rith/workflows/workflow-discovery');
-    const conversationDb = await import('@rith/core/db/conversations');
     const codebaseDb = await import('@rith/core/db/codebases');
 
     (discoverWorkflowsWithConfig as ReturnType<typeof mock>).mockResolvedValueOnce({
@@ -564,14 +536,6 @@ describe('workflowRunCommand', () => {
         makeTestWorkflowWithSource({ name: 'rith-assist', description: 'Long' }),
       ],
       errors: [],
-    });
-    (conversationDb.getOrCreateConversation as ReturnType<typeof mock>).mockResolvedValueOnce({
-      id: 'conv-1',
-      platform: 'cli',
-      platform_conversation_id: 'cli-123',
-      title: null,
-      is_active: true,
-      codebase_id: null,
     });
     (codebaseDb.findCodebaseByDefaultCwd as ReturnType<typeof mock>).mockResolvedValueOnce({
       id: 'cb-1',
@@ -628,7 +592,6 @@ describe('workflowRunCommand', () => {
 
   it('should prefer exact match over suffix match', async () => {
     const { discoverWorkflowsWithConfig } = await import('@rith/workflows/workflow-discovery');
-    const conversationDb = await import('@rith/core/db/conversations');
     const codebaseDb = await import('@rith/core/db/codebases');
 
     (discoverWorkflowsWithConfig as ReturnType<typeof mock>).mockResolvedValueOnce({
@@ -637,14 +600,6 @@ describe('workflowRunCommand', () => {
         makeTestWorkflowWithSource({ name: 'rith-assist', description: 'Long name' }),
       ],
       errors: [],
-    });
-    (conversationDb.getOrCreateConversation as ReturnType<typeof mock>).mockResolvedValueOnce({
-      id: 'conv-1',
-      platform: 'cli',
-      platform_conversation_id: 'cli-123',
-      title: null,
-      is_active: true,
-      codebase_id: null,
     });
     (codebaseDb.findCodebaseByDefaultCwd as ReturnType<typeof mock>).mockResolvedValueOnce({
       id: 'cb-1',
@@ -682,15 +637,11 @@ describe('workflowRunCommand', () => {
 
   it('should throw when codebase lookup fails (isolation is default)', async () => {
     const { discoverWorkflowsWithConfig } = await import('@rith/workflows/workflow-discovery');
-    const conversationDb = await import('@rith/core/db/conversations');
     const codebaseDb = await import('@rith/core/db/codebases');
 
     (discoverWorkflowsWithConfig as ReturnType<typeof mock>).mockResolvedValueOnce({
       workflows: [makeTestWorkflowWithSource({ name: 'assist', description: 'Help' })],
       errors: [],
-    });
-    (conversationDb.getOrCreateConversation as ReturnType<typeof mock>).mockResolvedValueOnce({
-      id: 'conv-123',
     });
     (codebaseDb.findCodebaseByDefaultCwd as ReturnType<typeof mock>).mockRejectedValueOnce(
       new Error('ECONNREFUSED')
@@ -704,20 +655,15 @@ describe('workflowRunCommand', () => {
   it('should continue when codebase lookup fails with --no-worktree', async () => {
     const { discoverWorkflowsWithConfig } = await import('@rith/workflows/workflow-discovery');
     const { executeWorkflow } = await import('@rith/workflows/executor');
-    const conversationDb = await import('@rith/core/db/conversations');
     const codebaseDb = await import('@rith/core/db/codebases');
 
     (discoverWorkflowsWithConfig as ReturnType<typeof mock>).mockResolvedValueOnce({
       workflows: [makeTestWorkflowWithSource({ name: 'assist', description: 'Help' })],
       errors: [],
     });
-    (conversationDb.getOrCreateConversation as ReturnType<typeof mock>).mockResolvedValueOnce({
-      id: 'conv-123',
-    });
     (codebaseDb.findCodebaseByDefaultCwd as ReturnType<typeof mock>).mockRejectedValueOnce(
       new Error('ECONNREFUSED')
     );
-    (conversationDb.updateConversation as ReturnType<typeof mock>).mockResolvedValueOnce(undefined);
     (executeWorkflow as ReturnType<typeof mock>).mockResolvedValueOnce({
       success: true,
       workflowRunId: 'run-123',
@@ -735,18 +681,13 @@ describe('workflowRunCommand', () => {
   it('should throw error when workflow execution fails', async () => {
     const { discoverWorkflowsWithConfig } = await import('@rith/workflows/workflow-discovery');
     const { executeWorkflow } = await import('@rith/workflows/executor');
-    const conversationDb = await import('@rith/core/db/conversations');
     const codebaseDb = await import('@rith/core/db/codebases');
 
     (discoverWorkflowsWithConfig as ReturnType<typeof mock>).mockResolvedValueOnce({
       workflows: [makeTestWorkflowWithSource({ name: 'assist', description: 'Help' })],
       errors: [],
     });
-    (conversationDb.getOrCreateConversation as ReturnType<typeof mock>).mockResolvedValueOnce({
-      id: 'conv-123',
-    });
     (codebaseDb.findCodebaseByDefaultCwd as ReturnType<typeof mock>).mockResolvedValueOnce(null);
-    (conversationDb.updateConversation as ReturnType<typeof mock>).mockResolvedValueOnce(undefined);
     (executeWorkflow as ReturnType<typeof mock>).mockResolvedValueOnce({
       success: false,
       error: 'Step failed: assist',
@@ -819,7 +760,6 @@ describe('workflowRunCommand', () => {
   it('passes fromBranch into isolation task request', async () => {
     const { discoverWorkflowsWithConfig } = await import('@rith/workflows/workflow-discovery');
     const { executeWorkflow } = await import('@rith/workflows/executor');
-    const conversationDb = await import('@rith/core/db/conversations');
     const codebaseDb = await import('@rith/core/db/codebases');
     const isolation = await import('@rith/isolation');
 
@@ -827,14 +767,10 @@ describe('workflowRunCommand', () => {
       workflows: [makeTestWorkflowWithSource({ name: 'assist', description: 'Help' })],
       errors: [],
     });
-    (conversationDb.getOrCreateConversation as ReturnType<typeof mock>).mockResolvedValueOnce({
-      id: 'conv-123',
-    });
     (codebaseDb.findCodebaseByDefaultCwd as ReturnType<typeof mock>).mockResolvedValueOnce({
       id: 'cb-123',
       default_cwd: '/test/path',
     });
-    (conversationDb.updateConversation as ReturnType<typeof mock>).mockResolvedValueOnce(undefined);
     (executeWorkflow as ReturnType<typeof mock>).mockResolvedValueOnce({
       success: true,
       workflowRunId: 'run-123',
@@ -896,7 +832,6 @@ describe('workflowRunCommand', () => {
   it('creates worktree with auto-generated branch when no --branch given', async () => {
     const { discoverWorkflowsWithConfig } = await import('@rith/workflows/workflow-discovery');
     const { executeWorkflow } = await import('@rith/workflows/executor');
-    const conversationDb = await import('@rith/core/db/conversations');
     const codebaseDb = await import('@rith/core/db/codebases');
     const isolation = await import('@rith/isolation');
     const isolationDb = await import('@rith/core/db/isolation-environments');
@@ -909,14 +844,10 @@ describe('workflowRunCommand', () => {
       workflows: [makeTestWorkflowWithSource({ name: 'assist', description: 'Help' })],
       errors: [],
     });
-    (conversationDb.getOrCreateConversation as ReturnType<typeof mock>).mockResolvedValueOnce({
-      id: 'conv-123',
-    });
     (codebaseDb.findCodebaseByDefaultCwd as ReturnType<typeof mock>).mockResolvedValueOnce({
       id: 'cb-123',
       default_cwd: '/test/path',
     });
-    (conversationDb.updateConversation as ReturnType<typeof mock>).mockResolvedValueOnce(undefined);
     (executeWorkflow as ReturnType<typeof mock>).mockResolvedValueOnce({
       success: true,
       workflowRunId: 'run-123',
@@ -948,7 +879,6 @@ describe('workflowRunCommand', () => {
   it('skips isolation when --no-worktree flag is set', async () => {
     const { discoverWorkflowsWithConfig } = await import('@rith/workflows/workflow-discovery');
     const { executeWorkflow } = await import('@rith/workflows/executor');
-    const conversationDb = await import('@rith/core/db/conversations');
     const codebaseDb = await import('@rith/core/db/codebases');
     const isolation = await import('@rith/isolation');
 
@@ -963,14 +893,10 @@ describe('workflowRunCommand', () => {
       workflows: [makeTestWorkflowWithSource({ name: 'assist', description: 'Help' })],
       errors: [],
     });
-    (conversationDb.getOrCreateConversation as ReturnType<typeof mock>).mockResolvedValueOnce({
-      id: 'conv-123',
-    });
     (codebaseDb.findCodebaseByDefaultCwd as ReturnType<typeof mock>).mockResolvedValueOnce({
       id: 'cb-123',
       default_cwd: '/test/path',
     });
-    (conversationDb.updateConversation as ReturnType<typeof mock>).mockResolvedValueOnce(undefined);
     (executeWorkflow as ReturnType<typeof mock>).mockResolvedValueOnce({
       success: true,
       workflowRunId: 'run-123',
@@ -993,16 +919,12 @@ describe('workflowRunCommand', () => {
   it('surfaces auto-registration failures instead of claiming the repo is invalid', async () => {
     const { discoverWorkflowsWithConfig } = await import('@rith/workflows/workflow-discovery');
     const { registerRepository } = await import('@rith/core');
-    const conversationDb = await import('@rith/core/db/conversations');
     const codebaseDb = await import('@rith/core/db/codebases');
     const gitModule = await import('@rith/git');
 
     (discoverWorkflowsWithConfig as ReturnType<typeof mock>).mockResolvedValueOnce({
       workflows: [makeTestWorkflowWithSource({ name: 'assist', description: 'Help' })],
       errors: [],
-    });
-    (conversationDb.getOrCreateConversation as ReturnType<typeof mock>).mockResolvedValueOnce({
-      id: 'conv-123',
     });
     (codebaseDb.findCodebaseByDefaultCwd as ReturnType<typeof mock>).mockResolvedValueOnce(null);
     (gitModule.findRepoRoot as ReturnType<typeof mock>).mockResolvedValueOnce('/test/path');
@@ -1028,16 +950,12 @@ describe('workflowRunCommand', () => {
   it('surfaces auto-registration failures on --resume instead of claiming the repo is invalid', async () => {
     const { discoverWorkflowsWithConfig } = await import('@rith/workflows/workflow-discovery');
     const { registerRepository } = await import('@rith/core');
-    const conversationDb = await import('@rith/core/db/conversations');
     const codebaseDb = await import('@rith/core/db/codebases');
     const gitModule = await import('@rith/git');
 
     (discoverWorkflowsWithConfig as ReturnType<typeof mock>).mockResolvedValueOnce({
       workflows: [makeTestWorkflowWithSource({ name: 'assist', description: 'Help' })],
       errors: [],
-    });
-    (conversationDb.getOrCreateConversation as ReturnType<typeof mock>).mockResolvedValueOnce({
-      id: 'conv-123',
     });
     (codebaseDb.findCodebaseByDefaultCwd as ReturnType<typeof mock>).mockResolvedValueOnce(null);
     (gitModule.findRepoRoot as ReturnType<typeof mock>).mockResolvedValueOnce('/test/path');
@@ -1063,16 +981,12 @@ describe('workflowRunCommand', () => {
   it('falls back to generic workspace hint when registration error has an unrecognized shape', async () => {
     const { discoverWorkflowsWithConfig } = await import('@rith/workflows/workflow-discovery');
     const { registerRepository } = await import('@rith/core');
-    const conversationDb = await import('@rith/core/db/conversations');
     const codebaseDb = await import('@rith/core/db/codebases');
     const gitModule = await import('@rith/git');
 
     (discoverWorkflowsWithConfig as ReturnType<typeof mock>).mockResolvedValueOnce({
       workflows: [makeTestWorkflowWithSource({ name: 'assist', description: 'Help' })],
       errors: [],
-    });
-    (conversationDb.getOrCreateConversation as ReturnType<typeof mock>).mockResolvedValueOnce({
-      id: 'conv-123',
     });
     (codebaseDb.findCodebaseByDefaultCwd as ReturnType<typeof mock>).mockResolvedValueOnce(null);
     (gitModule.findRepoRoot as ReturnType<typeof mock>).mockResolvedValueOnce('/test/path');
@@ -1101,7 +1015,6 @@ describe('workflowRunCommand', () => {
   it('skips isolation when workflow YAML pins worktree.enabled: false', async () => {
     const { discoverWorkflowsWithConfig } = await import('@rith/workflows/workflow-discovery');
     const { executeWorkflow } = await import('@rith/workflows/executor');
-    const conversationDb = await import('@rith/core/db/conversations');
     const codebaseDb = await import('@rith/core/db/codebases');
     const isolation = await import('@rith/isolation');
 
@@ -1121,14 +1034,10 @@ describe('workflowRunCommand', () => {
       ],
       errors: [],
     });
-    (conversationDb.getOrCreateConversation as ReturnType<typeof mock>).mockResolvedValueOnce({
-      id: 'conv-123',
-    });
     (codebaseDb.findCodebaseByDefaultCwd as ReturnType<typeof mock>).mockResolvedValueOnce({
       id: 'cb-123',
       default_cwd: '/test/path',
     });
-    (conversationDb.updateConversation as ReturnType<typeof mock>).mockResolvedValueOnce(undefined);
     (executeWorkflow as ReturnType<typeof mock>).mockResolvedValueOnce({
       success: true,
       workflowRunId: 'run-123',
@@ -1185,7 +1094,6 @@ describe('workflowRunCommand', () => {
   it('accepts worktree.enabled: false + --no-worktree as redundant (no error)', async () => {
     const { discoverWorkflowsWithConfig } = await import('@rith/workflows/workflow-discovery');
     const { executeWorkflow } = await import('@rith/workflows/executor');
-    const conversationDb = await import('@rith/core/db/conversations');
     const codebaseDb = await import('@rith/core/db/codebases');
 
     (discoverWorkflowsWithConfig as ReturnType<typeof mock>).mockResolvedValueOnce({
@@ -1198,14 +1106,10 @@ describe('workflowRunCommand', () => {
       ],
       errors: [],
     });
-    (conversationDb.getOrCreateConversation as ReturnType<typeof mock>).mockResolvedValueOnce({
-      id: 'conv-123',
-    });
     (codebaseDb.findCodebaseByDefaultCwd as ReturnType<typeof mock>).mockResolvedValueOnce({
       id: 'cb-123',
       default_cwd: '/test/path',
     });
-    (conversationDb.updateConversation as ReturnType<typeof mock>).mockResolvedValueOnce(undefined);
     (executeWorkflow as ReturnType<typeof mock>).mockResolvedValueOnce({
       success: true,
       workflowRunId: 'run-123',
@@ -1236,16 +1140,12 @@ describe('workflowRunCommand', () => {
 
   it('throws when isolation cannot be created due to missing codebase', async () => {
     const { discoverWorkflowsWithConfig } = await import('@rith/workflows/workflow-discovery');
-    const conversationDb = await import('@rith/core/db/conversations');
     const codebaseDb = await import('@rith/core/db/codebases');
     const gitModule = await import('@rith/git');
 
     (discoverWorkflowsWithConfig as ReturnType<typeof mock>).mockResolvedValueOnce({
       workflows: [makeTestWorkflowWithSource({ name: 'assist', description: 'Help' })],
       errors: [],
-    });
-    (conversationDb.getOrCreateConversation as ReturnType<typeof mock>).mockResolvedValueOnce({
-      id: 'conv-123',
     });
     // No codebase found
     (codebaseDb.findCodebaseByDefaultCwd as ReturnType<typeof mock>).mockResolvedValueOnce(null);
@@ -1260,7 +1160,6 @@ describe('workflowRunCommand', () => {
   it('emits warning when reused worktree has mismatched base branch', async () => {
     const { discoverWorkflowsWithConfig } = await import('@rith/workflows/workflow-discovery');
     const { executeWorkflow } = await import('@rith/workflows/executor');
-    const conversationDb = await import('@rith/core/db/conversations');
     const codebaseDb = await import('@rith/core/db/codebases');
     const isolationDb = await import('@rith/core/db/isolation-environments');
     const gitModule = await import('@rith/git');
@@ -1268,9 +1167,6 @@ describe('workflowRunCommand', () => {
     (discoverWorkflowsWithConfig as ReturnType<typeof mock>).mockResolvedValueOnce({
       workflows: [makeTestWorkflowWithSource({ name: 'assist', description: 'Help' })],
       errors: [],
-    });
-    (conversationDb.getOrCreateConversation as ReturnType<typeof mock>).mockResolvedValueOnce({
-      id: 'conv-123',
     });
     (codebaseDb.findCodebaseByDefaultCwd as ReturnType<typeof mock>).mockResolvedValueOnce({
       id: 'cb-123',
@@ -1284,7 +1180,6 @@ describe('workflowRunCommand', () => {
       workflow_id: 'my-feature',
     });
     (gitModule.isAncestorOf as ReturnType<typeof mock>).mockResolvedValueOnce(false);
-    (conversationDb.updateConversation as ReturnType<typeof mock>).mockResolvedValueOnce(undefined);
     (executeWorkflow as ReturnType<typeof mock>).mockResolvedValueOnce({
       success: true,
       workflowRunId: 'run-123',
@@ -1302,16 +1197,12 @@ describe('workflowRunCommand', () => {
   it('does not emit base branch warning when reused worktree is valid', async () => {
     const { discoverWorkflowsWithConfig } = await import('@rith/workflows/workflow-discovery');
     const { executeWorkflow } = await import('@rith/workflows/executor');
-    const conversationDb = await import('@rith/core/db/conversations');
     const codebaseDb = await import('@rith/core/db/codebases');
     const isolationDb = await import('@rith/core/db/isolation-environments');
 
     (discoverWorkflowsWithConfig as ReturnType<typeof mock>).mockResolvedValueOnce({
       workflows: [makeTestWorkflowWithSource({ name: 'assist', description: 'Help' })],
       errors: [],
-    });
-    (conversationDb.getOrCreateConversation as ReturnType<typeof mock>).mockResolvedValueOnce({
-      id: 'conv-123',
     });
     (codebaseDb.findCodebaseByDefaultCwd as ReturnType<typeof mock>).mockResolvedValueOnce({
       id: 'cb-123',
@@ -1325,7 +1216,6 @@ describe('workflowRunCommand', () => {
       workflow_id: 'my-feature',
     });
     // isAncestorOf returns true by default — no warning expected
-    (conversationDb.updateConversation as ReturnType<typeof mock>).mockResolvedValueOnce(undefined);
     (executeWorkflow as ReturnType<typeof mock>).mockResolvedValueOnce({
       success: true,
       workflowRunId: 'run-123',
@@ -1428,7 +1318,6 @@ describe('workflowRunCommand', () => {
   it('does not send result card when executeWorkflow has no summary', async () => {
     const { discoverWorkflowsWithConfig } = await import('@rith/workflows/workflow-discovery');
     const { executeWorkflow } = await import('@rith/workflows/executor');
-    const conversationDb = await import('@rith/core/db/conversations');
     const codebaseDb = await import('@rith/core/db/codebases');
     const messagesDb = await import('@rith/core/db/messages');
 
@@ -1436,11 +1325,7 @@ describe('workflowRunCommand', () => {
       workflows: [makeTestWorkflowWithSource({ name: 'assist', description: 'Help' })],
       errors: [],
     });
-    (conversationDb.getOrCreateConversation as ReturnType<typeof mock>).mockResolvedValueOnce({
-      id: 'conv-123',
-    });
     (codebaseDb.findCodebaseByDefaultCwd as ReturnType<typeof mock>).mockResolvedValueOnce(null);
-    (conversationDb.updateConversation as ReturnType<typeof mock>).mockResolvedValueOnce(undefined);
     (executeWorkflow as ReturnType<typeof mock>).mockResolvedValueOnce({
       success: true,
       workflowRunId: 'run-1',
@@ -1500,7 +1385,6 @@ describe('workflowRunCommand', () => {
   it('does not throw and continues to executeWorkflow when dispatch sendMessage fails', async () => {
     const { discoverWorkflowsWithConfig } = await import('@rith/workflows/workflow-discovery');
     const { executeWorkflow } = await import('@rith/workflows/executor');
-    const conversationDb = await import('@rith/core/db/conversations');
     const codebaseDb = await import('@rith/core/db/codebases');
     const messagesDb = await import('@rith/core/db/messages');
 
@@ -1508,11 +1392,7 @@ describe('workflowRunCommand', () => {
       workflows: [makeTestWorkflowWithSource({ name: 'assist', description: 'Help' })],
       errors: [],
     });
-    (conversationDb.getOrCreateConversation as ReturnType<typeof mock>).mockResolvedValueOnce({
-      id: 'conv-123',
-    });
     (codebaseDb.findCodebaseByDefaultCwd as ReturnType<typeof mock>).mockResolvedValueOnce(null);
-    (conversationDb.updateConversation as ReturnType<typeof mock>).mockResolvedValueOnce(undefined);
     (executeWorkflow as ReturnType<typeof mock>).mockClear();
     (executeWorkflow as ReturnType<typeof mock>).mockResolvedValueOnce({
       success: true,
@@ -1535,7 +1415,6 @@ describe('workflowRunCommand', () => {
   it('does not send result card when workflow is paused even with summary', async () => {
     const { discoverWorkflowsWithConfig } = await import('@rith/workflows/workflow-discovery');
     const { executeWorkflow } = await import('@rith/workflows/executor');
-    const conversationDb = await import('@rith/core/db/conversations');
     const codebaseDb = await import('@rith/core/db/codebases');
     const messagesDb = await import('@rith/core/db/messages');
 
@@ -1543,11 +1422,7 @@ describe('workflowRunCommand', () => {
       workflows: [makeTestWorkflowWithSource({ name: 'assist', description: 'Help' })],
       errors: [],
     });
-    (conversationDb.getOrCreateConversation as ReturnType<typeof mock>).mockResolvedValueOnce({
-      id: 'conv-123',
-    });
     (codebaseDb.findCodebaseByDefaultCwd as ReturnType<typeof mock>).mockResolvedValueOnce(null);
-    (conversationDb.updateConversation as ReturnType<typeof mock>).mockResolvedValueOnce(undefined);
     (executeWorkflow as ReturnType<typeof mock>).mockResolvedValueOnce({
       success: true,
       workflowRunId: 'run-paused',
@@ -2547,16 +2422,6 @@ describe('workflowRunCommand — progress rendering', () => {
     discoverMock.mockResolvedValueOnce({
       workflows: [makeTestWorkflowWithSource({ name: 'plan', description: 'Plan work' })],
       errors: [],
-    });
-
-    const conversationDb = require('@rith/core/db/conversations');
-    (conversationDb.getOrCreateConversation as ReturnType<typeof mock>).mockResolvedValueOnce({
-      id: 'conv-1',
-      platform: 'cli',
-      platform_conversation_id: 'cli-123',
-      title: null,
-      is_active: true,
-      codebase_id: null,
     });
 
     const codebaseDb = require('@rith/core/db/codebases');

@@ -61,7 +61,7 @@ describe('env-vars', () => {
     test('issues DELETE with codebaseId and key', async () => {
       await deleteCodebaseEnvVar('codebase-1', 'MY_KEY');
       const [sql, params] = mockQuery.mock.calls[0] as [string, unknown[]];
-      expect(sql).toContain('DELETE FROM remote_agent_codebase_env_vars');
+      expect(sql).toContain('DELETE FROM codebase_env_vars');
       expect(params).toEqual(['codebase-1', 'MY_KEY']);
     });
   });

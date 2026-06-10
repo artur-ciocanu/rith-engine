@@ -138,8 +138,6 @@ async function registerRepoAtPath(
   name: string,
   repositoryUrl: string | null
 ): Promise<RegisterResult> {
-  const suggestedAssistant = 'pi';
-
   // Check if a codebase with this name already exists (dedup by project identity)
   const existing = await codebaseDb.findCodebaseByName(name);
   if (existing) {
@@ -200,7 +198,6 @@ async function registerRepoAtPath(
     name,
     repository_url: repositoryUrl ?? undefined,
     default_cwd: targetPath,
-    ai_assistant_type: suggestedAssistant,
   });
 
   // Auto-load commands if found

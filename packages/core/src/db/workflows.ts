@@ -55,7 +55,6 @@ export async function createWorkflowRun(data: {
   user_message: string;
   metadata?: WorkflowRunMetadata;
   working_path?: string;
-  parent_conversation_id?: string;
 }): Promise<WorkflowRun> {
   // Serialize metadata with validation to catch circular references early
   let metadataJson: string;
@@ -89,9 +88,9 @@ export async function createWorkflowRun(data: {
 
   try {
     const result = await pool.query<WorkflowRun>(
-      `INSERT INTO remote_agent_workflow_runs
-       (workflow_name, conversation_id, codebase_id, user_message, metadata, working_path, parent_conversation_id)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)
+      `INSERT INTO workflow_runs
+       (workflow_name, conversation_id, codebase_id, user_message, metadata, working_path)
+       VALUES ($1, $2, $3, $4, $5, $6)
        RETURNING *`,
       [
         data.workflow_name,
@@ -100,7 +99,6 @@ export async function createWorkflowRun(data: {
         data.user_message,
         metadataJson,
         data.working_path ?? null,
-        data.parent_conversation_id ?? null,
       ]
     );
     const row = result.rows[0];
@@ -119,10 +117,7 @@ export async function createWorkflowRun(data: {
 
 export async function getWorkflowRun(id: string): Promise<WorkflowRun | null> {
   try {
-    const result = await pool.query<WorkflowRun>(
-      'SELECT * FROM remote_agent_workflow_runs WHERE id = $1',
-      [id]
-    );
+    const result = await pool.query<WorkflowRun>('SELECT * FROM workflow_runs WHERE id = $1', [id]);
     const row = result.rows[0];
     return row ? normalizeWorkflowRun(row) : null;
   } catch (error) {
@@ -135,7 +130,7 @@ export async function getWorkflowRun(id: string): Promise<WorkflowRun | null> {
 export async function getWorkflowRunStatus(id: string): Promise<string | null> {
   try {
     const result = await pool.query<{ status: string }>(
-      'SELECT status FROM remote_agent_workflow_runs WHERE id = $1',
+      'SELECT status FROM workflow_runs WHERE id = $1',
       [id]
     );
     return result.rows[0]?.status ?? null;
@@ -149,10 +144,10 @@ export async function getWorkflowRunStatus(id: string): Promise<string | null> {
 export async function getActiveWorkflowRun(conversationId: string): Promise<WorkflowRun | null> {
   try {
     const result = await pool.query<WorkflowRun>(
-      `SELECT * FROM remote_agent_workflow_runs
-       WHERE (conversation_id = $1 OR parent_conversation_id = $2) AND status = 'running'
+      `SELECT * FROM workflow_runs
+       WHERE conversation_id = $1 AND status = 'running'
        ORDER BY started_at DESC LIMIT 1`,
-      [conversationId, conversationId]
+      [conversationId]
     );
     const row = result.rows[0];
     return row ? normalizeWorkflowRun(row) : null;
@@ -171,10 +166,10 @@ export async function getActiveWorkflowRun(conversationId: string): Promise<Work
 export async function getPausedWorkflowRun(conversationId: string): Promise<WorkflowRun | null> {
   try {
     const result = await pool.query<WorkflowRun>(
-      `SELECT * FROM remote_agent_workflow_runs
-       WHERE (conversation_id = $1 OR parent_conversation_id = $2) AND status = 'paused'
+      `SELECT * FROM workflow_runs
+       WHERE conversation_id = $1 AND status = 'paused'
        ORDER BY started_at DESC LIMIT 1`,
-      [conversationId, conversationId]
+      [conversationId]
     );
     const row = result.rows[0];
     return row ? normalizeWorkflowRun(row) : null;
@@ -243,7 +238,7 @@ export async function getActiveWorkflowRunByPath(
 
   try {
     const result = await pool.query<WorkflowRun>(
-      `SELECT * FROM remote_agent_workflow_runs
+      `SELECT * FROM workflow_runs
        WHERE ${clauses.join(' AND ')}
        ORDER BY started_at ASC, id ASC LIMIT 1`,
       params
@@ -260,7 +255,7 @@ export async function getActiveWorkflowRunByPath(
 export async function findLatestRunByWorkingPath(workingPath: string): Promise<WorkflowRun | null> {
   try {
     const result = await pool.query<WorkflowRun>(
-      `SELECT * FROM remote_agent_workflow_runs
+      `SELECT * FROM workflow_runs
        WHERE working_path = $1
        ORDER BY started_at DESC
        LIMIT 1`,
@@ -285,7 +280,7 @@ export async function getRunningWorkflows(): Promise<
       workflow_name: string;
       started_at: string;
     }>(
-      "SELECT id, conversation_id, workflow_name, started_at FROM remote_agent_workflow_runs WHERE status = 'running' ORDER BY started_at ASC LIMIT 100",
+      "SELECT id, conversation_id, workflow_name, started_at FROM workflow_runs WHERE status = 'running' ORDER BY started_at ASC LIMIT 100",
       []
     );
     return [...result.rows];
@@ -303,7 +298,7 @@ export async function findResumableRun(
   const dialect = getDialect();
   try {
     const result = await pool.query<WorkflowRun>(
-      `SELECT * FROM remote_agent_workflow_runs
+      `SELECT * FROM workflow_runs
        WHERE workflow_name = $1
          AND working_path = $2
          AND (
@@ -346,7 +341,7 @@ export async function resumeWorkflowRun(id: string): Promise<WorkflowRun> {
     // The original creation time can be recovered from workflow_events
     // history if needed for analytics.
     updateResult = await pool.query(
-      `UPDATE remote_agent_workflow_runs
+      `UPDATE workflow_runs
        SET status = 'running',
            completed_at = NULL,
            started_at = ${dialect.now()},
@@ -368,10 +363,7 @@ export async function resumeWorkflowRun(id: string): Promise<WorkflowRun> {
 
   let selectResult: Awaited<ReturnType<typeof pool.query<WorkflowRun>>>;
   try {
-    selectResult = await pool.query<WorkflowRun>(
-      'SELECT * FROM remote_agent_workflow_runs WHERE id = $1',
-      [id]
-    );
+    selectResult = await pool.query<WorkflowRun>('SELECT * FROM workflow_runs WHERE id = $1', [id]);
   } catch (error) {
     const err = error as Error;
     getLog().error({ err, workflowRunId: id }, 'db.workflow_run_resume_select_failed');
@@ -438,7 +430,7 @@ export async function updateWorkflowRun(
 
   try {
     const result = await pool.query(
-      `UPDATE remote_agent_workflow_runs SET ${setClauses.join(', ')} WHERE id = ${idParam}`,
+      `UPDATE workflow_runs SET ${setClauses.join(', ')} WHERE id = ${idParam}`,
       values
     );
     if (result.rowCount === 0) {
@@ -462,14 +454,14 @@ export async function completeWorkflowRun(
   try {
     if (metadata) {
       result = await pool.query(
-        `UPDATE remote_agent_workflow_runs
+        `UPDATE workflow_runs
          SET status = 'completed', completed_at = ${dialect.now()}, metadata = ${dialect.jsonMerge('metadata', 2)}
          WHERE id = $1 AND status = 'running'`,
         [id, JSON.stringify(metadata)]
       );
     } else {
       result = await pool.query(
-        `UPDATE remote_agent_workflow_runs
+        `UPDATE workflow_runs
          SET status = 'completed', completed_at = ${dialect.now()}
          WHERE id = $1 AND status = 'running'`,
         [id]
@@ -491,7 +483,7 @@ export async function failWorkflowRun(id: string, error: string): Promise<void> 
   let result: Awaited<ReturnType<IDatabase['query']>>;
   try {
     result = await pool.query(
-      `UPDATE remote_agent_workflow_runs
+      `UPDATE workflow_runs
        SET status = 'failed', completed_at = ${dialect.now()}, metadata = ${dialect.jsonMerge('metadata', 2)}
        WHERE id = $1 AND status = 'running'`,
       [id, JSON.stringify({ error })]
@@ -515,7 +507,7 @@ export async function cancelWorkflowRun(id: string): Promise<void> {
     // may transition to cancelled. Without this, cancelling an already
     // completed/failed/cancelled run would corrupt its terminal status.
     result = await pool.query(
-      `UPDATE remote_agent_workflow_runs
+      `UPDATE workflow_runs
        SET status = 'cancelled', completed_at = ${dialect.now()}
        WHERE id = $1 AND status NOT IN ('completed', 'failed', 'cancelled')`,
       [id]
@@ -544,7 +536,7 @@ export async function pauseWorkflowRun(
   const dialect = getDialect();
   try {
     const result = await pool.query(
-      `UPDATE remote_agent_workflow_runs
+      `UPDATE workflow_runs
        SET status = 'paused', metadata = ${dialect.jsonMerge('metadata', 2)}
        WHERE id = $1 AND status = 'running'`,
       [id, JSON.stringify({ approval: approvalContext })]
@@ -599,7 +591,7 @@ export async function listWorkflowRuns(options?: {
 
   try {
     const result = await pool.query<WorkflowRun>(
-      `SELECT * FROM remote_agent_workflow_runs ${whereStr} ORDER BY started_at DESC LIMIT ${limitParam}`,
+      `SELECT * FROM workflow_runs ${whereStr} ORDER BY started_at DESC LIMIT ${limitParam}`,
       values
     );
     return result.rows.map(normalizeWorkflowRun);
@@ -617,39 +609,9 @@ export async function listWorkflowRuns(options?: {
  */
 export async function updateWorkflowActivity(id: string): Promise<void> {
   const dialect = getDialect();
-  await pool.query(
-    `UPDATE remote_agent_workflow_runs SET last_activity_at = ${dialect.now()} WHERE id = $1`,
-    [id]
-  );
-}
-
-/**
- * Transition all 'running' workflow runs to 'failed'.
- * Called on server startup to mark runs orphaned by process termination.
- * The next invocation of the same workflow at the same path will auto-resume
- * from completed nodes via findResumableRun.
- */
-export async function failOrphanedRuns(): Promise<{ count: number }> {
-  const dialect = getDialect();
-  try {
-    const result = await pool.query(
-      `UPDATE remote_agent_workflow_runs
-       SET status = 'failed',
-           completed_at = ${dialect.now()},
-           metadata = ${dialect.jsonMerge('metadata', 1)}
-       WHERE status = 'running'`,
-      [JSON.stringify({ failure_reason: 'server_restart' })]
-    );
-    const count = result.rowCount ?? 0;
-    if (count > 0) {
-      getLog().info({ count }, 'db.orphaned_workflow_runs_failed');
-    }
-    return { count };
-  } catch (error) {
-    const err = error as Error;
-    getLog().error({ err }, 'db.orphaned_workflow_runs_fail_failed');
-    throw new Error(`Failed to fail orphaned workflow runs: ${err.message}`);
-  }
+  await pool.query(`UPDATE workflow_runs SET last_activity_at = ${dialect.now()} WHERE id = $1`, [
+    id,
+  ]);
 }
 
 /**

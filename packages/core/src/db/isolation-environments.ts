@@ -22,7 +22,7 @@ function getLog(): ReturnType<typeof createLogger> {
  */
 export async function getById(id: string): Promise<IsolationEnvironmentRow | null> {
   const result = await pool.query<IsolationEnvironmentRow>(
-    'SELECT * FROM remote_agent_isolation_environments WHERE id = $1',
+    'SELECT * FROM isolation_environments WHERE id = $1',
     [id]
   );
   return result.rows[0] ?? null;
@@ -37,7 +37,7 @@ export async function findActiveByWorkflow(
   workflowId: string
 ): Promise<IsolationEnvironmentRow | null> {
   const result = await pool.query<IsolationEnvironmentRow>(
-    `SELECT * FROM remote_agent_isolation_environments
+    `SELECT * FROM isolation_environments
      WHERE codebase_id = $1 AND workflow_type = $2 AND workflow_id = $3 AND status = 'active'`,
     [codebaseId, workflowType, workflowId]
   );
@@ -51,7 +51,7 @@ export async function listByCodebase(
   codebaseId: string
 ): Promise<readonly IsolationEnvironmentRow[]> {
   const result = await pool.query<IsolationEnvironmentRow>(
-    `SELECT * FROM remote_agent_isolation_environments
+    `SELECT * FROM isolation_environments
      WHERE codebase_id = $1 AND status = 'active'
      ORDER BY created_at DESC`,
     [codebaseId]
@@ -67,15 +67,14 @@ export async function listByCodebase(
 export async function create(env: CreateEnvironmentParams): Promise<IsolationEnvironmentRow> {
   const dialect = getDialect();
   const result = await pool.query<IsolationEnvironmentRow>(
-    `INSERT INTO remote_agent_isolation_environments
-     (codebase_id, workflow_type, workflow_id, provider, working_path, branch_name, created_by_platform, metadata)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+    `INSERT INTO isolation_environments
+     (codebase_id, workflow_type, workflow_id, provider, working_path, branch_name, metadata)
+     VALUES ($1, $2, $3, $4, $5, $6, $7)
      ON CONFLICT (codebase_id, workflow_type, workflow_id) WHERE status = 'active'
      DO UPDATE SET
        working_path = EXCLUDED.working_path,
        branch_name = EXCLUDED.branch_name,
        provider = EXCLUDED.provider,
-       created_by_platform = EXCLUDED.created_by_platform,
        metadata = EXCLUDED.metadata,
        status = 'active',
        created_at = ${dialect.now()}
@@ -87,7 +86,6 @@ export async function create(env: CreateEnvironmentParams): Promise<IsolationEnv
       env.provider ?? 'worktree',
       env.working_path,
       env.branch_name,
-      env.created_by_platform ?? null,
       JSON.stringify(env.metadata ?? {}),
     ]
   );
@@ -107,10 +105,10 @@ export async function create(env: CreateEnvironmentParams): Promise<IsolationEnv
  * Update environment status
  */
 export async function updateStatus(id: string, status: 'active' | 'destroyed'): Promise<void> {
-  const result = await pool.query(
-    'UPDATE remote_agent_isolation_environments SET status = $1 WHERE id = $2',
-    [status, id]
-  );
+  const result = await pool.query('UPDATE isolation_environments SET status = $1 WHERE id = $2', [
+    status,
+    id,
+  ]);
 
   if (result.rowCount === 0) {
     throw new Error(
@@ -126,7 +124,7 @@ export async function updateStatus(id: string, status: 'active' | 'destroyed'): 
 export async function updateMetadata(id: string, metadata: Record<string, unknown>): Promise<void> {
   const dialect = getDialect();
   const result = await pool.query(
-    `UPDATE remote_agent_isolation_environments
+    `UPDATE isolation_environments
      SET metadata = ${dialect.jsonMerge('metadata', 1)}
      WHERE id = $2`,
     [JSON.stringify(metadata), id]
@@ -148,7 +146,7 @@ export async function findByRelatedIssue(
 ): Promise<IsolationEnvironmentRow | null> {
   const dialect = getDialect();
   const result = await pool.query<IsolationEnvironmentRow>(
-    `SELECT * FROM remote_agent_isolation_environments
+    `SELECT * FROM isolation_environments
      WHERE codebase_id = $1
        AND status = 'active'
        AND ${dialect.jsonArrayContains('metadata', 'related_issues', 2)}
@@ -163,7 +161,7 @@ export async function findByRelatedIssue(
  */
 export async function countActiveByCodebase(codebaseId: string): Promise<number> {
   const result = await pool.query<{ count: string }>(
-    `SELECT COUNT(*) as count FROM remote_agent_isolation_environments
+    `SELECT COUNT(*) as count FROM isolation_environments
      WHERE codebase_id = $1 AND status = 'active'`,
     [codebaseId]
   );
@@ -184,10 +182,9 @@ export async function findStaleEnvironments(
 
   const result = await pool.query<IsolationEnvironmentRow & { codebase_default_cwd: string }>(
     `SELECT e.*, c.default_cwd as codebase_default_cwd
-     FROM remote_agent_isolation_environments e
-     JOIN remote_agent_codebases c ON e.codebase_id = c.id
+     FROM isolation_environments e
+     JOIN codebases c ON e.codebase_id = c.id
      WHERE e.status = 'active'
-       AND e.created_by_platform != 'telegram'
        AND e.updated_at < ${staleActivityThreshold}
        AND e.created_at < ${staleCreationThreshold}`,
     [staleDays, staleDays]
@@ -205,8 +202,8 @@ export async function findActiveByBranchName(
 ): Promise<(IsolationEnvironmentRow & { codebase_default_cwd: string }) | null> {
   const result = await pool.query<IsolationEnvironmentRow & { codebase_default_cwd: string }>(
     `SELECT e.*, c.default_cwd as codebase_default_cwd
-     FROM remote_agent_isolation_environments e
-     JOIN remote_agent_codebases c ON e.codebase_id = c.id
+     FROM isolation_environments e
+     JOIN codebases c ON e.codebase_id = c.id
      WHERE e.branch_name = $1 AND e.status = 'active'
      ORDER BY e.created_at DESC
      LIMIT 1`,
@@ -231,8 +228,8 @@ export async function listAllActiveWithCodebase(): Promise<
     }
   >(
     `SELECT e.*, c.default_cwd as codebase_default_cwd, c.repository_url as codebase_repository_url
-     FROM remote_agent_isolation_environments e
-     JOIN remote_agent_codebases c ON e.codebase_id = c.id
+     FROM isolation_environments e
+     JOIN codebases c ON e.codebase_id = c.id
      WHERE e.status = 'active'
      ORDER BY e.created_at DESC`
   );
@@ -252,7 +249,7 @@ export async function listByCodebaseWithAge(
   const result = await pool.query<IsolationEnvironmentRow & { days_since_activity: number }>(
     `SELECT e.*,
             ${daysSinceUpdated} as days_since_activity
-     FROM remote_agent_isolation_environments e
+     FROM isolation_environments e
      WHERE e.codebase_id = $1 AND e.status = 'active'
      ORDER BY e.created_at DESC`,
     [codebaseId]

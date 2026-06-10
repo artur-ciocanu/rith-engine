@@ -25,7 +25,6 @@ import {
   updateWorkflowActivity,
   findResumableRun,
   resumeWorkflowRun,
-  failOrphanedRuns,
   listWorkflowRuns,
   deleteOldWorkflowRuns,
   deleteWorkflowRun,
@@ -41,7 +40,6 @@ describe('workflows database', () => {
     id: 'workflow-run-123',
     workflow_name: 'feature-development',
     conversation_id: 'conv-456',
-    parent_conversation_id: null,
     codebase_id: 'codebase-789',
     status: 'running',
     user_message: 'Add dark mode support',
@@ -65,16 +63,11 @@ describe('workflows database', () => {
 
       expect(result).toEqual(mockWorkflowRun);
       expect(mockQuery).toHaveBeenCalledWith(
-        expect.stringContaining('INSERT INTO remote_agent_workflow_runs'),
-        [
-          'feature-development',
-          'conv-456',
-          'codebase-789',
-          'Add dark mode support',
-          '{}',
-          null,
-          null,
-        ]
+        expect.stringContaining(`INSERT INTO workflow_runs
+       (workflow_name, conversation_id, codebase_id, user_message, metadata, working_path)
+       VALUES ($1, $2, $3, $4, $5, $6)
+       RETURNING *`),
+        ['feature-development', 'conv-456', 'codebase-789', 'Add dark mode support', '{}', null]
       );
     });
 
@@ -95,14 +88,16 @@ describe('workflows database', () => {
 
       expect(result.metadata).toEqual({ github_context: 'Issue #42 context' });
       expect(mockQuery).toHaveBeenCalledWith(
-        expect.stringContaining('INSERT INTO remote_agent_workflow_runs'),
+        expect.stringContaining(`INSERT INTO workflow_runs
+       (workflow_name, conversation_id, codebase_id, user_message, metadata, working_path)
+       VALUES ($1, $2, $3, $4, $5, $6)
+       RETURNING *`),
         [
           'feature-development',
           'conv-456',
           'codebase-789',
           'Add dark mode support',
           JSON.stringify({ github_context: 'Issue #42 context' }),
-          null,
           null,
         ]
       );
@@ -120,8 +115,11 @@ describe('workflows database', () => {
 
       expect(result.codebase_id).toBeNull();
       expect(mockQuery).toHaveBeenCalledWith(
-        expect.stringContaining('INSERT INTO remote_agent_workflow_runs'),
-        ['feature-development', 'conv-456', null, 'Add dark mode support', '{}', null, null]
+        expect.stringContaining(`INSERT INTO workflow_runs
+       (workflow_name, conversation_id, codebase_id, user_message, metadata, working_path)
+       VALUES ($1, $2, $3, $4, $5, $6)
+       RETURNING *`),
+        ['feature-development', 'conv-456', null, 'Add dark mode support', '{}', null]
       );
     });
   });
@@ -133,10 +131,9 @@ describe('workflows database', () => {
       const result = await getWorkflowRun('workflow-run-123');
 
       expect(result).toEqual(mockWorkflowRun);
-      expect(mockQuery).toHaveBeenCalledWith(
-        'SELECT * FROM remote_agent_workflow_runs WHERE id = $1',
-        ['workflow-run-123']
-      );
+      expect(mockQuery).toHaveBeenCalledWith('SELECT * FROM workflow_runs WHERE id = $1', [
+        'workflow-run-123',
+      ]);
     });
 
     test('returns null for non-existent workflow run', async () => {
@@ -155,10 +152,9 @@ describe('workflows database', () => {
       const result = await getWorkflowRunStatus('workflow-run-123');
 
       expect(result).toBe('running');
-      expect(mockQuery).toHaveBeenCalledWith(
-        'SELECT status FROM remote_agent_workflow_runs WHERE id = $1',
-        ['workflow-run-123']
-      );
+      expect(mockQuery).toHaveBeenCalledWith('SELECT status FROM workflow_runs WHERE id = $1', [
+        'workflow-run-123',
+      ]);
     });
 
     test('returns null for non-existent workflow run', async () => {
@@ -186,10 +182,8 @@ describe('workflows database', () => {
 
       expect(result).toEqual(mockWorkflowRun);
       expect(mockQuery).toHaveBeenCalledWith(
-        expect.stringContaining(
-          "(conversation_id = $1 OR parent_conversation_id = $2) AND status = 'running'"
-        ),
-        ['conv-456', 'conv-456']
+        expect.stringContaining("conversation_id = $1 AND status = 'running'"),
+        ['conv-456']
       );
     });
 
@@ -486,7 +480,7 @@ describe('workflows database', () => {
       await updateWorkflowActivity('workflow-run-123');
 
       expect(mockQuery).toHaveBeenCalledWith(
-        "UPDATE remote_agent_workflow_runs SET last_activity_at = datetime('now') WHERE id = $1",
+        "UPDATE workflow_runs SET last_activity_at = datetime('now') WHERE id = $1",
         ['workflow-run-123']
       );
     });
@@ -699,37 +693,6 @@ describe('workflows database', () => {
     });
   });
 
-  describe('failOrphanedRuns', () => {
-    test('transitions all running runs to failed with completed_at and returns count', async () => {
-      mockQuery.mockResolvedValueOnce(createQueryResult([], 2));
-
-      const result = await failOrphanedRuns();
-
-      expect(result.count).toBe(2);
-      const [query, params] = mockQuery.mock.calls[0] as [string, unknown[]];
-      expect(query).toContain("status = 'failed'");
-      expect(query).toContain("completed_at = datetime('now')");
-      expect(query).toContain("status = 'running'");
-      expect(params).toContain(JSON.stringify({ failure_reason: 'server_restart' }));
-    });
-
-    test('returns count 0 when no running runs exist', async () => {
-      mockQuery.mockResolvedValueOnce(createQueryResult([], 0));
-
-      const result = await failOrphanedRuns();
-
-      expect(result.count).toBe(0);
-    });
-
-    test('throws on database error', async () => {
-      mockQuery.mockRejectedValueOnce(new Error('Connection lost'));
-
-      await expect(failOrphanedRuns()).rejects.toThrow(
-        'Failed to fail orphaned workflow runs: Connection lost'
-      );
-    });
-  });
-
   describe('resumeWorkflowRun', () => {
     test('updates run to running, clears completed_at, and returns updated row', async () => {
       const updatedRun = { ...mockWorkflowRun, status: 'running' as const, completed_at: null };
@@ -824,7 +787,7 @@ describe('workflows database', () => {
       const [beginSql] = mockQuery.mock.calls[0] as [string, unknown[]];
       expect(beginSql).toBe('BEGIN');
       const [eventsSql] = mockQuery.mock.calls[1] as [string, unknown[]];
-      expect(eventsSql).toContain('remote_agent_workflow_events');
+      expect(eventsSql).toContain('workflow_events');
       const [runsSql] = mockQuery.mock.calls[2] as [string, unknown[]];
       expect(runsSql).toContain("status IN ('completed', 'failed', 'cancelled')");
       const [commitSql] = mockQuery.mock.calls[3] as [string, unknown[]];
@@ -871,9 +834,9 @@ describe('workflows database', () => {
       const [selectSql] = mockQuery.mock.calls[1] as [string, unknown[]];
       expect(selectSql).toContain('SELECT status');
       const [eventsSql] = mockQuery.mock.calls[2] as [string, unknown[]];
-      expect(eventsSql).toContain('remote_agent_workflow_events');
+      expect(eventsSql).toContain('workflow_events');
       const [runsSql] = mockQuery.mock.calls[3] as [string, unknown[]];
-      expect(runsSql).toContain('remote_agent_workflow_runs');
+      expect(runsSql).toContain('workflow_runs');
     });
 
     test('throws "not found" when run does not exist', async () => {

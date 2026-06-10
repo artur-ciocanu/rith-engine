@@ -27,6 +27,19 @@ below. Two non-blocking OPEN side-issues remain unscheduled (cross-package
 schema-bootstrap gap and the SQLite/PG dialect-divergence risk are both **resolved by
 removing PostgreSQL entirely** — Rith Engine is now SQLite-only.
 
+**P0 fixed + DB schema de-Archon'd (this session).** A graphify-driven architecture review
+found that `rith run` was **broken on every real DB**: `workflow_runs.conversation_id` kept a
+`NOT NULL REFERENCES remote_agent_conversations(id)` FK (with `PRAGMA foreign_keys=ON`) but the
+conversations concept had been removed from code, so `createWorkflowRun` always failed with
+`FOREIGN KEY constraint failed` (invisible to CI — every workflow test mocks the DB). Fix: dropped
+the vestigial `conversations` table and its FK; `conversation_id` is now a plain CLI session key.
+While there, kept-only-what's-necessary: renamed the `remote_agent_*` Archon table prefix to clean
+names (`codebases`, `codebase_env_vars`, `isolation_environments`, `workflow_runs`,
+`workflow_events`); dropped dead columns (`parent_conversation_id`, `current_step_index`,
+`ai_assistant_type`, `created_by_platform`) and the dead `failOrphanedRuns`; added an idempotent
+`migrateLegacySchema()` rebuild (copies kept data, drops legacy tables, 0 FK violations) plus the
+missing `working_path` index. Regression + migration tests added against real `bun:sqlite`.
+
 ---
 
 ## Progress at a glance

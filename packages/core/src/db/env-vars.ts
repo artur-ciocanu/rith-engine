@@ -22,7 +22,7 @@ export interface CodebaseEnvVar {
 /** Get all env vars for a codebase as a flat Record. */
 export async function getCodebaseEnvVars(codebaseId: string): Promise<Record<string, string>> {
   const result = await pool.query<CodebaseEnvVar>(
-    'SELECT key, value FROM remote_agent_codebase_env_vars WHERE codebase_id = $1 ORDER BY key ASC',
+    'SELECT key, value FROM codebase_env_vars WHERE codebase_id = $1 ORDER BY key ASC',
     [codebaseId]
   );
   return Object.fromEntries(result.rows.map(r => [r.key, r.value]));
@@ -37,7 +37,7 @@ export async function setCodebaseEnvVar(
   const dialect = getDialect();
   const id = dialect.generateUuid();
   await pool.query(
-    `INSERT INTO remote_agent_codebase_env_vars (id, codebase_id, key, value)
+    `INSERT INTO codebase_env_vars (id, codebase_id, key, value)
      VALUES ($1, $2, $3, $4)
      ON CONFLICT (codebase_id, key) DO UPDATE SET value = $4, updated_at = ${dialect.now()}`,
     [id, codebaseId, key, value]
@@ -47,9 +47,9 @@ export async function setCodebaseEnvVar(
 
 /** Delete a single env var. No-op if key doesn't exist. */
 export async function deleteCodebaseEnvVar(codebaseId: string, key: string): Promise<void> {
-  await pool.query(
-    'DELETE FROM remote_agent_codebase_env_vars WHERE codebase_id = $1 AND key = $2',
-    [codebaseId, key]
-  );
+  await pool.query('DELETE FROM codebase_env_vars WHERE codebase_id = $1 AND key = $2', [
+    codebaseId,
+    key,
+  ]);
   getLog().debug({ codebaseId, key }, 'db.env_var_delete_completed');
 }
