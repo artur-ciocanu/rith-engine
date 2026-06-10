@@ -22,6 +22,11 @@ mock.module('../db/workflow-events', () => ({
   createWorkflowEvent: mockCreateWorkflowEvent,
 }));
 
+const mockPoolQuery = mock(() => Promise.resolve({ rows: [], rowCount: 0 }));
+mock.module('../db/connection', () => ({
+  pool: { query: mockPoolQuery },
+}));
+
 const mockLogger = {
   fatal: mock(() => undefined),
   error: mock(() => undefined),
@@ -97,6 +102,7 @@ describe('approveWorkflow', () => {
     expect(mockUpdateWorkflowRun).toHaveBeenCalledWith('run-1', {
       status: 'failed',
       metadata: { approval_response: 'approved', rejection_reason: '', rejection_count: 0 },
+      fromStatus: 'paused',
     });
   });
 
@@ -126,6 +132,7 @@ describe('approveWorkflow', () => {
     expect(mockUpdateWorkflowRun).toHaveBeenCalledWith('run-1', {
       status: 'failed',
       metadata: { loop_user_input: 'fix the tests' },
+      fromStatus: 'paused',
     });
   });
 
@@ -199,6 +206,7 @@ describe('rejectWorkflow', () => {
     expect(mockUpdateWorkflowRun).toHaveBeenCalledWith('run-1', {
       status: 'failed',
       metadata: { rejection_reason: 'needs more tests', rejection_count: 1 },
+      fromStatus: 'paused',
     });
   });
 

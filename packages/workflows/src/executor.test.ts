@@ -255,7 +255,10 @@ describe('executeWorkflow', () => {
 
       // Without this, every guard-blocked dispatch would leak a `pending`
       // row that briefly blocks future dispatches via the lock query.
-      expect(updateSpy).toHaveBeenCalledWith('self-run-789', { status: 'cancelled' });
+      expect(updateSpy).toHaveBeenCalledWith('self-run-789', {
+        status: 'cancelled',
+        fromStatus: 'pending',
+      });
     });
 
     it('uses the actionable "in use" message format with workflow name, duration, and short id', async () => {

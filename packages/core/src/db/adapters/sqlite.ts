@@ -237,6 +237,8 @@ export class SqliteAdapter implements IDatabase {
       CREATE INDEX IF NOT EXISTS idx_workflow_events_type ON workflow_events(event_type);
       CREATE INDEX IF NOT EXISTS idx_workflow_runs_last_activity
         ON workflow_runs(last_activity_at) WHERE status = 'running';
+      CREATE INDEX IF NOT EXISTS idx_workflow_runs_resumable
+        ON workflow_runs(workflow_name, working_path) WHERE status IN ('failed', 'paused');
     `);
     getLog().info('db.sqlite_schema_initialized');
   }
@@ -313,9 +315,8 @@ export const sqliteDialect: SqlDialect = {
   },
 
   jsonArrayContains(column: string, path: string, paramIndex: number): string {
-    // SQLite: check if JSON array contains value using instr
-    // Use $N placeholder for consistent param ordering
-    return `instr(json_extract(${column}, '$.${path}'), $${String(paramIndex)}) > 0`;
+    // SQLite: exact JSON array membership via json_each (not substring matching)
+    return `EXISTS (SELECT 1 FROM json_each(json_extract(${column}, '$.${path}')) WHERE value = CAST($${String(paramIndex)} AS TEXT))`;
   },
 
   nowMinusDays(paramIndex: number): string {
