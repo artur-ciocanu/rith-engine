@@ -42,7 +42,7 @@ export interface IDatabase {
   /**
    * Get the database type for dialect-specific SQL
    */
-  readonly dialect: 'postgres' | 'sqlite';
+  readonly dialect: 'sqlite';
 
   /**
    * Get the SQL dialect helpers for this database

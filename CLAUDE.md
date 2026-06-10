@@ -152,7 +152,7 @@ This runs `check:bundled`, `check:bundled-skill`, type-check, lint, format check
 
 ### Database
 
-**SQLite (default — zero setup):**
+**SQLite (zero setup):**
 - Uses SQLite at `~/.rith/rith.db` (auto-initialized)
 
 ### CLI (Command Line)
@@ -429,7 +429,7 @@ assistants:
 │   │   ├── runs/{id}/            # Per-run artifacts ($ARTIFACTS_DIR)
 │   └── logs/                     # Workflow execution logs
 ├── update-check.json              # Update check cache (binary builds, 24h TTL)
-├── rith.db                     # SQLite database (when DATABASE_URL not set)
+├── rith.db                     # SQLite database
 └── config.yaml                   # Global configuration (non-secrets)
 ```
 

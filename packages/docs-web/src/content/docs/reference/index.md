@@ -17,7 +17,7 @@ Technical reference documentation for Rith Engine internals.
 - **[Commands Reference](/reference/commands/)** -- Slash commands available in all platform adapters
 - **[Variables Reference](/reference/variables/)** -- Variable substitution in commands and workflows ($ARGUMENTS, $BASE_BRANCH, etc.)
 - **[API Reference](/reference/api/)** -- REST API endpoints for programmatic access
-- **[Database](/reference/database/)** -- Schema, migrations, SQLite/PostgreSQL setup
+- **[Database](/reference/database/)** -- Schema overview and SQLite storage details
 - **[Configuration Reference](/reference/configuration/)** -- Full config.yaml options, environment variables, streaming modes
 - **[Security](/reference/security/)** -- Permission model, authorization, webhook verification, data privacy
 - **[Troubleshooting](/reference/troubleshooting/)** -- Common issues and solutions

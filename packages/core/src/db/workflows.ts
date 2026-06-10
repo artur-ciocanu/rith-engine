@@ -1,7 +1,7 @@
 /**
  * Database operations for workflow runs
  */
-import { pool, getDialect, getDatabaseType } from './connection';
+import { pool, getDialect } from './connection';
 import type { IDatabase } from './adapters/types';
 import type {
   WorkflowRun,
@@ -208,10 +208,7 @@ export async function getActiveWorkflowRunByPath(
   workingPath: string,
   self?: { id: string; startedAt: Date }
 ): Promise<WorkflowRun | null> {
-  const isPostgres = getDatabaseType() === 'postgresql';
-  const stalePendingCutoff = isPostgres
-    ? `NOW() - INTERVAL '${String(STALE_PENDING_AGE_MS)} milliseconds'`
-    : `datetime('now', '-${String(Math.floor(STALE_PENDING_AGE_MS / 1000))} seconds')`;
+  const stalePendingCutoff = `datetime('now', '-${String(Math.floor(STALE_PENDING_AGE_MS / 1000))} seconds')`;
 
   // Build params + clauses dynamically. Self exclusion + tiebreaker travel
   // together — the tiebreaker references both ids and timestamps.
@@ -231,21 +228,16 @@ export async function getActiveWorkflowRunByPath(
     //
     // Serialize Date to ISO string — bun:sqlite rejects Date bindings.
     //
-    // Format-aware comparison:
-    //   PostgreSQL: started_at is TIMESTAMPTZ; cast the ISO param to
-    //     timestamptz so the comparison is chronological, not lexical.
-    //   SQLite: started_at is TEXT in "YYYY-MM-DD HH:MM:SS" format. Our
-    //     ISO param has "YYYY-MM-DDTHH:MM:SS.mmmZ". Lexical comparison is
-    //     WRONG: char 11 is space (0x20) in the column vs T (0x54) in the
-    //     param, so every column value lex-sorts before every ISO param —
-    //     making `started_at < $param` always TRUE regardless of actual
-    //     time. Wrap both sides in datetime() to force chronological
-    //     comparison via SQLite's date/time functions.
+    // started_at is TEXT in "YYYY-MM-DD HH:MM:SS" format; our ISO param is
+    // "YYYY-MM-DDTHH:MM:SS.mmmZ". A lexical comparison is WRONG (char 11 is a
+    // space in the column vs `T` in the param, so every column value sorts
+    // before every ISO param). Wrap both sides in datetime() to force a
+    // chronological comparison via SQLite's date/time functions.
     params.push(self.startedAt.toISOString());
     const startedAtParam = `$${String(params.length)}`;
     const idParam = `$${String(params.length - 1)}`;
-    const colExpr = isPostgres ? 'started_at' : 'datetime(started_at)';
-    const paramExpr = isPostgres ? `${startedAtParam}::timestamptz` : `datetime(${startedAtParam})`;
+    const colExpr = 'datetime(started_at)';
+    const paramExpr = `datetime(${startedAtParam})`;
     clauses.push(`(${colExpr} < ${paramExpr} OR (${colExpr} = ${paramExpr} AND id < ${idParam}))`);
   }
 
@@ -337,8 +329,8 @@ export async function findResumableRun(
 export async function resumeWorkflowRun(id: string): Promise<WorkflowRun> {
   const dialect = getDialect();
 
-  // Split into UPDATE + SELECT to support both PostgreSQL and SQLite
-  // (SQLite does not support RETURNING on UPDATE statements)
+  // Split into UPDATE + SELECT because SQLite does not support RETURNING on
+  // UPDATE statements.
   // Each phase has its own try/catch to avoid string-sniffing own errors in a shared catch.
   let updateResult: Awaited<ReturnType<typeof pool.query>>;
   try {
@@ -672,10 +664,7 @@ export async function deleteOldWorkflowRuns(olderThanDays: number): Promise<{ co
       `Invalid olderThanDays: ${String(olderThanDays)} (must be a non-negative integer)`
     );
   }
-  const cutoff =
-    getDatabaseType() === 'postgresql'
-      ? `NOW() - INTERVAL '${String(olderThanDays)} days'`
-      : `datetime('now', '-${String(olderThanDays)} days')`;
+  const cutoff = `datetime('now', '-${String(olderThanDays)} days')`;
   try {
     await pool.query('BEGIN', []);
     // Delete events first (FK reference)

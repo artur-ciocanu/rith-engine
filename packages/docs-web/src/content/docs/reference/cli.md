@@ -364,10 +364,7 @@ On startup, the CLI:
 
 ## Database
 
-- **Without `DATABASE_URL` (default):** Uses SQLite at `~/.rith/rith.db` -- zero setup, auto-initialized on first run
-- **With `DATABASE_URL`:** Uses PostgreSQL (optional, for cloud/advanced deployments)
-
-Both work transparently. Most users never need to configure a database.
+Rith Engine uses SQLite at `~/.rith/rith.db` — zero setup, auto-initialized on first run. Most users never need to think about the database.
 
 ## Examples
 

@@ -25,7 +25,7 @@ Rith Engine supports a layered configuration system with sensible defaults, opti
 ├── workflows/              # Home-scoped workflows (source: 'global')
 ├── commands/               # Home-scoped commands (source: 'global')
 ├── scripts/                # Home-scoped scripts (runtime: bun | uv)
-├── rith.db               # SQLite database (when DATABASE_URL not set)
+├── rith.db               # SQLite database
 └── config.yaml             # Global configuration (optional)
 ```
 
@@ -208,13 +208,6 @@ Run `pi /login` (OAuth) to write `~/.pi/agent/auth.json`, which Rith Engine pick
 | `GITEA_ALLOWED_USERS` | Comma-separated Gitea usernames for whitelist (case-insensitive) | Open access |
 | `GITEA_BOT_MENTION` | @mention name the bot responds to in issues/PRs | Falls back to `BOT_DISPLAY_NAME` |
 
-### Database
-
-| Variable | Description | Default |
-| --- | --- | --- |
-| `DATABASE_URL` | PostgreSQL connection string (omit to use SQLite) | SQLite at `~/.rith/rith.db` |
-
-
 ### Worktree Management
 
 | Variable | Description | Default |
@@ -264,8 +257,8 @@ The `[rith] loaded N keys from …` lines are suppressed by default (they would 
 
 **Which file should I use?**
 
-- **`~/.rith/.env`** — user-wide defaults (your personal `DATABASE_URL`, tokens, etc.). Applies to every project.
-- **`<cwd>/.rith/.env`** — per-project overrides. Different tokens per repo, different DB per environment, etc.
+- **`~/.rith/.env`** — user-wide defaults (your personal tokens, etc.). Applies to every project.
+- **`<cwd>/.rith/.env`** — per-project overrides. Different tokens per repo, etc.
 - **`<cwd>/.env`** — **your app's** env file. Rith Engine does not read this file; it strips the keys at boot so they do not leak into Rith Engine's process.
 
 ## Docker Configuration

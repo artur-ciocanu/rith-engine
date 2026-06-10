@@ -17,14 +17,7 @@ export { type AttachedFile, type Codebase } from './types';
 // =============================================================================
 // Database
 // =============================================================================
-export {
-  pool,
-  getDatabase,
-  getDialect,
-  getDatabaseType,
-  closeDatabase,
-  resetDatabase,
-} from './db/connection';
+export { pool, getDatabase, getDialect, closeDatabase, resetDatabase } from './db/connection';
 export type { IDatabase, SqlDialect } from './db/adapters/types';
 
 // Namespaced db modules for explicit access

@@ -459,7 +459,7 @@ Each workflow run gets its own isolated copy of the repo:
 │                              ▼                                          │
 │   ┌─────────────────────────────────────────────────────────────────┐  │
 │   │ 4. ENVIRONMENT VARIABLES (highest priority)                     │  │
-│   │    DATABASE_URL=postgres://...   # overrides config             │  │
+│   │    LOG_LEVEL=debug   # overrides config                          │  │
 │   └─────────────────────────────────────────────────────────────────┘  │
 │                                                                         │
 └─────────────────────────────────────────────────────────────────────────┘

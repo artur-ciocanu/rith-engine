@@ -397,7 +397,6 @@ Worktrees stored at: `~/.rith/workspaces/<owner>/<repo>/worktrees/<branch-slug>/
 
 - Connection opened on first database call
 - Always closed in `finally` block after command completes
-- **Default: SQLite** at `~/.rith/rith.db` (zero setup, auto-initialized)
-- **Optional: PostgreSQL** when `DATABASE_URL` is set (for cloud/advanced deployments)
+- **SQLite** at `~/.rith/rith.db` (zero setup, auto-initialized)
 
 **Code:** `packages/cli/src/cli.ts`

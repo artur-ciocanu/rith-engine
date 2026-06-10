@@ -1,14 +1,12 @@
 /**
- * Database connection management with auto-detection
+ * Database connection management.
  *
- * Strategy:
- * - If DATABASE_URL is set: Use PostgreSQL (shared with server)
- * - Otherwise: Use SQLite at ~/.rith/rith.db (standalone CLI)
+ * Rith Engine uses SQLite exclusively, stored at ~/.rith/rith.db. The schema is
+ * auto-initialized on first connect (see SqliteAdapter).
  */
 import { join } from 'path';
 import { getRithHome } from '@rith/paths';
 import type { IDatabase, SqlDialect, QueryResult } from './adapters/types';
-import { PostgresAdapter, postgresDialect } from './adapters/postgres';
 import { SqliteAdapter, sqliteDialect } from './adapters/sqlite';
 import { createLogger } from '@rith/paths';
 
@@ -32,16 +30,10 @@ export function getDatabase(): IDatabase {
     return database;
   }
 
-  if (process.env.DATABASE_URL) {
-    getLog().info('db.connection_postgresql_selected');
-    database = new PostgresAdapter(process.env.DATABASE_URL);
-    dialect = postgresDialect;
-  } else {
-    const dbPath = join(getRithHome(), 'rith.db');
-    getLog().info({ dbPath }, 'db.connection_sqlite_selected');
-    database = new SqliteAdapter(dbPath);
-    dialect = sqliteDialect;
-  }
+  const dbPath = join(getRithHome(), 'rith.db');
+  getLog().info({ dbPath }, 'db.connection_sqlite_selected');
+  database = new SqliteAdapter(dbPath);
+  dialect = sqliteDialect;
 
   return database;
 }
@@ -63,14 +55,6 @@ export function getDialect(): SqlDialect {
   }
 
   return dialect;
-}
-
-/**
- * Get the current database type without initializing the database
- * Useful for version/info commands that don't need a connection
- */
-export function getDatabaseType(): 'postgresql' | 'sqlite' {
-  return process.env.DATABASE_URL ? 'postgresql' : 'sqlite';
 }
 
 /**

@@ -1,5 +1,5 @@
 import { mock, describe, test, expect, beforeEach } from 'bun:test';
-import { createQueryResult, mockPostgresDialect } from '../test/mocks/database';
+import { createQueryResult, mockSqliteDialect } from '../test/mocks/database';
 import type { IsolationEnvironmentRow } from '@rith/isolation';
 
 const mockQuery = mock(() => Promise.resolve(createQueryResult([])));
@@ -8,7 +8,7 @@ mock.module('./connection', () => ({
   pool: {
     query: mockQuery,
   },
-  getDialect: () => mockPostgresDialect,
+  getDialect: () => mockSqliteDialect,
 }));
 
 import {
@@ -224,10 +224,10 @@ describe('isolation-environments', () => {
 
       await updateMetadata('env-123', { pr_number: 42 });
 
-      expect(mockQuery).toHaveBeenCalledWith(expect.stringContaining('metadata = metadata ||'), [
-        '{"pr_number":42}',
-        'env-123',
-      ]);
+      expect(mockQuery).toHaveBeenCalledWith(
+        expect.stringContaining('metadata = json_patch(metadata, $1)'),
+        ['{"pr_number":42}', 'env-123']
+      );
     });
   });
 

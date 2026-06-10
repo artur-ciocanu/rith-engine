@@ -19,11 +19,6 @@ Rith Engine is a CLI workflow engine. "Deployment" means installing the `rith` b
 | **Windows** | Native Windows or WSL2 | [Windows](/deployment/windows/) |
 | **CI** | GitHub Actions, GitLab CI, Jenkins | [CI Integration](/deployment/ci-integration/) |
 
-## Database Options
+## Database
 
-| Option | Setup | Best For |
-|--------|-------|----------|
-| **SQLite** (default) | Zero config, just omit `DATABASE_URL` | Single-user, CLI usage, local development |
-| **PostgreSQL** | Set `DATABASE_URL` to any Postgres instance | Shared state, larger run history |
-
-SQLite stores data at `~/.rith/rith.db`. It is auto-initialized on first run.
+Rith Engine uses SQLite, stored at `~/.rith/rith.db` and auto-initialized on first run. No configuration or setup is required.

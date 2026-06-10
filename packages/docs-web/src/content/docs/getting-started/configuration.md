@@ -17,7 +17,6 @@ Set these in your shell or `.env` file:
 | `ANTHROPIC_API_KEY` | No | Anthropic API key for Pi auth (alternative to `pi /login`) |
 | `OPENAI_API_KEY` | No | OpenAI API key for Pi auth (alternative to `pi /login`) |
 | `GEMINI_API_KEY` | No | Google Gemini API key for Pi auth (alternative to `pi /login`) |
-| `DATABASE_URL` | No | PostgreSQL connection string (default: SQLite) |
 | `GH_TOKEN` | No | GitHub personal access token — used to authenticate when cloning private GitHub repos |
 | `GITLAB_TOKEN` | No | GitLab personal/project access token — used to authenticate when cloning private GitLab repos (also used by the GitLab adapter) |
 | `GITEA_TOKEN` | No | Gitea/Forgejo access token — used to authenticate when cloning private Gitea/Forgejo repos (also used by the Gitea adapter) |

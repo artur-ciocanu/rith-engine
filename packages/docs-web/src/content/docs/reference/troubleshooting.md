@@ -12,26 +12,15 @@ Common issues and their solutions when running Rith Engine.
 
 ## Database Connection Errors
 
-**For SQLite (default):**
+Rith Engine uses SQLite at `~/.rith/rith.db`. The database is created and its schema initialized automatically on first run — no setup is required.
 
-SQLite requires no setup. The database is created automatically at `~/.rith/rith.db`. If you see errors, check that the `~/.rith/` directory exists and is writable.
+If you see database errors:
+- Check that the `~/.rith/` directory exists and is writable.
+- Inspect the tables with `sqlite3 ~/.rith/rith.db ".tables"`.
+- If the database file is corrupted, remove it — Rith Engine recreates it on the next run:
 
-**For remote PostgreSQL:**
 ```bash
-# Verify DATABASE_URL
-echo $DATABASE_URL
-
-# Test connection directly
-psql $DATABASE_URL -c "SELECT 1"
-```
-
-**Verify tables exist (PostgreSQL):**
-```bash
-psql $DATABASE_URL -c "\dt"
-
-# Should show: remote_agent_codebases, remote_agent_conversations, remote_agent_sessions,
-# remote_agent_isolation_environments, remote_agent_workflow_runs, remote_agent_workflow_events,
-# remote_agent_messages
+rm ~/.rith/rith.db
 ```
 
 ## Clone Command Fails
