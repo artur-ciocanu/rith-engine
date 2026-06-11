@@ -1,0 +1,22 @@
+# Quick smoke test — verifies the full stack holds together after refactors.
+name: e2e-hello-smoke
+description: 'Minimal smoke: single AI node + bash assert.'
+model: azure-claude-foundry/claude-opus-4-6
+
+nodes:
+  - id: greet
+    prompt: 'Say exactly "Hello Pi!" and nothing else.'
+    allowed_tools: []
+    effort: low
+    idle_timeout: 30000
+
+  - id: check
+    bash: |
+      output="$greet.output"
+      if echo "$output" | grep -q "Hello Pi"; then
+        echo "PASS: got '$output'"
+      else
+        echo "FAIL: expected 'Hello Pi!' but got '$output'"
+        exit 1
+      fi
+    depends_on: [greet]

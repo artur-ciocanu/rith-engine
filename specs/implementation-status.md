@@ -15,17 +15,18 @@ value object plus the **ctx-first** parameter convention — in `#22`; the DDD/G
 structural core (NodeRunner registry, `DagRunContext`/`NodeRunContext`, gate extraction,
 `WorkflowRunAggregate`) in `#24`; and the **item 14 step 2 per-runner file split** in `#25`
 (`c43472d`, current `main` HEAD), which completes item 14.
-**Status as of:** 2026-06-08 — items 1–13, DX 8–10, items 16–17, and **all of item 14**
-(step-1 context seam `#21`, `#22` PromptContext / ctx-first cohesion, `#24` structural core,
-`#25` per-runner file split) are merged; docs are Pi-only / CLI-only and `bun run validate`
-is green end-to-end on `main` (`check:bundled`, `check:bundled-skill`, `type-check` ×7,
-`lint --max-warnings 0`, `format:check`, full test suite — 0 failures).
-**Remaining:** **none of the tracked items.** Item 15 (typed `WorkflowRun.metadata`)
-is now done in the working tree — see "REMAINING → From `architectural-review.md`"
-below. Two non-blocking OPEN side-issues remain unscheduled (cross-package
-`mock.module` leakage; the `NodeRunResult` control-signal flip). The former Postgres
-schema-bootstrap gap and the SQLite/PG dialect-divergence risk are both **resolved by
-removing PostgreSQL entirely** — Rith Engine is now SQLite-only.
+**Status as of:** 2026-06-10 — items 1–17 complete; **fresh architecture review** (graphify-driven,
+1580-node knowledge graph) shipped P0 runtime-bug fixes (`#30`), P1 data-integrity hardening (`#30`),
+and P2 structural decomposition of the three largest god files (`#31`/`#32`/`#33`). Type-check ×7
+passes; workflows 906/0; core/operations tests green. E2E smoke test
+(`e2e-hello-smoke` → `azure-claude-foundry/claude-opus-4-6`) passes end-to-end.
+**Overall state: OK.** The codebase is maintainable and functional. Not pristine architecture — the
+`@rith/core` → `@rith/pi` upward dependency is the main structural wart, and `@rith/workflows` at
+9K lines (45 files) is where complexity concentrates — but nothing is broken, nothing is blocking,
+and no vibe-coded Archon landmines remain in the runtime paths.
+**Remaining:** two non-blocking OPEN side-issues (cross-package `mock.module` leakage;
+`NodeRunResult` control-signal flip). One known architectural smell (`core` importing `pi`
+upward — see "Architectural assessment" below). No P0/P1 issues outstanding.
 
 **P0 fixed + DB schema de-Archon'd (this session).** A graphify-driven architecture review
 found that `rith run` was **broken on every real DB**: `workflow_runs.conversation_id` kept a
@@ -63,6 +64,14 @@ missing `working_path` index. Regression + migration tests added against real `b
 | 15  | Discriminate `WorkflowRun.metadata`; aggregate root    | arch         | ✅ Done (typed `WorkflowRunMetadata`)            |
 | 16  | Workflows single-process mock isolation                | test infra   | ✅ Done (#18)                                    |
 | 17  | Collapse `@rith/providers` → `@rith/pi` (rename/reorg) | cleanup      | ✅ Done (#20)                                    |
+| 18  | Fix legacy table names in delete functions             | arch review  | ✅ Done (#30)                                    |
+| 19  | Fix `jsonArrayContains` false positives                | arch review  | ✅ Done (#30)                                    |
+| 20  | `updateWorkflowRun` fromStatus guard                   | arch review  | ✅ Done (#30)                                    |
+| 21  | Transaction wrapping for approve/reject                | arch review  | ✅ Done (#30)                                    |
+| 22  | Composite index for `findResumableRun`                 | arch review  | ✅ Done (#30)                                    |
+| 23  | Split `workflow.ts` god file (1522→11 modules)         | arch review  | ✅ Done (#31)                                    |
+| 24  | Split `worktree.ts` god file (1227→793 + 3 helpers)    | arch review  | ✅ Done (#32)                                    |
+| 25  | Decompose `PiCodingAgent.sendQuery` into helpers       | arch review  | ✅ Done (#33)                                    |
 
 ### Refactor (precedes items 14/15): `@rith/providers` → `@rith/pi`
 
@@ -358,6 +367,74 @@ the same class of leak, one level up, and is **out of scope** for #18. If a futu
 true single-process repo run, apply the same `mockModuleScoped` pattern to the offending
 core/cli/providers tests.
 
+### Fresh architecture review — P0/P1/P2 fixes (#30, #31, #32, #33) — 2026-06-10
+
+Graphify-driven review (1580 nodes, 3688 edges, 98 communities) plus targeted source-level
+verification. Full plan in `specs/architecture-review-plan.md` (10 findings, 5 verified
+non-issues). The review specifically looked for vibe-coded Archon leftovers.
+
+**P0 — Runtime bugs (shipped in #30):**
+
+1. **Legacy table names in `deleteOldWorkflowRuns` / `deleteWorkflowRun`** —
+   `packages/core/src/db/workflows.ts`. Both delete functions still referenced the dropped
+   `remote_agent_workflow_runs` / `remote_agent_workflow_events` tables. Any call to
+   `rith workflow cleanup` crashed with `no such table`. Fix: 5 string replacements.
+
+2. **`jsonArrayContains` false positives** — `packages/core/src/db/adapters/sqlite.ts`.
+   Used `instr()` substring matching: querying issue 4 matched 42, 142, 421. Fix: replaced
+   with `json_each()` for exact array membership (`EXISTS (SELECT 1 FROM json_each(...) WHERE
+value = CAST($N AS TEXT))`).
+
+**P1 — Data integrity (shipped in #30):**
+
+3. **`updateWorkflowRun` status guard** — added opt-in `fromStatus` parameter to prevent
+   invalid state transitions (`completed → running`, etc.). Updated all 6 callers in
+   `workflow-operations.ts` (`fromStatus: 'paused'`) and `executor.ts`
+   (`fromStatus: 'pending'` / `['pending', 'running']`). Backwards-compatible: omitting
+   `fromStatus` keeps old behavior. Store interface (`IWorkflowStore`) updated.
+
+4. **Transaction wrapping for approve/reject** — `packages/core/src/operations/workflow-operations.ts`.
+   `approveWorkflow` (2-3 events + status update) and `rejectWorkflow` (1 event + status update)
+   now wrapped in `BEGIN`/`COMMIT`/`ROLLBACK`. Prevents dangling `approval_received` events on
+   crash between writes.
+
+5. **Composite index for `findResumableRun`** — `packages/core/src/db/adapters/sqlite.ts`.
+   Added `idx_workflow_runs_resumable ON workflow_runs(workflow_name, working_path) WHERE status
+IN ('failed', 'paused')`. Covers the unindexed query in `findResumableRun`.
+
+**P2 — Structural decomposition (shipped in #31, #32, #33):**
+
+6. **Split `workflow.ts` god file** (#31) — `packages/cli/src/commands/workflow.ts` (1522 lines)
+   → 11 focused modules under `commands/workflow/` (run.ts 642, marketplace.ts 329, status.ts 170,
+   approve.ts 71, reject.ts 76, resume.ts 66, list.ts 65, cleanup.ts 21, event-emit.ts 26,
+   abandon.ts 10, shared.ts 50). Barrel `index.ts` re-exports all public symbols; existing
+   importers unchanged.
+
+7. **Split `worktree.ts` god file** (#32) — `packages/isolation/src/providers/worktree.ts`
+   (1227 → 793 lines). Extracted: `worktree-branches.ts` (408 lines — `createFromPR`,
+   `createFromSameRepoPR`, `createNewBranch`, `deleteBranchTracked`, `deleteRemoteBranchTracked`),
+   `worktree-files.ts` (84 lines — `copyConfiguredFiles`), `worktree-submodules.ts` (58 lines —
+   `initSubmodules`). Main file remains the public API.
+
+8. **Decompose `PiCodingAgent.sendQuery`** (#33) — `packages/pi/src/agent.ts`. Extracted 3
+   private methods: `resolveAuth()` (auth resolution), `translateOptions()` (model/option
+   translation), `createSession()` (SDK session + extensions + resources). `sendQuery()` is now a
+   slim orchestrator. No public API changes.
+
+9. **`AgentDefinition` unification** — investigated; the duplication flagged in the plan no longer
+   exists. The type is defined once in `@rith/workflows`. No action needed.
+
+10. **`dagNodeBaseSchema` AI fields on non-AI nodes** — documented and intentional for YAML
+    ergonomics. Runtime correctly ignores them. No action taken (per plan recommendation).
+
+**Tests updated:** 4 existing test assertions updated for the new `fromStatus` parameter
+(`workflow-operations.test.ts` ×3, `executor.test.ts` ×1). Pool mock added to
+`workflow-operations.test.ts` for transaction calls. All touched tests green.
+
+**Verification:** type-check ×7 passes; `packages/workflows` 906/0; `packages/core`
+workflow + operations tests 82/0; E2E smoke test (`e2e-hello-smoke` workflow →
+`azure-claude-foundry/claude-opus-4-6` → bash assert) passes end-to-end.
+
 ---
 
 ## REMAINING
@@ -559,6 +636,62 @@ fixed (product code untouched; tests reconciled to current behavior, no weakenin
   script (which never runs `src/workflows/`); it mocks many `../db/*` modules plus `@rith/pi`
   (now exports `PiCodingAgent`), so it only loads cleanly inside a batch. The migration's
   structural assertion there is covered by `tsc`.
+
+## Architectural assessment (2026-06-10)
+
+**Overall: OK.** The codebase is maintainable and functional. It's the result of taming a
+vibe-coded Archon prototype into something that works reliably without rewriting it. Not
+textbook architecture, but nothing that will surprise you at 2am either.
+
+### What's solid
+
+- **No import cycles** across packages (graphify-verified).
+- **Dependency direction is mostly clean:** `paths` (0 deps) ← `git` ← `isolation` ← `core` ←
+  `cli`, with `workflows` and `pi` as peer mid-tier packages.
+- **Test-to-source ratios are healthy:** 1.2x–1.8x across all packages. `workflows` has 16K
+  test lines covering 9K source — the DAG executor and runners are well-tested.
+- **All P0/P1 Archon landmines cleared:** no more legacy table names, no substring SQL matching,
+  status transitions are guarded, multi-step writes are transactional, query patterns are indexed.
+- **God files decomposed:** `workflow.ts` (1522→11 files), `worktree.ts` (1227→793 + 3 helpers),
+  `dag-executor.ts` (2910→337 + runners). No file over 900 lines in the hot paths.
+- **Model/auth config lives in Pi** (`~/.pi/agent/config.json`, `~/.pi/agent/auth.json`). Rith
+  workflows reference `provider/model` strings and Pi resolves them. No duplication.
+
+### Known warts (not blocking, documented for future reference)
+
+1. **`@rith/core` imports `@rith/pi` upward.** `store-adapter.ts` imports `PiCodingAgent` and
+   `config-types.ts` imports `PiDefaults`. This inverts the expected dependency direction
+   (`core` should be below `pi`, not depend on it). Not broken — but makes future package
+   restructuring harder. Fix would be to move the store-adapter into `cli` or `workflows`
+   where the `pi` dependency is already expected.
+
+2. **`@rith/workflows` is the complexity center** — 9182 lines, 45 files. The runner files
+   (`ai-node-runner.ts` 886, `loop-node-runner.ts` 650) are inherently complex orchestration.
+   Not bloated — but this is where future bugs will cluster. Well-tested (906 tests) so it's
+   manageable.
+
+3. **`dag-node.ts` (637 lines) carries AI fields on non-AI nodes** (~15 AI-specific fields on
+   bash/script nodes). Intentional for YAML ergonomics — users paste configs without removing
+   AI fields. Runtime ignores them. Weakens type-level guarantees but documented as a conscious
+   tradeoff.
+
+4. **`worktree.ts` is still 793 lines** after the split. The `destroy()` method spans ~225 lines
+   with 8 error-handling paths. Further decomposition possible but diminishing returns.
+
+5. **Cross-package `mock.module` leakage** persists (see OPEN issue above). Not a production
+   concern — only affects a hypothetical single-process repo-wide `bun test` run that nobody does.
+
+### Archon heritage
+
+The codebase was vibe-coded as Archon (`@archon/*` → `@rith/*` rename). Telltale signs that
+have been cleaned up: `remote_agent_*` table prefixes (renamed + migrated), `instr()` substring
+SQL (replaced with `json_each()`), unguarded state transitions (now `fromStatus`-gated),
+non-transactional multi-step writes (now `BEGIN`/`COMMIT`/`ROLLBACK`), vestigial `conversations`
+table FK (dropped), dead columns (`parent_conversation_id`, `current_step_index`,
+`ai_assistant_type`, `created_by_platform` — dropped), multi-provider abstractions
+(`@rith/providers` → collapsed into `@rith/pi`). What remains is the `workflows` package
+complexity, which is inherent to DAG orchestration and not reducible without a rewrite that
+would risk more than it saves.
 
 ## Useful commands
 
