@@ -114,6 +114,9 @@ nodes:
   # fresh_context ensures genuine separation between roles
   #
   - id: adversarial-sprint
+    skills:
+      - rith-implement
+      - rith-validate
     depends_on: [init-workspace]
     idle_timeout: 600000
     model: anthropic/claude-opus-4-5

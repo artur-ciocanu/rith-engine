@@ -17,7 +17,7 @@ import { execFileAsync } from '@rith/git';
 import { getRithHome, createLogger, isTelemetryDisabled } from '@rith/paths';
 import type { Logger } from '@rith/paths';
 import { pool } from '@rith/core';
-import { BUNDLED_COMMANDS, BUNDLED_WORKFLOWS } from '@rith/workflows/defaults';
+import { discoverWorkflows } from '@rith/workflows/workflow-discovery';
 
 // Env vars that indicate a Pi backend API key is configured. Mirrors
 // `PI_PROVIDER_ENV_VARS` in packages/pi/src/agent.ts — the keys
@@ -141,13 +141,24 @@ export async function checkWorkspaceWritable(): Promise<CheckResult> {
 
 export async function checkBundledDefaults(): Promise<CheckResult> {
   const label = 'Bundled defaults';
-  const commands = Object.keys(BUNDLED_COMMANDS).length;
-  const workflows = Object.keys(BUNDLED_WORKFLOWS).length;
-  return {
-    label,
-    status: 'pass',
-    message: `${workflows} workflow(s), ${commands} command(s) loaded`,
-  };
+  try {
+    const result = await discoverWorkflows(null, { loadDefaults: true });
+    const workflows = result.workflows.length;
+    return {
+      label,
+      status: workflows > 0 ? 'pass' : 'skip',
+      message:
+        workflows > 0
+          ? `${workflows} workflow(s) discovered`
+          : 'No default workflows found — run installer to populate ~/.rith/workflows/',
+    };
+  } catch (err) {
+    return {
+      label,
+      status: 'skip',
+      message: `Could not discover workflows: ${(err as Error).message}`,
+    };
+  }
 }
 
 export async function checkTelemetry(): Promise<CheckResult> {

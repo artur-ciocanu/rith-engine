@@ -21,11 +21,15 @@ OUTFILE="${OUTFILE:-}"
 
 echo "Building Rith Engine CLI v${VERSION} (commit: ${GIT_COMMIT})"
 
-# Regenerate bundled defaults from .rith/{commands,workflows}/defaults/ so the
-# compiled binary always embeds the current on-disk contents. CI also runs
-# `bun run check:bundled` to catch committed drift.
-echo "Regenerating bundled defaults..."
-bun run scripts/generate-bundled-defaults.ts
+# Package skills and workflows as content files alongside the binary.
+# The installer copies these to ~/.rith/ on install.
+echo "Packaging content files..."
+CONTENT_DIR="dist/content"
+rm -rf "$CONTENT_DIR"
+mkdir -p "$CONTENT_DIR"
+cp -r .rith/skills "$CONTENT_DIR/skills"
+cp -r .rith/workflows/defaults "$CONTENT_DIR/workflows"
+echo "  -> $CONTENT_DIR/skills/ and $CONTENT_DIR/workflows/"
 
 # Update build-time constants in source before compiling.
 # The file is restored via an EXIT trap so the dev tree is never left dirty,

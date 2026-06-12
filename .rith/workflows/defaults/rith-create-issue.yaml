@@ -4,7 +4,7 @@ description: |
   Triggers: "create issue", "file a bug", "report this bug", "open an issue for",
             "create github issue", "report issue", "log this bug".
   Does: Classifies problem area (haiku) -> gathers context in parallel (templates, git state, duplicates) ->
-        investigates relevant code -> reproduces the issue using area-specific tools (agent-browser, CLI, DB queries) ->
+        investigates relevant code -> reproduces the issue using area-specific tools (CLI, DB queries) ->
         gates on reproduction success -> creates issue with full evidence OR reports back if cannot reproduce.
   NOT for: Feature requests, enhancements, or non-bug work. Only for bugs/problems.
 
@@ -27,24 +27,18 @@ nodes:
       ## Area Definitions
       | Area | Packages | Indicators |
       |------|----------|------------|
-      | web-ui | @rith/web, @rith/server (routes, web adapter) | UI rendering, SSE streaming, React components, browser behavior |
-      | api-server | @rith/server (routes, middleware) | HTTP endpoints, response codes, request handling |
-      | cli | @rith/cli | CLI commands, workflow invocation from terminal, output formatting |
-      | isolation | @rith/isolation, @rith/git | Worktrees, branch operations, cleanup, environment lifecycle |
-      | workflows | @rith/workflows | YAML parsing, DAG execution, variable substitution, node types |
-      | database | @rith/core (db/) | SQLite/PostgreSQL queries, schema, data integrity, migrations |
-      | adapters | @rith/adapters | Slack/Telegram/GitHub/Discord message handling, auth, polling |
-      | core | @rith/core (orchestrator, handlers, clients) | Message routing, session management, AI client streaming |
+      | cli | packages/cli | CLI commands, workflow invocation from terminal, output formatting |
+      | isolation | packages/isolation, packages/git | Worktrees, branch operations, cleanup, environment lifecycle |
+      | workflows | packages/workflows | YAML parsing, DAG execution, variable substitution, node types |
+      | database | packages/core (db/) | SQLite queries, schema, data integrity, migrations |
+      | core | packages/core (orchestrator, handlers, clients) | Message routing, session management, AI client streaming |
+      | pi | packages/pi | Pi agent, skill loading, configuration |
       | other | Any package not covered above | Cross-cutting concerns, build tooling, config, unknown area |
 
       ## Classification Rules
-      - Choose the MOST SPECIFIC area. "SSE disconnects" = web-ui (not api-server).
+      - Choose the MOST SPECIFIC area.
       - If ambiguous between two areas, pick the one closer to the user-facing symptom.
       - Use "other" only when the problem genuinely doesn't fit any specific area.
-      - needs_server: Set to "true" if reproducing requires a running Rith Engine server.
-        Typically true for: web-ui, api-server, core, adapters.
-        Typically false for: cli, isolation, workflows, database.
-        For "other": use your judgment based on the description.
       - repro_hint: Extract the user's reproduction steps into a concise instruction.
         If no explicit steps given, infer the most likely way to trigger the issue.
 
@@ -59,17 +53,14 @@ nodes:
           enum: ["bug", "regression", "crash", "performance", "configuration"]
         area:
           type: string
-          enum: ["web-ui", "api-server", "cli", "isolation", "workflows", "database", "adapters", "core", "other"]
+          enum: ["cli", "isolation", "workflows", "database", "core", "pi", "other"]
         title:
           type: string
         keywords:
           type: string
         repro_hint:
           type: string
-        needs_server:
-          type: string
-          enum: ["true", "false"]
-      required: [type, area, title, keywords, repro_hint, needs_server]
+      required: [type, area, title, keywords, repro_hint]
 
   # ═══════════════════════════════════════════════════════════════
   # PHASE 2: PARALLEL CONTEXT GATHERING
@@ -160,14 +151,12 @@ nodes:
       ## Instructions
 
       1. Based on the area, search the relevant packages:
-         - web-ui: `packages/web/src/`, `packages/server/src/adapters/web/`, `packages/server/src/routes/`
-         - api-server: `packages/server/src/routes/`, `packages/server/src/`
          - cli: `packages/cli/src/`
          - isolation: `packages/isolation/src/`, `packages/git/src/`
          - workflows: `packages/workflows/src/`
          - database: `packages/core/src/db/`
-         - adapters: `packages/adapters/src/`
          - core: `packages/core/src/orchestrator/`, `packages/core/src/handlers/`
+         - pi: `packages/pi/src/`
          - other: search broadly based on keywords — check `packages/*/src/`, config files, build scripts
 
       2. Find: entry points, error handling paths, related type definitions, recent changes
@@ -194,36 +183,10 @@ nodes:
   # PHASE 4: REPRODUCE — Area-specific issue reproduction
   # ═══════════════════════════════════════════════════════════════
 
-  - id: start-server
-    bash: |
-      # Allocate a free port using Bun's OS assignment
-      PORT=$(bun -e "const s = Bun.serve({port: 0, fetch: () => new Response('')}); console.log(s.port); s.stop()")
-      echo "$PORT" > "$ARTIFACTS_DIR/.server-port"
-
-      # Start dev server in background
-      PORT=$PORT bun run dev:server > "$ARTIFACTS_DIR/.server-log" 2>&1 &
-      SERVER_PID=$!
-      echo "$SERVER_PID" > "$ARTIFACTS_DIR/.server-pid"
-
-      # Wait for server to be ready (up to 30s)
-      for i in $(seq 1 30); do
-        if curl -s "http://localhost:$PORT/api/health" > /dev/null 2>&1; then
-          echo "Server ready on port $PORT (PID: $SERVER_PID)"
-          exit 0
-        fi
-        sleep 1
-      done
-
-      echo "WARNING: Server may not be fully ready after 30s (port $PORT, PID $SERVER_PID)"
-      echo "Continuing anyway — reproduce node will handle connection errors"
-    depends_on: [classify]
-    when: "$classify.output.needs_server == 'true'"
-    timeout: 45000
-
   - id: reproduce
     prompt: |
       You are an issue reproduction specialist. Your job is to reproduce the reported
-      problem and capture evidence (screenshots, command output, error messages).
+      problem and capture evidence (command output, error messages).
 
       ## Problem Context
       - **Area**: $classify.output.area
@@ -234,38 +197,11 @@ nodes:
       ## Investigation Findings
       $investigate.output
 
-      ## Server Info
-      If a server was started, read the port from: `cat "$ARTIFACTS_DIR/.server-port"`
-      If the file doesn't exist, no server is running (area doesn't need one).
-
       ---
 
       ## Reproduction Playbooks
 
       Follow the playbook matching the area. Capture ALL evidence to `$ARTIFACTS_DIR/`.
-
-      ### web-ui
-      1. Read the server port: `PORT=$(cat "$ARTIFACTS_DIR/.server-port" | tr -d '\n')`
-      2. Open the app: `agent-browser open http://localhost:$PORT`
-      3. Take a baseline screenshot: `agent-browser screenshot "$ARTIFACTS_DIR/repro-01-baseline.png"`
-      4. Get interactive elements: `agent-browser snapshot -i`
-      5. Navigate to the area related to the issue (use @refs from snapshot)
-      6. Perform the actions described in the repro_hint
-      7. Screenshot each significant state: `agent-browser screenshot "$ARTIFACTS_DIR/repro-02-action.png"`
-      8. If an error appears, capture it: `agent-browser get text @errorElement`
-      9. Check browser console: `agent-browser console`
-      10. Check for JS errors: `agent-browser errors`
-      11. Final screenshot: `agent-browser screenshot "$ARTIFACTS_DIR/repro-03-result.png"`
-      12. Close browser: `agent-browser close`
-
-      ### api-server
-      1. Read the server port: `PORT=$(cat "$ARTIFACTS_DIR/.server-port" | tr -d '\n')`
-      2. Create a test conversation: `curl -s -X POST http://localhost:$PORT/api/conversations -H "Content-Type: application/json" -d '{}'`
-      3. Hit the problematic endpoint based on the repro_hint
-      4. Capture response codes and bodies: `curl -s -w "\nHTTP_CODE: %{http_code}\n" ...`
-      5. For SSE issues: `curl -s -N http://localhost:$PORT/api/stream/<id>` (timeout after 10s)
-      6. Check server logs: `cat "$ARTIFACTS_DIR/.server-log" | tail -50`
-      7. Save all curl output to `$ARTIFACTS_DIR/repro-api-responses.txt`
 
       ### cli
       1. Run the CLI command that should trigger the issue
@@ -281,7 +217,7 @@ nodes:
       3. Check branches: `git branch -a > "$ARTIFACTS_DIR/repro-branches.txt"`
       4. Try the operation that should fail (based on repro_hint)
       5. Capture the error output
-      6. Query isolation DB: `sqlite3 ~/.rith/rith.db "SELECT * FROM remote_agent_isolation_environments ORDER BY created_at DESC LIMIT 10" > "$ARTIFACTS_DIR/repro-isolation-db.txt" 2>&1`
+      6. Query isolation DB: `sqlite3 ~/.rith/rith.db "SELECT * FROM isolation_environments ORDER BY created_at DESC LIMIT 10" > "$ARTIFACTS_DIR/repro-isolation-db.txt" 2>&1`
 
       ### workflows
       1. List workflows: `bun run cli workflow list --json > "$ARTIFACTS_DIR/repro-workflow-list.json" 2>&1`
@@ -296,24 +232,17 @@ nodes:
          - `sqlite3 ~/.rith/rith.db ".schema <table>" > "$ARTIFACTS_DIR/repro-db-schema.txt"`
          - `sqlite3 ~/.rith/rith.db "SELECT COUNT(*) FROM <table>" > "$ARTIFACTS_DIR/repro-db-counts.txt"`
       3. Check for the specific data condition described in the repro_hint
-      4. If PostgreSQL: use `psql $DATABASE_URL -c "..."` instead
-
-      ### adapters
-      1. Read the server port: `PORT=$(cat "$ARTIFACTS_DIR/.server-port" | tr -d '\n')`
-      2. Check adapter configuration: look for relevant env vars in `.env`
-      3. Check server startup logs: `cat "$ARTIFACTS_DIR/.server-log" | grep -i "adapter\|slack\|telegram\|github\|discord" | head -20`
-      4. If the adapter fails to initialize, capture the error
-      5. Test message routing via web API as a proxy:
-         `curl -s -X POST http://localhost:$PORT/api/conversations/<id>/message -H "Content-Type: application/json" -d '{"message":"/status"}'`
 
       ### core
-      1. Read the server port: `PORT=$(cat "$ARTIFACTS_DIR/.server-port" | tr -d '\n')`
-      2. Create a conversation: `curl -s -X POST http://localhost:$PORT/api/conversations -H "Content-Type: application/json" -d '{}'`
-      3. Send a message that triggers the issue:
-         `curl -s -X POST http://localhost:$PORT/api/conversations/<id>/message -H "Content-Type: application/json" -d '{"message":"<repro_hint>"}'`
-      4. Poll for responses: `curl -s http://localhost:$PORT/api/conversations/<id>/messages`
-      5. Check session state in DB: `sqlite3 ~/.rith/rith.db "SELECT * FROM remote_agent_sessions WHERE conversation_id='<id>'" 2>/dev/null`
-      6. Check server logs: `cat "$ARTIFACTS_DIR/.server-log" | tail -50`
+      1. Check relevant orchestrator/handler code paths
+      2. Run any CLI commands that exercise the core layer:
+         `bun run cli <relevant-command> > "$ARTIFACTS_DIR/repro-core-output.txt" 2>&1`
+      3. Check session state in DB: `sqlite3 ~/.rith/rith.db "SELECT * FROM sessions ORDER BY created_at DESC LIMIT 5" 2>/dev/null`
+
+      ### pi
+      1. Check pi configuration: `bun run cli config show > "$ARTIFACTS_DIR/repro-pi-config.txt" 2>&1`
+      2. Try the operation that triggers the issue
+      3. Capture error output
 
       ### other
       1. Run `bun run validate` to check for any obvious failures — capture output:
@@ -324,10 +253,7 @@ nodes:
       3. If the description implies a build or config issue:
          - Check `package.json` scripts, `tsconfig.json`, `.env.example`
          - Try running the relevant build/dev command
-      4. If the description implies a runtime issue:
-         - Start the server (if `.server-port` file exists) and try to trigger the behavior
-         - Check logs for errors
-      5. Document everything you tried, even if nothing reproduces clearly
+      4. Document everything you tried, even if nothing reproduces clearly
 
       ---
 
@@ -351,7 +277,6 @@ nodes:
       [what actually happened — or "could not trigger the reported behavior"]
 
       ## Evidence Files
-      - `$ARTIFACTS_DIR/repro-*.png` — screenshots (if web-ui)
       - `$ARTIFACTS_DIR/repro-*.txt` — command output
       - `$ARTIFACTS_DIR/repro-*.json` — structured data
 
@@ -367,48 +292,14 @@ nodes:
 
       Even if you cannot fully reproduce the issue, document what you tried
       and what you observed. Partial reproduction is still valuable evidence.
-    depends_on: [classify, git-context, investigate, start-server]
+    depends_on: [classify, git-context, investigate]
     context: fresh
-    skills:
-      - agent-browser
     trigger_rule: one_success
     idle_timeout: 300000
 
   # ═══════════════════════════════════════════════════════════════
-  # PHASE 5: CLEANUP + GATE
+  # PHASE 5: GATE
   # ═══════════════════════════════════════════════════════════════
-
-  - id: cleanup-server
-    bash: |
-      SERVER_PID=$(cat "$ARTIFACTS_DIR/.server-pid" 2>/dev/null | tr -d '\n')
-      SERVER_PORT=$(cat "$ARTIFACTS_DIR/.server-port" 2>/dev/null | tr -d '\n')
-
-      if [ -z "$SERVER_PID" ]; then
-        echo "No server was started — skipping cleanup"
-        exit 0
-      fi
-
-      echo "Cleaning up server PID $SERVER_PID on port $SERVER_PORT..."
-
-      # Kill by PID (cross-platform)
-      kill "$SERVER_PID" 2>/dev/null || taskkill //F //T //PID "$SERVER_PID" 2>/dev/null || true
-
-      # Kill by port (fallback)
-      if [ -n "$SERVER_PORT" ]; then
-        fuser -k "$SERVER_PORT/tcp" 2>/dev/null || true
-        lsof -ti:"$SERVER_PORT" 2>/dev/null | xargs kill -9 2>/dev/null || true
-        netstat -ano 2>/dev/null | grep ":$SERVER_PORT " | grep LISTENING | awk '{print $5}' | sort -u | while read pid; do
-          taskkill //F //T //PID "$pid" 2>/dev/null || true
-        done
-      fi
-
-      # Close any agent-browser session
-      agent-browser close 2>/dev/null || true
-
-      sleep 1
-      echo "Cleanup complete"
-    depends_on: [reproduce]
-    trigger_rule: all_done
 
   - id: check-reproduction
     bash: |
@@ -425,7 +316,7 @@ nodes:
       else
         echo "$STATUS"
       fi
-    depends_on: [cleanup-server]
+    depends_on: [reproduce]
     trigger_rule: all_done
 
   # ═══════════════════════════════════════════════════════════════
@@ -455,8 +346,7 @@ nodes:
       1. **State upfront**: "Could not reproduce the reported issue. No GitHub issue was created."
 
       2. **Summarize what was tried**: List the specific steps the reproduce node took,
-         based on the area playbook. Be concrete — "Started server on port X, navigated to Y,
-         clicked Z — no error appeared."
+         based on the area playbook. Be concrete — "Ran command X — no error appeared."
 
       3. **Share what was found**: Include relevant findings from the investigation
          (code references, recent changes, suspected areas).
@@ -464,9 +354,9 @@ nodes:
       4. **Suggest next steps**:
          - Ask the user to provide more specific reproduction steps
          - Mention any environment-specific factors that might matter
-           (OS, browser, database state, specific data conditions)
+           (OS, database state, specific data conditions)
          - If the investigation found suspicious code, mention it as a lead
-         - Suggest running with debug logging: `LOG_LEVEL=debug bun run dev`
+         - Suggest running with debug logging: `LOG_LEVEL=debug bun run cli ...`
 
       5. **Offer to retry**: "If you can provide more specific steps, run the workflow
          again with those details."
@@ -532,7 +422,7 @@ nodes:
          [Key file:line references from investigation]
 
          ## Additional Context
-         [Screenshots, logs, database state — reference artifact files]
+         [Logs, database state — reference artifact files]
          ```
 
       4. **Include reproduction evidence**:
@@ -540,7 +430,7 @@ nodes:
          - If PARTIAL: include what was observed, note incomplete reproduction
 
       5. **Suggest labels** based on classification:
-         - Area label: `area: web`, `area: cli`, `area: workflows`, etc.
+         - Area label: `area: cli`, `area: workflows`, `area: core`, etc.
          - Type label: `bug`, `regression`, `performance`, etc.
 
       6. Write the complete issue body to `$ARTIFACTS_DIR/issue-draft.md`

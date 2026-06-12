@@ -136,8 +136,8 @@ function getLog(): ReturnType<typeof createLogger> {
 
 // Structured-output prompt augmentation is shared across providers. Import
 // once for local use and re-export so existing callers and tests keep their
-// import path stable; new providers should import from `./shared/structured-output`.
-import { augmentPromptForJsonSchema } from './shared/structured-output';
+// import path stable; new providers should import from `./structured-output`.
+import { augmentPromptForJsonSchema } from './structured-output';
 export { augmentPromptForJsonSchema };
 
 /**

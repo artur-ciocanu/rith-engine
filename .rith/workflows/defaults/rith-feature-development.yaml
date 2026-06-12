@@ -7,13 +7,116 @@ description: |
 
 nodes:
   - id: implement
-    command: rith-implement
+    skills:
+      - rith-implement
+      - rith-validate
     model: anthropic/claude-opus-4-5
+    prompt: |
+      # Implement Plan
+
+      **Plan**: $ARGUMENTS
+
+      Execute the plan end-to-end with rigorous self-validation. You are autonomous.
+
+      ## Core Rules
+
+      - **Validation loops catch mistakes early.** Run checks after every change. Fix issues immediately.
+      - **Golden Rule**: If a validation fails, fix it before moving on. Never accumulate broken state.
+
+      ## Phase 0: Detect Project Environment
+
+      Identify the package manager from lock files (bun.lockb, pnpm-lock.yaml, yarn.lock,
+      package-lock.json, Cargo.toml, go.mod). Check package.json for available validation
+      scripts (type-check, lint, test, build).
+
+      ## Phase 1: Load the Plan
+
+      Read the plan from $ARGUMENTS (file path or GitHub issue URL/number).
+      Extract: Summary, Patterns to Mirror, Files to Change, Step-by-Step Tasks,
+      Validation Commands, and Acceptance Criteria.
+
+      ## Phase 2: Prepare Git State
+
+      - Check current branch and worktree status
+      - If in a worktree: use current branch AS-IS (do NOT switch)
+      - If on $BASE_BRANCH with clean state: create branch `feature/{plan-slug}`
+      - If on another branch: use it AS-IS
+      - Sync: `git fetch origin && git pull --rebase origin $BASE_BRANCH 2>/dev/null || true`
+
+      ## Phase 3: Execute Tasks
+
+      For each task in the plan's Step-by-Step Tasks:
+      1. Read the MIRROR file reference and understand the pattern
+      2. Implement the change exactly as specified
+      3. **Run type-check after EVERY file change** — fix before proceeding
+      4. Track progress and document any deviations with rationale
+
+      ## Phase 4: Full Validation
+
+      Run all validation commands from the plan:
+      1. **Static analysis**: type-check + lint (fix lint errors with lint:fix first)
+      2. **Tests**: Write/update tests for new code, then run test suite — all must pass
+      3. **Build**: Must complete without errors
+      4. **Integration tests**: If API/server changes, test endpoints
+
+      ## Phase 5: Implementation Report
+
+      Write report to `$ARTIFACTS_DIR/../reports/{plan-name}-report.md` covering:
+      - Summary, branch, status (COMPLETE/PARTIAL)
+      - Assessment vs Reality (predicted vs actual complexity/confidence)
+      - Tasks completed table with status
+      - Validation results table
+      - Files changed with line counts
+      - Deviations from plan (if any)
+
+      ## Phase 6: Commit
+
+      Stage and commit all implementation changes with a descriptive message.
+      Do NOT stage scratch files, artifacts, or review documents.
 
   - id: create-pr
-    command: rith-create-pr
+    skills:
+      - rith-git
     depends_on: [implement]
     context: fresh
+    prompt: |
+      # Create Pull Request
+
+      **Base branch override**: $ARGUMENTS
+      **Default base branch**: $BASE_BRANCH
+
+      > If a base branch was provided as argument, use it for --base. Otherwise use $BASE_BRANCH.
+
+      ## Pre-flight: Check for Existing PRs
+
+      Extract issue number from branch name (e.g., `fix/issue-580` → `580`).
+      Search for open PRs referencing that issue. If found, report existing PR URL and stop.
+
+      ## Phase 1: Gather Context
+
+      - Check git state: branch, status, commits since $BASE_BRANCH
+      - Look for implementation report: `ls -t $ARTIFACTS_DIR/../reports/*-report.md 2>/dev/null | head -1`
+      - Get commit summary: `git log origin/$BASE_BRANCH..HEAD --pretty=format:"- %s"`
+
+      ## Phase 2: Prepare Branch
+
+      - If uncommitted changes: stage ONLY source files by name (never `git add -A` or `git add .`)
+      - Never stage scratch/review/PR-body artifacts (.pr-body.md, review/, *-report.md, $ARTIFACTS_DIR)
+      - Push: `git push -u origin HEAD`
+
+      ## Phase 3: Create PR
+
+      - Check for PR template at `.github/pull_request_template.md` (or variants)
+      - If template found: fill every section from implementation report and commits
+      - If no template: use Summary, Changes, Validation, Testing Notes format
+      - Include `Closes #XXX` if from a GitHub issue
+      - Write body to `$ARTIFACTS_DIR/pr-body.md`, then:
+        `gh pr create --title "[title]" --body-file $ARTIFACTS_DIR/pr-body.md --base $BASE_BRANCH`
+      - Capture PR number/URL to `$ARTIFACTS_DIR/.pr-number` and `$ARTIFACTS_DIR/.pr-url`
+
+      ## Phase 4: Output
+
+      Report: PR URL, branch, title, summary, and next steps.
 
   - id: verify-pr-base
     bash: |

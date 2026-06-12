@@ -9,7 +9,6 @@ import { readFile } from 'fs/promises';
 import { join } from 'path';
 import type { IWorkflowPlatform, WorkflowDeps, WorkflowMessageMetadata } from './deps';
 import * as rithPaths from '@rith/paths';
-import { BUNDLED_COMMANDS, isBinaryBuild } from './defaults/bundled-defaults';
 import { createLogger } from '@rith/paths';
 import { isValidCommandName } from './command-validation';
 import type { LoadCommandResult } from './schemas';
@@ -279,50 +278,39 @@ export async function loadCommandPrompt(
     }
   }
 
-  // If not found in repo/home and app defaults enabled, search app defaults
+  // If not found in repo/home and app defaults enabled, search app defaults on disk
   const loadDefaultCommands = config.defaults?.loadDefaultCommands ?? true;
   if (loadDefaultCommands) {
-    if (isBinaryBuild()) {
-      // Binary: check bundled commands
-      const bundledContent = BUNDLED_COMMANDS[commandName];
-      if (bundledContent) {
-        getLog().debug({ commandName }, 'command_loaded_bundled');
-        return { success: true, content: bundledContent };
-      }
-      getLog().debug({ commandName }, 'command_bundled_not_found');
-    } else {
-      // Bun: load from filesystem (walk 1 level deep so `defaults/rith-*.md` resolves)
-      const appDefaultsPath = rithPaths.getDefaultCommandsPath();
-      const entries = await rithPaths.findMarkdownFilesRecursive(appDefaultsPath, '', {
-        maxDepth: 1,
-      });
-      const match = entries.find(e => e.commandName === commandName);
-      if (match) {
-        const filePath = join(appDefaultsPath, match.relativePath);
-        try {
-          const content = await readFile(filePath, 'utf-8');
-          if (!content.trim()) {
-            getLog().error({ commandName }, 'command_app_default_empty');
-            return {
-              success: false,
-              reason: 'empty_file',
-              message: `App default command file is empty: ${commandName}.md`,
-            };
-          }
-          getLog().debug({ commandName }, 'command_loaded_app_defaults');
-          return { success: true, content };
-        } catch (error) {
-          const err = error as NodeJS.ErrnoException;
-          if (err.code !== 'ENOENT') {
-            getLog().warn({ err, commandName }, 'command_app_default_read_error');
-          } else {
-            getLog().debug({ commandName }, 'command_app_default_not_found');
-          }
-          // Fall through to not found
+    const appDefaultsPath = rithPaths.getDefaultCommandsPath();
+    const entries = await rithPaths.findMarkdownFilesRecursive(appDefaultsPath, '', {
+      maxDepth: 1,
+    });
+    const match = entries.find(e => e.commandName === commandName);
+    if (match) {
+      const filePath = join(appDefaultsPath, match.relativePath);
+      try {
+        const content = await readFile(filePath, 'utf-8');
+        if (!content.trim()) {
+          getLog().error({ commandName }, 'command_app_default_empty');
+          return {
+            success: false,
+            reason: 'empty_file',
+            message: `App default command file is empty: ${commandName}.md`,
+          };
         }
-      } else {
-        getLog().debug({ commandName }, 'command_app_default_not_found');
+        getLog().debug({ commandName }, 'command_loaded_app_defaults');
+        return { success: true, content };
+      } catch (error) {
+        const err = error as NodeJS.ErrnoException;
+        if (err.code !== 'ENOENT') {
+          getLog().warn({ err, commandName }, 'command_app_default_read_error');
+        } else {
+          getLog().debug({ commandName }, 'command_app_default_not_found');
+        }
+        // Fall through to not found
       }
+    } else {
+      getLog().debug({ commandName }, 'command_app_default_not_found');
     }
   }
 

@@ -95,7 +95,31 @@ nodes:
   - id: generate-prd
     depends_on: [detect-input]
     when: "$detect-input.output.input_type != 'ready'"
-    command: rith-ralph-generate
+    skills:
+      - rith-ralph
+    prompt: |
+      Generate production-quality Ralph PRD files — `prd.md` (full context document)
+      and `prd.json` (story tracking) — through systematic codebase exploration.
+
+      **Input**: $ARGUMENTS
+      **Detected input type**: $detect-input.output.input_type
+      **PRD directory**: $detect-input.output.prd_dir
+
+      Follow the loaded skill methodology for PRD generation. Key phases:
+
+      1. **DETECT** — If existing PRD found, read it and skip to technical grounding.
+         If feature idea, proceed through all phases.
+      2. **UNDERSTAND** — Determine problem, user, goal, scope, success metrics autonomously.
+      3. **UX & DESIGN** — Map user journey, states, edge cases, interaction model.
+      4. **TECHNICAL GROUNDING** — Explore codebase using read-only subagent. Find similar
+         implementations, types/interfaces to extend, naming conventions, test patterns.
+         Read project rules/conventions. This is the critical phase — codebase first.
+      5. **STORY BREAKDOWN** — Split into iteration-sized stories (15-30 min each).
+         Each story must have verifiable acceptance criteria referencing real files.
+         Order by dependency. No circular deps.
+      6. **GENERATE** — Write `prd.md` and `prd.json` to `.rith/ralph/{slug}/`.
+
+      Core principle: CODEBASE FIRST. Stories must reference real files, patterns, and types.
     context: fresh
 
   # ═══════════════════════════════════════════════════════════════
@@ -229,7 +253,7 @@ nodes:
         ### 0.3 Read Project Rules
 
         ```bash
-        cat CLAUDE.md
+        cat CLAUDE.md 2>/dev/null || true
         ```
 
         Note all coding standards, patterns, and rules. Follow them exactly.
@@ -239,7 +263,7 @@ nodes:
         - [ ] progress.txt read (or noted as absent)
         - [ ] prd.json read — know which stories pass/fail
         - [ ] prd.md read — understand requirements
-        - [ ] CLAUDE.md rules noted
+        - [ ] Project rules/conventions noted
 
         ---
 
@@ -303,7 +327,7 @@ nodes:
         **DO:**
         - Implement ONLY the selected story — one story per iteration
         - Follow existing code patterns exactly (naming, structure, imports, error handling)
-        - Match the project's coding standards from CLAUDE.md
+        - Match the project's coding standards from project rules/conventions
         - Write or update tests as required by acceptance criteria
         - Keep changes minimal and focused
 

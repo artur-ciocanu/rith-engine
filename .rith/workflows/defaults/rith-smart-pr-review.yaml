@@ -12,10 +12,71 @@ description: |
 
 nodes:
   - id: scope
-    command: rith-pr-review-scope
+    skills:
+      - rith-review
+    prompt: |
+      You are gathering PR context and verifying reviewability before launching parallel review agents.
+
+      ## Input
+      $ARGUMENTS
+
+      ## Instructions
+
+      1. **Identify PR**: Check `$ARTIFACTS_DIR/.pr-number`, then arguments, then current branch (`gh pr view`).
+         Write PR number to `$ARTIFACTS_DIR/.pr-number`.
+
+      2. **Fetch PR details**:
+         ```bash
+         gh pr view {number} --json number,title,body,url,headRefName,baseRefName,files,additions,deletions,changedFiles,state,author,isDraft,mergeable,mergeStateStatus
+         ```
+
+      3. **Pre-review checks**:
+         - Merge conflicts → STOP if CONFLICTING
+         - CI status → note failures
+         - Behind base → warn if 6+ commits behind, recommend rebase at 16+
+         - Draft status → note if draft
+         - Size → warn if 20+ files or 1000+ lines changed
+
+      4. **Gather context**:
+         - Get full diff: `gh pr diff {number}`
+         - Categorize files: source, test, docs, config
+         - Read project rules/conventions for reviewer rules
+         - Scan diff for new abstractions (interfaces, types, classes)
+
+      5. **Check workflow artifacts**: Look for plan-context.md or investigation.md in
+         `$ARTIFACTS_DIR/../runs/*/` — extract "NOT Building" / scope limits sections.
+
+      6. **Create artifacts directory**: `mkdir -p $ARTIFACTS_DIR/review`
+
+      7. **Write scope manifest** to `$ARTIFACTS_DIR/review/scope.md` with:
+         - PR metadata (number, title, URL, branches, author, date)
+         - Pre-review status table
+         - Changed files table with types and line counts
+         - File categories with counts
+         - Review focus areas
+         - NOT Building (Scope Limits) section from workflow artifacts
+         - Project rules compliance requirements
 
   - id: sync
-    command: rith-sync-pr-with-main
+    skills:
+      - rith-review
+      - rith-git
+    prompt: |
+      Ensure the PR branch is up-to-date with the base branch before review.
+
+      ## Instructions
+
+      1. Read PR number from `$ARTIFACTS_DIR/.pr-number` and scope from `$ARTIFACTS_DIR/review/scope.md`
+      2. Get branch names (PR_HEAD, PR_BASE) from scope
+      3. Fetch both branches and checkout PR_HEAD
+      4. Check how far behind: `git rev-list --count HEAD..origin/$PR_BASE`
+      5. If 0 commits behind → report "up to date" and exit
+      6. Attempt rebase: `git rebase origin/$PR_BASE`
+      7. If conflicts: analyze each, auto-resolve simple ones, resolve complex ones preserving PR intent
+      8. Continue rebase: `git rebase --continue`
+      9. Validate: type-check, lint, tests
+      10. Push: `git push --force-with-lease origin $PR_HEAD`
+      11. If rebase occurred, write report to `$ARTIFACTS_DIR/review/sync-report.md`
     depends_on: [scope]
 
   - id: classify
@@ -80,37 +141,248 @@ nodes:
         - reasoning
 
   - id: code-review
-    command: rith-code-review-agent
+    skills:
+      - rith-review
+    prompt: |
+      Review this PR for code quality, project rules compliance, patterns, and bugs.
+
+      **Output artifact**: `$ARTIFACTS_DIR/review/code-review-findings.md`
+
+      ## Instructions
+
+      1. **Load context**: Read PR number from `$ARTIFACTS_DIR/.pr-number`, scope from
+         `$ARTIFACTS_DIR/review/scope.md`, PR diff via `gh pr diff`, and project rules/conventions.
+         Check for "NOT Building (Scope Limits)" — do NOT flag excluded items.
+
+      2. **Analyze each changed file**:
+         - Project rules compliance (imports, naming, error handling, types, testing patterns)
+         - Bug detection (logic errors, null handling, race conditions, memory leaks, security, off-by-one)
+         - Code quality (duplication, complexity, abstractions, naming, comments)
+         - Pattern matching: search codebase for correct patterns to reference
+         - Primitive duplication: check if new interfaces/types/utilities duplicate existing ones
+
+      3. **Write findings** to artifact with this structure per finding:
+         - Severity (CRITICAL/HIGH/MEDIUM/LOW), category, location
+         - Issue description with evidence (code snippets)
+         - Fix suggestions table (multiple options with pros/cons)
+         - Recommended fix with code
+         - Codebase pattern reference
+
+      4. **Include**: Summary with verdict, statistics table, project rules compliance table,
+         patterns referenced, and positive observations.
     depends_on: [classify, sync]
     when: "$classify.output.run_code_review == 'true'"
 
   - id: error-handling
-    command: rith-error-handling-agent
+    skills:
+      - rith-review
+    prompt: |
+      Hunt for silent failures, inadequate error handling, broad catch blocks, and inappropriate
+      fallback behavior in this PR.
+
+      **Output artifact**: `$ARTIFACTS_DIR/review/error-handling-findings.md`
+
+      ## Instructions
+
+      1. **Load context**: Read PR number, scope, diff, and project error handling rules.
+         Check for "NOT Building (Scope Limits)" — do NOT flag excluded items.
+
+      2. **Find all error handling code** in the diff:
+         try/catch blocks, .catch() handlers, || fallback, ?? defaults, ?. optional chaining,
+         error event handlers, conditional error states.
+
+      3. **Scrutinize each handler** for:
+         - Logging quality (severity, context, debuggability)
+         - User feedback (actionable, specific, appropriate detail level)
+         - Catch block specificity (expected types only, not suppressing unrelated errors)
+         - Fallback behavior (documented, not masking problems, user-visible)
+
+      4. **Search codebase** for existing error handling patterns to reference.
+
+      5. **Write findings** to artifact with per-finding structure:
+         - Severity, category (silent-failure/broad-catch/missing-logging/poor-user-feedback/unsafe-fallback)
+         - Hidden errors list, user impact
+         - Fix suggestions with options and codebase pattern references
+         - Error handler audit table and silent failure risk assessment
     depends_on: [classify, sync]
     when: "$classify.output.run_error_handling == 'true'"
 
   - id: test-coverage
-    command: rith-test-coverage-agent
+    skills:
+      - rith-review
+    prompt: |
+      Analyze test coverage for the PR changes. Identify critical gaps, evaluate test quality,
+      and ensure tests verify behavior not implementation.
+
+      **Output artifact**: `$ARTIFACTS_DIR/review/test-coverage-findings.md`
+
+      ## Instructions
+
+      1. **Load context**: Read PR number, scope (note source vs test files), diff, and existing tests.
+         Check for "NOT Building (Scope Limits)" — do NOT flag excluded items.
+
+      2. **Map source to tests**: For each changed source file, find corresponding test file.
+         Check if new functions are tested, if modified functions' tests are updated.
+
+      3. **Identify critical gaps**: Untested error handling paths, edge cases (null, empty, boundary),
+         critical business logic, security-sensitive code, async behavior, integration points.
+
+      4. **Evaluate test quality**: Behavior vs implementation testing, regression detection,
+         refactoring resilience, DAMP principles, meaningful assertions.
+
+      5. **Write findings** to artifact with:
+         - Coverage map (source file → test file → coverage status)
+         - Per-finding: severity, category, criticality score, untested code, suggested tests with example code
+         - Test quality audit table, risk assessment, pattern references
     depends_on: [classify, sync]
     when: "$classify.output.run_test_coverage == 'true'"
 
   - id: comment-quality
-    command: rith-comment-quality-agent
+    skills:
+      - rith-review
+    prompt: |
+      Analyze code comments for accuracy, completeness, and maintainability in this PR.
+
+      **Output artifact**: `$ARTIFACTS_DIR/review/comment-quality-findings.md`
+
+      ## Instructions
+
+      1. **Load context**: Read PR number, scope, and diff (focus on new/modified comments, JSDoc, docstrings).
+         Check for "NOT Building (Scope Limits)" — do NOT flag excluded items.
+
+      2. **Check comment accuracy**: Does each comment match actual code behavior?
+         Are parameter/return descriptions correct? Edge cases documented accurately?
+
+      3. **Identify comment rot**: Old behavior descriptions, unaddressed TODO/FIXME,
+         outdated references, comments contradicting code.
+
+      4. **Check documentation completeness**: Complex functions documented? Public APIs?
+         Non-obvious algorithms explained? Magic numbers/constants? Important decisions?
+
+      5. **Assess maintainability**: Will future developers understand the "why"?
+         Are there redundant comments? Good signal-to-noise ratio? Comments in right places?
+
+      6. **Write findings** to artifact with:
+         - Per-finding: severity, category (inaccurate/outdated/missing/redundant/misleading)
+         - Actual code behavior vs comment claims
+         - Comment audit table, documentation gaps table, comment rot table
+         - Fix suggestions (update/remove/expand options)
     depends_on: [classify, sync]
     when: "$classify.output.run_comment_quality == 'true'"
 
   - id: docs-impact
-    command: rith-docs-impact-agent
+    skills:
+      - rith-review
+    prompt: |
+      Analyze if PR changes require documentation updates: project rules/conventions,
+      docs/ folder, agent definitions, or other documentation.
+
+      **Output artifact**: `$ARTIFACTS_DIR/review/docs-impact-findings.md`
+
+      ## Instructions
+
+      1. **Load context**: Read PR number, scope, and diff.
+         Check for "NOT Building (Scope Limits)" — do NOT flag excluded items.
+
+      2. **Check for documentation impact**:
+         - New/changed/removed public APIs → API docs needed?
+         - New CLI commands or flags → CLI docs needed?
+         - New environment variables → config docs needed?
+         - Changed behavior → existing docs outdated?
+         - New features → user-facing docs needed?
+         - Architecture changes → project rules/conventions update needed?
+
+      3. **Scan existing documentation**: Check docs/ folder, README, project rules/conventions
+         for sections that may be affected by the changes.
+
+      4. **Write findings** to artifact with:
+         - Per-finding: severity, category (missing-docs/outdated-docs/incomplete-docs)
+         - What documentation needs updating and why
+         - Suggested documentation text
+         - Impact assessment (user-facing vs internal)
     depends_on: [classify, sync]
     when: "$classify.output.run_docs_impact == 'true'"
 
   - id: synthesize
-    command: rith-synthesize-review
+    skills:
+      - rith-review
+    prompt: |
+      Synthesize all review agent findings into a consolidated report and post to GitHub.
+
+      **Output artifact**: `$ARTIFACTS_DIR/review/consolidated-review.md`
+
+      ## Instructions
+
+      1. **Load all findings**: Read PR number from `$ARTIFACTS_DIR/.pr-number`, scope from
+         `$ARTIFACTS_DIR/review/scope.md`, then read whichever agent artifacts exist:
+         - `$ARTIFACTS_DIR/review/code-review-findings.md`
+         - `$ARTIFACTS_DIR/review/error-handling-findings.md`
+         - `$ARTIFACTS_DIR/review/test-coverage-findings.md`
+         - `$ARTIFACTS_DIR/review/comment-quality-findings.md`
+         - `$ARTIFACTS_DIR/review/docs-impact-findings.md`
+
+      2. **Aggregate by severity**: CRITICAL (must fix), HIGH (should fix), MEDIUM (consider), LOW (nice to have).
+
+      3. **Deduplicate**: Merge overlapping findings, group related issues, resolve conflicting recommendations.
+
+      4. **Prioritize**: Rank by severity → user impact → ease of fix → risk if unfixed.
+
+      5. **Write consolidated artifact** with:
+         - Executive summary and overall verdict (APPROVE/REQUEST_CHANGES/NEEDS_DISCUSSION)
+         - Statistics table (findings by agent and severity)
+         - CRITICAL and HIGH issues with recommended fixes
+         - MEDIUM issues with options table (fix now / create issue / skip)
+         - LOW issues summary table
+         - Positive observations, suggested follow-up issues
+
+      6. **Post GitHub comment**: `gh pr comment {number} --body "..."` with formatted review
+         covering all severity levels, using collapsible details for verbose sections.
     depends_on: [code-review, error-handling, test-coverage, comment-quality, docs-impact]
     trigger_rule: one_success
 
   - id: implement-fixes
-    command: rith-implement-review-fixes
+    skills:
+      - rith-review
+      - rith-implement
+    prompt: |
+      Implement all CRITICAL and HIGH priority fixes from the consolidated review.
+
+      **Output artifact**: `$ARTIFACTS_DIR/review/fix-report.md`
+
+      ## Important
+
+      Your output will be posted as a GitHub comment. Keep working output minimal —
+      only output the final structured report. Use todo tracking to track progress silently.
+
+      ## Instructions
+
+      1. **Load fix list**: Read PR number, checkout the PR's head branch (not a new branch),
+         read consolidated review from `$ARTIFACTS_DIR/review/consolidated-review.md`.
+         If needed, read individual agent artifacts for full fix code.
+
+      2. **Implement fixes**:
+         - For each CRITICAL issue: read file, apply recommended fix, verify it compiles
+         - For each HIGH issue: same process
+         - For test coverage gaps on fixed code: create/update test files, verify tests pass
+         - Document any unfixable issues (conflicts, complexity, ambiguity, risk)
+
+      3. **Validate**: Run type-check, lint, tests, and build. Fix any issues introduced.
+
+      4. **Commit and push**:
+         - Stage only files you edited (never `git add -A` or `git add .`)
+         - Never stage scratch/review/PR-body artifacts
+         - Commit with descriptive message listing fixes applied
+         - Push to the PR's head branch
+
+      5. **Write fix report** to artifact with:
+         - CRITICAL/HIGH fixes applied (status, details)
+         - Tests added
+         - Not-fixed items with reasons
+         - MEDIUM/LOW issues for user decision
+         - Validation results and git status
+
+      6. **Post GitHub comment**: `gh pr comment {number} --body "..."` with fix report
+         summarizing what was fixed, what wasn't, and suggested follow-up issues.
     depends_on: [synthesize]
 
   # Optional: push notification when review completes.

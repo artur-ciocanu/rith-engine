@@ -61,6 +61,8 @@ nodes:
   # ═══════════════════════════════════════════════════════════════
 
   - id: analyze-impact
+    skills:
+      - rith-plan
     prompt: |
       You are a senior software engineer analyzing code for a safe refactoring.
 
@@ -124,6 +126,8 @@ nodes:
   # ═══════════════════════════════════════════════════════════════
 
   - id: plan-refactor
+    skills:
+      - rith-plan
     prompt: |
       You are planning a safe refactoring. You must produce a precise, ordered plan
       that another agent will follow literally.
@@ -206,6 +210,9 @@ nodes:
   # ═══════════════════════════════════════════════════════════════
 
   - id: execute-refactor
+    skills:
+      - rith-implement
+      - rith-validate
     model: anthropic/claude-opus-4-5
     prompt: |
       You are executing a refactoring plan with strict safety guardrails.
@@ -332,6 +339,8 @@ nodes:
   # ═══════════════════════════════════════════════════════════════
 
   - id: fix-failures
+    skills:
+      - rith-validate
     prompt: |
       Review the validation output below.
 
@@ -380,6 +389,8 @@ nodes:
   # ═══════════════════════════════════════════════════════════════
 
   - id: verify-behavior
+    skills:
+      - rith-review
     prompt: |
       You are a code reviewer verifying that a refactoring preserved exact behavior.
       You can ONLY read files — you cannot make any changes.
@@ -435,6 +446,8 @@ nodes:
   # ═══════════════════════════════════════════════════════════════
 
   - id: create-pr
+    skills:
+      - rith-git
     prompt: |
       Create a pull request for the refactoring.
 

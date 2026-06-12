@@ -133,7 +133,7 @@ bun run format:check
 bun run validate
 ```
 
-This runs `check:bundled`, `check:bundled-skill`, type-check, lint, format check, and tests. All six must pass for CI to succeed.
+This runs type-check, lint, format check, and tests. All must pass for CI to succeed.
 
 ### ESLint Guidelines
 
@@ -252,7 +252,8 @@ packages/
 │   └── src/
 │       ├── types.ts          # Contract layer (PiAgent, SendQueryOptions, MessageChunk — ZERO SDK deps)
 │       ├── agent.ts          # PiCodingAgent + config + model-ref + event-bridge + session-resolver (flat module)
-│       ├── shared/           # Shared utilities (skills, structured-output)
+│       ├── skills.ts          # Skill directory resolution
+│       ├── structured-output.ts # Best-effort JSON structured output
 │       ├── mcp/              # MCP configuration
 │       └── index.ts          # Package exports
 ├── core/                     # @rith/core - Shared business logic
@@ -281,7 +282,6 @@ packages/
 │       ├── event-emitter.ts  # Workflow observability events
 │       ├── logger.ts         # JSONL file logger
 │       ├── validator.ts      # Resource validation (command files, MCP configs, skill dirs)
-│       ├── defaults/         # Bundled default commands and workflows
 │       └── utils/            # Variable substitution, tool formatting, execution utilities
 ├── git/                      # @rith/git - Git operations (no @rith/core dep)
 │   └── src/
@@ -358,9 +358,9 @@ import * as core from '@rith/core';  // Don't do this
 **Package Split:**
 - **@rith/paths**: Path resolution utilities, Pino logger factory, web dist cache path (`getWebDistDir`), CWD env stripper (`stripCwdEnv`, `strip-cwd-env-boot`) (no @rith/* deps; `pino` and `dotenv` are allowed external deps)
 - **@rith/git**: Git operations - worktrees, branches, repos, exec wrappers (depends only on @rith/paths)
-- **@rith/pi**: Pi Coding Agent — owns SDK deps, the `PiAgent` interface, `sendQuery()` contract, and Pi-specific option translation. `@rith/pi/types` is the contract subpath (zero SDK deps, zero runtime side effects) that `@rith/workflows` imports from. The agent lives in `agent.ts` (flat module, `PiCodingAgent`); shared utilities under `shared/`.
+- **@rith/pi**: Pi Coding Agent — owns SDK deps, the `PiAgent` interface, `sendQuery()` contract, and Pi-specific option translation. `@rith/pi/types` is the contract subpath (zero SDK deps, zero runtime side effects) that `@rith/workflows` imports from. The agent lives in `agent.ts` (flat module, `PiCodingAgent`); shared utilities (`skills.ts`, `structured-output.ts`) live at package root.
 - **@rith/isolation**: Worktree isolation types, providers, resolver, error classifiers (depends only on @rith/git + @rith/paths)
-- **@rith/workflows**: Workflow engine - loader, router, executor, DAG, logger, bundled defaults (depends only on @rith/git + @rith/paths + @rith/pi/types + @hono/zod-openapi + zod; DB/AI/config injected via `WorkflowDeps`)
+- **@rith/workflows**: Workflow engine - loader, router, executor, DAG, logger (depends only on @rith/git + @rith/paths + @rith/pi/types + @hono/zod-openapi + zod; DB/AI/config injected via `WorkflowDeps`)
 - **@rith/cli**: Command-line interface for running workflows (depends on @rith/core + @rith/pi + @rith/workflows + @rith/git + @rith/isolation)
 - **@rith/core**: Business logic, database, orchestration (depends on @rith/pi for AI; provides `createWorkflowStore()` adapter bridging core DB → `IWorkflowStore`)
 
@@ -572,9 +572,8 @@ async function createSession(conversationId: string, codebaseId: string) {
    - Claude routing calls use `tools: []` to prevent tool use at the API level; Codex tool bypass is detected and triggers the same fallback
 
 **Defaults:**
-- Bundled in `.rith/commands/defaults/` and `.rith/workflows/defaults/`
-- Binary builds: Embedded at compile time (no filesystem access needed) via `packages/workflows/src/defaults/bundled-defaults.generated.ts`
-- Source builds: Loaded from filesystem at runtime
+- Skills in `.rith/skills/` and workflows in `.rith/workflows/defaults/`
+- Loaded from filesystem at runtime — no compiled-in defaults
 - Merged with repo-specific commands/workflows (repo overrides defaults by name)
 - Opt-out: Set `defaults.loadDefaultCommands: false` or `defaults.loadDefaultWorkflows: false` in `.rith/config.yaml`
 - **After adding, removing, or editing a default file, run `bun run generate:bundled`** to refresh the embedded bundle. `bun run validate` (and CI) run `check:bundled` and `check:bundled-skill` and will fail loudly if either generated file is stale.

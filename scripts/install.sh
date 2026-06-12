@@ -221,6 +221,30 @@ main() {
 
   success "Installed to $INSTALL_DIR/$BINARY_NAME"
 
+  # Install default skills and workflows to ~/.rith/
+  local rith_home="${RITH_HOME:-$HOME/.rith}"
+  info "Installing default skills and workflows to $rith_home..."
+
+  # Download content archive (skills + workflows) from release
+  local content_url
+  content_url="https://github.com/$REPO/releases/download/$VERSION/rith-content.tar.gz"
+  local content_archive="$tmp_dir/rith-content.tar.gz"
+
+  if curl -fsSL "$content_url" -o "$content_archive" 2>/dev/null; then
+    mkdir -p "$rith_home/skills" "$rith_home/workflows"
+    tar -xzf "$content_archive" -C "$tmp_dir"
+    # Overwrite installed defaults (user's project-local .rith/ is never touched)
+    if [ -d "$tmp_dir/content/skills" ]; then
+      cp -r "$tmp_dir/content/skills/"* "$rith_home/skills/" 2>/dev/null || true
+    fi
+    if [ -d "$tmp_dir/content/workflows" ]; then
+      cp -r "$tmp_dir/content/workflows/"* "$rith_home/workflows/" 2>/dev/null || true
+    fi
+    success "Default skills and workflows installed to $rith_home"
+  else
+    warn "Could not download content archive — skills and workflows will be loaded from the repo"
+  fi
+
   # Verify installation
   echo ""
   info "Verifying installation..."

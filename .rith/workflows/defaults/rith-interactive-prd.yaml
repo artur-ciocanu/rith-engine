@@ -255,8 +255,8 @@ nodes:
       **Check 1: File paths** — For every file referenced in "Technical Approach" and
       "Implementation Phases", verify it exists. If it doesn't, note the correction.
 
-      **Check 2: API endpoints** — For every endpoint mentioned, check if it already exists
-      in `packages/server/src/routes/api.ts`. If it does, the PRD should say "extend" not "create".
+      **Check 2: API endpoints** — For every endpoint mentioned, verify it exists in the
+      codebase. If it already exists, the PRD should say "extend" not "create".
       If the PRD proposes a new endpoint for data that an existing endpoint already returns,
       flag it.
 

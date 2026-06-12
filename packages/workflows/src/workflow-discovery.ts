@@ -2,14 +2,13 @@
  * Workflow discovery - finds and loads workflow YAML files from disk.
  *
  * Extracted from loader.ts so that file can focus on YAML parsing.
- * This module handles directory traversal, bundled defaults, and the
- * full discoverWorkflows entry point.
+ * This module handles directory traversal and the full discoverWorkflows
+ * entry point.
  *
  * Imports parseWorkflow from loader.ts (parsing concern stays there).
  *
  * Scopes (precedence lowest → highest):
- *   1. `bundled` — embedded in the Rith Engine binary (or read from the app's
- *      defaults folder in source mode).
+ *   1. `bundled` — read from the app's defaults folder (`.rith/workflows/defaults/`).
  *   2. `global`  — home-scoped at `~/.rith/workflows/`. Applies to every
  *      repo; discovered automatically (no caller option needed).
  *   3. `project` — repo-local at `<cwd>/.rith/workflows/`.
@@ -25,10 +24,8 @@ import type {
   WorkflowWithSource,
 } from './schemas';
 import * as rithPaths from '@rith/paths';
-import { BUNDLED_WORKFLOWS, isBinaryBuild } from './defaults/bundled-defaults';
 import { createLogger } from '@rith/paths';
 import { parseWorkflow } from './loader';
-
 /**
  * Logger accessor — `createLogger` is called per use rather than cached so that
  * (a) test mocks of `createLogger` always apply, even across files in a shared
@@ -158,48 +155,13 @@ async function loadWorkflowsFromDir(dirPath: string, depth = 0): Promise<DirLoad
 }
 
 /**
- * Load bundled default workflows (for binary distribution)
- * Returns a Map of filename -> workflow for consistency with loadWorkflowsFromDir
- *
- * Note: Bundled workflows are embedded at compile time and should ALWAYS be valid.
- * Parse failures indicate a build-time corruption and are logged as errors.
- */
-function loadBundledWorkflows(): DirLoadResult {
-  const workflows = new Map<string, WorkflowDefinition>();
-  const errors: WorkflowLoadError[] = [];
-
-  for (const [name, content] of Object.entries(BUNDLED_WORKFLOWS)) {
-    const filename = `${name}.yaml`;
-    const result = parseWorkflow(content, filename);
-    if (result.workflow) {
-      workflows.set(filename, result.workflow);
-      getLog().debug({ workflowName: result.workflow.name }, 'bundled_workflow_loaded');
-    } else {
-      // Bundled workflows should ALWAYS be valid - this indicates a build-time error
-      getLog().error(
-        { filename, contentPreview: content.slice(0, 200) + '...' },
-        'bundled_workflow_parse_failed'
-      );
-      errors.push(result.error);
-    }
-  }
-
-  return { workflows, errors };
-}
-
-/**
  * Discover and load workflows from codebase.
  *
  * Loads three scopes in order (later overrides earlier by filename):
- *   1. Bundled defaults (unless `options.loadDefaults === false`).
+ *   1. App defaults from `.rith/workflows/defaults/` (unless opted out).
  *   2. Home-scoped `~/.rith/workflows/` — classified as `source: 'global'`.
- *      No caller option: every caller gets home-scoped discovery for free.
  *   3. Repo-scoped `<cwd>/.rith/workflows/` — classified as `source: 'project'`.
- *      Skipped when `cwd` is `null` (no project context — e.g. fresh deployment
- *      where no codebase has been registered yet).
- *
- * When running as a compiled binary, bundled defaults are loaded from embedded
- * content. In source/dev mode they're loaded from the filesystem.
+ *      Skipped when `cwd` is `null` (no project context).
  *
  * Migration: if the retired `~/.rith/.rith/workflows/` path exists, the
  * first call per process logs a WARN with the exact `mv` command. The legacy
@@ -213,49 +175,34 @@ export async function discoverWorkflows(
   const workflowsByFile = new Map<string, WorkflowWithSource>();
   const allErrors: WorkflowLoadError[] = [];
 
-  // 1. Load from app's bundled defaults (unless opted out)
+  // 1. Load from app's defaults directory (unless opted out)
   const loadDefaultWorkflows = options?.loadDefaults !== false;
   if (loadDefaultWorkflows) {
-    if (isBinaryBuild()) {
-      // Binary: load from embedded bundled content
-      getLog().debug('loading_bundled_default_workflows');
-      const bundledResult = loadBundledWorkflows();
-      for (const [filename, workflow] of bundledResult.workflows) {
+    const appDefaultsPath = rithPaths.getDefaultWorkflowsPath();
+    getLog().debug({ appDefaultsPath }, 'loading_app_default_workflows');
+    try {
+      await access(appDefaultsPath);
+      const appResult = await loadWorkflowsFromDir(appDefaultsPath);
+      for (const [filename, workflow] of appResult.workflows) {
         workflowsByFile.set(filename, { workflow, source: 'bundled' });
       }
-      allErrors.push(...bundledResult.errors);
-      getLog().info({ count: bundledResult.workflows.size }, 'bundled_default_workflows_loaded');
-    } else {
-      // Bun: load from filesystem (development mode)
-      const appDefaultsPath = rithPaths.getDefaultWorkflowsPath();
-      getLog().debug({ appDefaultsPath }, 'loading_app_default_workflows');
-      try {
-        await access(appDefaultsPath);
-        const appResult = await loadWorkflowsFromDir(appDefaultsPath);
-        for (const [filename, workflow] of appResult.workflows) {
-          workflowsByFile.set(filename, { workflow, source: 'bundled' });
-        }
-        if (appResult.errors.length > 0) {
-          getLog().warn(
-            { errorCount: appResult.errors.length, errors: appResult.errors },
-            'app_default_workflow_errors'
-          );
-          allErrors.push(...appResult.errors);
-        }
-        getLog().info({ count: appResult.workflows.size }, 'app_default_workflows_loaded');
-      } catch (error) {
-        const err = error as NodeJS.ErrnoException;
-        if (err.code !== 'ENOENT') {
-          getLog().warn({ err, appDefaultsPath }, 'app_defaults_access_error');
-        } else {
-          getLog().debug({ appDefaultsPath }, 'app_defaults_directory_not_found');
-        }
+      if (appResult.errors.length > 0) {
+        getLog().warn(
+          { errorCount: appResult.errors.length, errors: appResult.errors },
+          'app_default_workflow_errors'
+        );
+        allErrors.push(...appResult.errors);
+      }
+      getLog().info({ count: appResult.workflows.size }, 'app_default_workflows_loaded');
+    } catch (error) {
+      const err = error as NodeJS.ErrnoException;
+      if (err.code !== 'ENOENT') {
+        getLog().warn({ err, appDefaultsPath }, 'app_defaults_access_error');
+      } else {
+        getLog().debug({ appDefaultsPath }, 'app_defaults_directory_not_found');
       }
     }
   }
-
-  // 2. Load home-scoped workflows from ~/.rith/workflows/. No caller option —
-  // discovery is responsible for surfacing home-scoped content everywhere.
   await maybeWarnLegacyHomePath();
   const homeWorkflowPath = rithPaths.getHomeWorkflowsPath();
   getLog().debug({ homeWorkflowPath }, 'searching_home_workflows');

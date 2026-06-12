@@ -20,7 +20,6 @@ import {
   findMarkdownFilesRecursive,
 } from '@rith/paths';
 import { execFileAsync } from '@rith/git';
-import { BUNDLED_COMMANDS, isBinaryBuild } from './defaults/bundled-defaults';
 import { isValidCommandName } from './command-validation';
 
 /** Lazy-initialized logger */
@@ -167,19 +166,13 @@ export async function discoverAvailableCommands(
     getLog().warn({ err, path: homePath }, 'commands.home_discovery_failed');
   }
 
-  // 3. Bundled defaults
+  // 3. App defaults (on disk)
   const loadDefaults = config?.loadDefaultCommands !== false;
   if (loadDefaults) {
-    if (isBinaryBuild()) {
-      for (const name of Object.keys(BUNDLED_COMMANDS)) {
-        names.add(name);
-      }
-    } else {
-      const defaultsPath = getDefaultCommandsPath();
-      const files = await findMarkdownFilesRecursive(defaultsPath, '', { maxDepth: 1 });
-      for (const { commandName } of files) {
-        names.add(commandName);
-      }
+    const defaultsPath = getDefaultCommandsPath();
+    const files = await findMarkdownFilesRecursive(defaultsPath, '', { maxDepth: 1 });
+    for (const { commandName } of files) {
+      names.add(commandName);
     }
   }
 
@@ -237,17 +230,11 @@ async function resolveCommand(
     getLog().warn({ err, commandName }, 'commands.home_resolve_failed');
   }
 
-  // 3. Bundled defaults
+  // 3. App defaults (on disk)
   const loadDefaults = config?.loadDefaultCommands !== false;
   if (loadDefaults) {
-    if (isBinaryBuild()) {
-      if (commandName in BUNDLED_COMMANDS) {
-        return `[bundled:${commandName}]`;
-      }
-    } else {
-      const defaultsResolved = await resolveCommandInDir(getDefaultCommandsPath(), commandName);
-      if (defaultsResolved) return defaultsResolved;
-    }
+    const defaultsResolved = await resolveCommandInDir(getDefaultCommandsPath(), commandName);
+    if (defaultsResolved) return defaultsResolved;
   }
 
   return null;
@@ -378,20 +365,34 @@ export async function validateWorkflowResources(
 
     // --- Skills nodes: check skill directories exist ---
     if ('skills' in node && Array.isArray(node.skills)) {
+      const home = homedir();
       for (const skillName of node.skills) {
-        const projectSkillPath = join(cwd, '.claude', 'skills', skillName, 'SKILL.md');
-        const userSkillPath = join(homedir(), '.claude', 'skills', skillName, 'SKILL.md');
+        // Search order mirrors skillSearchRoots in @rith/pi:
+        // cwd/.rith > ~/.rith > cwd/.agents > cwd/.claude > ~/.agents > ~/.claude
+        const candidates = [
+          join(cwd, '.rith', 'skills', skillName, 'SKILL.md'),
+          join(home, '.rith', 'skills', skillName, 'SKILL.md'),
+          join(cwd, '.agents', 'skills', skillName, 'SKILL.md'),
+          join(cwd, '.claude', 'skills', skillName, 'SKILL.md'),
+          join(home, '.agents', 'skills', skillName, 'SKILL.md'),
+          join(home, '.claude', 'skills', skillName, 'SKILL.md'),
+        ];
 
-        const projectExists = await fileExists(projectSkillPath);
-        const userExists = await fileExists(userSkillPath);
+        let found = false;
+        for (const candidate of candidates) {
+          if (await fileExists(candidate)) {
+            found = true;
+            break;
+          }
+        }
 
-        if (!projectExists && !userExists) {
+        if (!found) {
           issues.push({
             level: 'warning',
             nodeId: node.id,
             field: 'skills',
-            message: `Skill '${skillName}' not found in .claude/skills/ or ~/.claude/skills/`,
-            hint: `Install with: npx skills add <repo> — or create manually at .claude/skills/${skillName}/SKILL.md`,
+            message: `Skill '${skillName}' not found in any skills directory`,
+            hint: `Create at .rith/skills/${skillName}/SKILL.md or install globally at ~/.rith/skills/${skillName}/SKILL.md`,
           });
         }
       }

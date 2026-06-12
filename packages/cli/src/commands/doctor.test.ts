@@ -174,12 +174,11 @@ describe('checkWorkspaceWritable', () => {
 });
 
 describe('checkBundledDefaults', () => {
-  it('returns pass with workflow and command counts', async () => {
+  it('returns pass with workflow count', async () => {
     const result = await checkBundledDefaults();
     expect(result.status).toBe('pass');
     expect(result.label).toBe('Bundled defaults');
     expect(result.message).toMatch(/\d+ workflow/);
-    expect(result.message).toMatch(/\d+ command/);
   });
 });
 

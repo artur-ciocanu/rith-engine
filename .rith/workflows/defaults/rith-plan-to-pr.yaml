@@ -22,7 +22,24 @@ nodes:
   # ═══════════════════════════════════════════════════════════════════
 
   - id: plan-setup
-    command: rith-plan-setup
+    skills:
+      - rith-plan
+    prompt: |
+      Prepare everything needed for plan implementation:
+
+      1. Locate plan file: check $ARTIFACTS_DIR/plan.md first, then $ARGUMENTS path
+      2. Read and parse the plan including scope limits and "NOT Building" section
+      3. Ensure correct git branch (create from $BASE_BRANCH if needed)
+      4. Write comprehensive context artifact to $ARTIFACTS_DIR/plan-context.md with:
+         - Plan summary, user story, metadata
+         - Scope limits (NOT Building items)
+         - Files to change list
+         - Patterns to mirror with file:line refs
+         - Validation commands
+         - Acceptance criteria
+
+      This step does NOT implement anything — only sets up the environment.
+      This step does NOT create a PR.
     context: fresh
 
   # ═══════════════════════════════════════════════════════════════════
@@ -30,7 +47,23 @@ nodes:
   # ═══════════════════════════════════════════════════════════════════
 
   - id: confirm-plan
-    command: rith-confirm-plan
+    skills:
+      - rith-plan
+    prompt: |
+      Verify the plan's research is still valid before implementation begins.
+
+      1. Read $ARTIFACTS_DIR/plan-context.md
+      2. For each pattern file referenced: verify it exists and code matches expectations
+      3. For CREATE targets: verify they don't already exist
+      4. For UPDATE targets: verify they still exist
+      5. Check validation commands are available (type-check, lint, test)
+      6. Write confirmation to $ARTIFACTS_DIR/plan-confirmation.md with status:
+         CONFIRMED, WARNINGS, or BLOCKED
+
+      If BLOCKED (missing files, major drift): stop and report.
+      If CONFIRMED/WARNINGS: proceed.
+
+      This step does NOT implement anything — only validates the plan is accurate.
     depends_on: [plan-setup]
     context: fresh
 
@@ -39,7 +72,25 @@ nodes:
   # ═══════════════════════════════════════════════════════════════════
 
   - id: implement-tasks
-    command: rith-implement-tasks
+    skills:
+      - rith-implement
+      - rith-validate
+    prompt: |
+      Execute the implementation plan task by task with rigorous validation.
+
+      1. Read $ARTIFACTS_DIR/plan-context.md and $ARTIFACTS_DIR/plan-confirmation.md
+      2. Read project rules/conventions for coding standards
+      3. Work through tasks in dependency order from the plan
+      4. For each task:
+         - Read referenced pattern files before writing code
+         - Implement following existing codebase patterns exactly
+         - Run type-check after each file change
+         - Fix any issues immediately before moving on
+      5. After all tasks: run full validation suite
+      6. Write implementation report to $ARTIFACTS_DIR/implementation.md
+
+      Golden rule: if validation fails, fix it before moving on.
+      Never accumulate broken state.
     depends_on: [confirm-plan]
     context: fresh
     model: anthropic/claude-opus-4-5
@@ -49,7 +100,22 @@ nodes:
   # ═══════════════════════════════════════════════════════════════════
 
   - id: validate
-    command: rith-validate
+    skills:
+      - rith-validate
+    prompt: |
+      Run the complete validation suite and fix any failures.
+
+      1. Read $ARTIFACTS_DIR/plan-context.md for validation commands
+      2. Detect package manager (bun/pnpm/yarn/npm) from lockfile
+      3. Run in order: type-check → lint → tests → build
+      4. For each failure:
+         - Diagnose root cause from error output
+         - Fix the issue (prefer minimal, targeted fixes)
+         - Re-run the failing check to confirm
+      5. Repeat until all checks pass or issues are unfixable
+      6. Write results to $ARTIFACTS_DIR/validation.md with pass/fail per check
+
+      Focus: run checks, fix issues, repeat until green.
     depends_on: [implement-tasks]
     context: fresh
 
@@ -58,7 +124,23 @@ nodes:
   # ═══════════════════════════════════════════════════════════════════
 
   - id: finalize-pr
-    command: rith-finalize-pr
+    skills:
+      - rith-git
+    prompt: |
+      Finalize the implementation and create the PR.
+
+      1. Read artifacts: plan-context.md, implementation.md, validation.md
+      2. Check for existing PR on current branch: `gh pr list --head $(git branch --show-current)`
+      3. Check for project PR template at .github/pull_request_template.md
+      4. Stage only source files (never artifacts, scratch files, or $ARTIFACTS_DIR contents)
+      5. Commit with descriptive message
+      6. Push branch: `git push -u origin HEAD`
+      7. Create PR targeting $BASE_BRANCH:
+         - Use project template if found, filling every section
+         - Otherwise: Summary, Changes, Validation results, Testing notes
+         - Link to issue if branch name contains issue number
+      8. Save PR number to $ARTIFACTS_DIR/.pr-number and URL to $ARTIFACTS_DIR/.pr-url
+      9. Write confirmation to $ARTIFACTS_DIR/pr-ready.md
     depends_on: [validate]
     context: fresh
 
@@ -81,42 +163,165 @@ nodes:
     depends_on: [finalize-pr]
 
   - id: review-scope
-    command: rith-pr-review-scope
+    skills:
+      - rith-review
+    prompt: |
+      Gather PR context and prepare the review artifacts directory.
+
+      1. Get PR number from $ARTIFACTS_DIR/.pr-number (or from $ARGUMENTS, or current branch)
+      2. Fetch PR details: `gh pr view {number} --json title,body,baseRefName,headRefName,files,additions,deletions`
+      3. Check PR is in reviewable state (not draft, has commits)
+      4. Create artifacts directory: `mkdir -p $ARTIFACTS_DIR/review`
+      5. Write scope to $ARTIFACTS_DIR/review/scope.md:
+         - PR number, title, branches
+         - Changed files list with stats
+         - Project rules/conventions rules to check
+         - Focus areas based on changed files
+         - "NOT Building (Scope Limits)" from plan-context.md if available
+      6. Save PR number: `echo {number} > $ARTIFACTS_DIR/.pr-number`
     depends_on: [verify-pr-base]
     context: fresh
 
   - id: sync
-    command: rith-sync-pr-with-main
+    skills:
+      - rith-git
+    prompt: |
+      Ensure the PR branch is up-to-date with the latest base branch before review.
+
+      1. Read PR number from $ARTIFACTS_DIR/.pr-number and scope from $ARTIFACTS_DIR/review/scope.md
+      2. Fetch latest: `git fetch origin {base} && git fetch origin {head}`
+      3. Check if behind: `git rev-list --count HEAD..origin/{base}`
+      4. If behind > 0: rebase onto base branch
+         - If conflicts arise: resolve them carefully, preserving PR intent
+         - Force push after rebase: `git push --force-with-lease`
+      5. Write sync report to $ARTIFACTS_DIR/review/sync-report.md only if action was taken
+      6. If already up-to-date: report silently and continue
     depends_on: [review-scope]
     context: fresh
 
   - id: code-review
-    command: rith-code-review-agent
+    skills:
+      - rith-review
+    prompt: |
+      Review the PR for code quality, project rules compliance, patterns, and bugs.
+
+      1. Read scope from $ARTIFACTS_DIR/review/scope.md
+      2. Get PR diff: `gh pr diff {number}`
+      3. Read project rules/conventions for coding standards
+      4. For each changed file, check:
+         - Import patterns, naming conventions, error handling
+         - Logic errors, null handling, race conditions
+         - Code duplication, function complexity, proper abstractions
+         - Check for primitive duplication (new types that overlap existing ones)
+      5. Search codebase for correct patterns when issues found
+      6. Respect "NOT Building (Scope Limits)" — do NOT flag excluded items
+
+      Output: $ARTIFACTS_DIR/review/code-review-findings.md with severity-ranked findings,
+      fix suggestions with multiple options, and codebase pattern references.
     depends_on: [sync]
     context: fresh
 
   - id: error-handling
-    command: rith-error-handling-agent
+    skills:
+      - rith-review
+    prompt: |
+      Review the PR's error handling patterns and robustness.
+
+      1. Read scope from $ARTIFACTS_DIR/review/scope.md
+      2. Get PR diff: `gh pr diff {number}`
+      3. Analyze error handling:
+         - Missing try/catch blocks, unhandled promise rejections
+         - Error types and messages (specific vs generic)
+         - Error propagation patterns
+         - Input validation gaps
+         - Graceful degradation for external dependencies
+      4. Respect "NOT Building (Scope Limits)"
+
+      Output: $ARTIFACTS_DIR/review/error-handling-findings.md with findings,
+      severity ratings, and fix suggestions with codebase pattern references.
     depends_on: [sync]
     context: fresh
 
   - id: test-coverage
-    command: rith-test-coverage-agent
+    skills:
+      - rith-review
+    prompt: |
+      Review test coverage for the PR's changes.
+
+      1. Read scope from $ARTIFACTS_DIR/review/scope.md
+      2. Get PR diff: `gh pr diff {number}`
+      3. Analyze:
+         - Are new functions/features tested?
+         - Edge cases covered (empty input, nulls, errors)?
+         - Test quality (meaningful assertions vs trivial checks)
+         - Integration tests for cross-module changes
+         - Do tests follow existing test patterns in the codebase?
+      4. Respect "NOT Building (Scope Limits)"
+
+      Output: $ARTIFACTS_DIR/review/test-coverage-findings.md with coverage gaps,
+      suggested test cases, and codebase test pattern references.
     depends_on: [sync]
     context: fresh
 
   - id: comment-quality
-    command: rith-comment-quality-agent
+    skills:
+      - rith-review
+    prompt: |
+      Review code comments for accuracy, completeness, and maintainability.
+
+      1. Read scope from $ARTIFACTS_DIR/review/scope.md
+      2. Get PR diff: `gh pr diff {number}`
+      3. Check:
+         - Comment accuracy vs actual code behavior
+         - Comment rot (outdated TODOs, stale references)
+         - Documentation completeness for public APIs and complex logic
+         - Signal-to-noise ratio (no redundant code-restating comments)
+      4. Respect "NOT Building (Scope Limits)"
+
+      Output: $ARTIFACTS_DIR/review/comment-quality-findings.md with findings,
+      comment audit table, and fix suggestions.
     depends_on: [sync]
     context: fresh
 
   - id: docs-impact
-    command: rith-docs-impact-agent
+    skills:
+      - rith-review
+    prompt: |
+      Check if PR changes require documentation updates.
+
+      1. Read scope from $ARTIFACTS_DIR/review/scope.md
+      2. Get PR diff: `gh pr diff {number}`
+      3. Check for documentation impact:
+         - Do API changes need docs updates?
+         - Are new features documented?
+         - Do config changes need docs updates?
+         - Are project rules/conventions updates needed?
+      4. Respect "NOT Building (Scope Limits)"
+
+      Output: $ARTIFACTS_DIR/review/docs-impact-findings.md with recommendations
+      for documentation updates needed.
     depends_on: [sync]
     context: fresh
 
   - id: synthesize
-    command: rith-synthesize-review
+    skills:
+      - rith-review
+    prompt: |
+      Synthesize all review agent findings into a consolidated report.
+
+      1. Read $ARTIFACTS_DIR/.pr-number and $ARTIFACTS_DIR/review/scope.md
+      2. Read all agent artifacts:
+         - review/code-review-findings.md
+         - review/error-handling-findings.md
+         - review/test-coverage-findings.md
+         - review/comment-quality-findings.md
+         - review/docs-impact-findings.md
+      3. Aggregate findings by severity: CRITICAL > HIGH > MEDIUM > LOW
+      4. Deduplicate overlapping findings across agents
+      5. Create action plan: what to fix now vs defer vs create issues for
+      6. Write consolidated report to $ARTIFACTS_DIR/review/consolidated-review.md
+      7. Post review comment to GitHub PR: `gh pr comment {number} --body-file ...`
+         Include: verdict (APPROVE/REQUEST_CHANGES), severity summary, top findings
     depends_on: [code-review, error-handling, test-coverage, comment-quality, docs-impact]
     trigger_rule: one_success
     context: fresh
@@ -126,7 +331,22 @@ nodes:
   # ═══════════════════════════════════════════════════════════════════
 
   - id: implement-fixes
-    command: rith-implement-review-fixes
+    skills:
+      - rith-implement
+      - rith-validate
+    prompt: |
+      Implement fixes for CRITICAL and HIGH findings from the review.
+
+      1. Read $ARTIFACTS_DIR/review/consolidated-review.md
+      2. For each CRITICAL finding: fix immediately using the recommended approach
+      3. For each HIGH finding: fix if straightforward, note if deferred
+      4. For MEDIUM/LOW: do NOT fix — these become follow-up recommendations
+      5. After fixes: run full validation suite (type-check, lint, tests)
+      6. Commit fixes separately from implementation: `git commit -m "fix: address review findings"`
+      7. Push changes
+      8. Write report of what was fixed vs deferred to $ARTIFACTS_DIR/review-fixes.md
+
+      Do not make additional improvements beyond what the review flagged.
     depends_on: [synthesize]
     context: fresh
 
@@ -135,6 +355,21 @@ nodes:
   # ═══════════════════════════════════════════════════════════════════
 
   - id: workflow-summary
-    command: rith-workflow-summary
+    skills:
+      - rith-git
+    prompt: |
+      Create the final workflow summary and post to GitHub.
+
+      1. Read ALL artifacts from $ARTIFACTS_DIR/:
+         - plan-context.md, plan-confirmation.md, implementation.md
+         - validation.md, pr-ready.md, review-fixes.md
+         - review/consolidated-review.md, review/scope.md
+      2. Summarize: what was implemented vs the plan, deviations and rationale
+      3. Surface unfixed review findings (MEDIUM/LOW) as follow-up recommendations
+      4. Create decision matrix: what to do next (merge, address issues, create follow-up tickets)
+      5. Write summary to $ARTIFACTS_DIR/workflow-summary.md
+      6. Post summary as GitHub PR comment: `gh pr comment {number} --body-file ...`
+
+      Output a concise decision matrix the user can act on quickly.
     depends_on: [implement-fixes]
     context: fresh

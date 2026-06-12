@@ -271,6 +271,28 @@ function Main {
         }
         Write-Ok "Installed to $destBinary"
 
+        # --- Install default skills and workflows ---
+        $rithHome = if ($env:RITH_HOME) { $env:RITH_HOME } else { Join-Path $HOME ".rith" }
+        Write-Info "Installing default skills and workflows to $rithHome..."
+        try {
+            $contentUrl = "https://github.com/$REPO/releases/download/$resolvedVersion/rith-content.tar.gz"
+            $contentArchive = Join-Path $tmpDir "rith-content.tar.gz"
+            Invoke-WebRequest -Uri $contentUrl -OutFile $contentArchive -UseBasicParsing -ErrorAction Stop
+            New-Item -ItemType Directory -Force -Path (Join-Path $rithHome "skills") | Out-Null
+            New-Item -ItemType Directory -Force -Path (Join-Path $rithHome "workflows") | Out-Null
+            tar -xzf $contentArchive -C $tmpDir
+            $contentDir = Join-Path $tmpDir "content"
+            if (Test-Path (Join-Path $contentDir "skills")) {
+                Copy-Item -Recurse -Force (Join-Path $contentDir "skills" "*") (Join-Path $rithHome "skills")
+            }
+            if (Test-Path (Join-Path $contentDir "workflows")) {
+                Copy-Item -Recurse -Force (Join-Path $contentDir "workflows" "*") (Join-Path $rithHome "workflows")
+            }
+            Write-Ok "Default skills and workflows installed to $rithHome"
+        } catch {
+            Write-Warn "Could not download content archive - skills and workflows will be loaded from the repo"
+        }
+
         # --- Add to PATH ---
         try {
             Add-ToUserPath -Dir $INSTALL_DIR

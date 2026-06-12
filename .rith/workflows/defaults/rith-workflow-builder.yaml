@@ -33,11 +33,16 @@ nodes:
       fi
 
       echo ""
-      echo "=== Project Context (CLAUDE.md first 50 lines) ==="
-      if [ -f "CLAUDE.md" ]; then
-        head -50 CLAUDE.md
-      else
-        echo "(no CLAUDE.md)"
+      echo "=== Project Context (project rules first 50 lines) ==="
+      for f in CLAUDE.md AGENTS.md .cursorrules; do
+        if [ -f "$f" ]; then
+          echo "--- $f ---"
+          head -50 "$f"
+          break
+        fi
+      done
+      if [ ! -f "CLAUDE.md" ] && [ ! -f "AGENTS.md" ] && [ ! -f ".cursorrules" ]; then
+        echo "(no project rules file found)"
       fi
 
   - id: extract-intent
@@ -128,8 +133,10 @@ nodes:
             set -e
             echo "result"
 
-          # --- command node (references a .rith/commands/ file) ---
-          command: command-name
+          # --- skills + prompt node (loads methodology from skills, then runs prompt) ---
+          skills: [skill-name]
+          prompt: |
+            Instructions referencing loaded skill methodology...
 
           # --- script node (TypeScript via bun, or Python via uv — no AI, stdout = $<nodeId>.output) ---
           # Use for deterministic data transforms the shell would mangle (JSON parsing, etc.)
