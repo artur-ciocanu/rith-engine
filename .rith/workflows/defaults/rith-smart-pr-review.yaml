@@ -12,10 +12,37 @@ description: |
 
 nodes:
   - id: scope
-    command: rith-pr-review-scope
+    bash: |
+      # Ensure artifacts directory exists
+      mkdir -p $ARTIFACTS_DIR/review
 
+      # Write PR number for downstream steps
+      if [ -f "$ARTIFACTS_DIR/.pr-number" ]; then
+        PR_NUMBER=$(cat $ARTIFACTS_DIR/.pr-number | tr -d '\n' | tr -d ' ')
+        if ! echo "$PR_NUMBER" | grep -qE '^[0-9]+$'; then
+          PR_NUMBER=""
+        fi
+      fi
+      if [ -z "$PR_NUMBER" ] && [ -n "$ARGUMENTS" ]; then
+        PR_NUMBER=$(echo "$ARGUMENTS" | grep -oE '[0-9]+' | head -1)
+      fi
+      if [ -z "$PR_NUMBER" ]; then
+        PR_NUMBER=$(gh pr view --json number -q '.number' 2>/dev/null)
+      fi
+      if [ -z "$PR_NUMBER" ]; then
+        echo "ERROR: No PR number found"
+        exit 1
+      fi
+      echo "$PR_NUMBER" > $ARTIFACTS_DIR/.pr-number
+
+      # Clean stale review artifacts older than 7 days
+      find $ARTIFACTS_DIR/../reviews/pr-* -maxdepth 0 -mtime +7 -exec rm -rf {} \; 2>/dev/null || true
+    skills: [rith-pr-review-scope]
+    prompt: |
+      Assess reviewability and create scope manifest for the PR.
+    context: fresh
   - id: sync
-    command: rith-sync-pr-with-main
+    skills: [rith-sync-pr-with-main]
     depends_on: [scope]
 
   - id: classify
@@ -80,37 +107,37 @@ nodes:
         - reasoning
 
   - id: code-review
-    command: rith-code-review-agent
+    skills: [rith-code-review]
     depends_on: [classify, sync]
     when: "$classify.output.run_code_review == 'true'"
 
   - id: error-handling
-    command: rith-error-handling-agent
+    skills: [rith-error-handling-review]
     depends_on: [classify, sync]
     when: "$classify.output.run_error_handling == 'true'"
 
   - id: test-coverage
-    command: rith-test-coverage-agent
+    skills: [rith-test-coverage-review]
     depends_on: [classify, sync]
     when: "$classify.output.run_test_coverage == 'true'"
 
   - id: comment-quality
-    command: rith-comment-quality-agent
+    skills: [rith-comment-quality-review]
     depends_on: [classify, sync]
     when: "$classify.output.run_comment_quality == 'true'"
 
   - id: docs-impact
-    command: rith-docs-impact-agent
+    skills: [rith-docs-impact-review]
     depends_on: [classify, sync]
     when: "$classify.output.run_docs_impact == 'true'"
 
   - id: synthesize
-    command: rith-synthesize-review
+    skills: [rith-synthesize-review]
     depends_on: [code-review, error-handling, test-coverage, comment-quality, docs-impact]
     trigger_rule: one_success
 
   - id: implement-fixes
-    command: rith-implement-review-fixes
+    skills: [rith-implement-review-fixes]
     depends_on: [synthesize]
 
   # Optional: push notification when review completes.

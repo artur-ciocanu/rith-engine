@@ -163,7 +163,6 @@ export async function discoverScriptsForCwd(cwd: string): Promise<Map<string, Sc
 
 /**
  * Returns bundled default scripts (empty — no bundled scripts for now).
- * Follows the bundled-defaults.ts pattern for future extensibility.
  */
 export function getDefaultScripts(): Map<string, ScriptDefinition> {
   return new Map();

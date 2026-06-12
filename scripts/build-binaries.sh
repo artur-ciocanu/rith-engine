@@ -21,11 +21,6 @@ OUTFILE="${OUTFILE:-}"
 
 echo "Building Rith Engine CLI v${VERSION} (commit: ${GIT_COMMIT})"
 
-# Regenerate bundled defaults from .rith/{commands,workflows}/defaults/ so the
-# compiled binary always embeds the current on-disk contents. CI also runs
-# `bun run check:bundled` to catch committed drift.
-echo "Regenerating bundled defaults..."
-bun run scripts/generate-bundled-defaults.ts
 
 # Update build-time constants in source before compiling.
 # The file is restored via an EXIT trap so the dev tree is never left dirty,
@@ -108,6 +103,32 @@ for target_pair in "${TARGETS[@]}"; do
 
   echo "  -> $outfile ($size bytes)"
 done
+
+# Package content (skills, workflows, commands) for distribution alongside binary.
+# These are read from disk at runtime now that bundled-defaults codegen is removed.
+echo ""
+echo "Packaging content for distribution..."
+CONTENT_DIR="dist/content"
+rm -rf "$CONTENT_DIR"
+mkdir -p "$CONTENT_DIR/skills" "$CONTENT_DIR/workflows" "$CONTENT_DIR/commands"
+
+# Copy skills
+if [ -d ".rith/skills" ]; then
+  cp -r .rith/skills/* "$CONTENT_DIR/skills/" 2>/dev/null || true
+  echo "  -> skills: $(ls -d "$CONTENT_DIR/skills"/*/ 2>/dev/null | wc -l | tr -d ' ') skill(s)"
+fi
+
+# Copy default workflows
+if [ -d ".rith/workflows/defaults" ]; then
+  cp .rith/workflows/defaults/*.yaml "$CONTENT_DIR/workflows/" 2>/dev/null || true
+  echo "  -> workflows: $(ls "$CONTENT_DIR/workflows/"*.yaml 2>/dev/null | wc -l | tr -d ' ') workflow(s)"
+fi
+
+# Copy remaining default commands (maintainer commands stay separate)
+if [ -d ".rith/commands" ]; then
+  find .rith/commands -maxdepth 2 -name '*.md' -exec cp {} "$CONTENT_DIR/commands/" \; 2>/dev/null || true
+  echo "  -> commands: $(ls "$CONTENT_DIR/commands/"*.md 2>/dev/null | wc -l | tr -d ' ') command(s)"
+fi
 
 echo ""
 echo "Build complete."

@@ -27,13 +27,12 @@ nodes:
       ## Area Definitions
       | Area | Packages | Indicators |
       |------|----------|------------|
-      | web-ui | @rith/web, @rith/server (routes, web adapter) | UI rendering, SSE streaming, React components, browser behavior |
-      | api-server | @rith/server (routes, middleware) | HTTP endpoints, response codes, request handling |
+      | web-ui | packages/pi/src/ | UI rendering, SSE streaming, React components, browser behavior |
+      | api-server | packages/pi/src/ (routes, middleware) | HTTP endpoints, response codes, request handling |
       | cli | @rith/cli | CLI commands, workflow invocation from terminal, output formatting |
       | isolation | @rith/isolation, @rith/git | Worktrees, branch operations, cleanup, environment lifecycle |
       | workflows | @rith/workflows | YAML parsing, DAG execution, variable substitution, node types |
-      | database | @rith/core (db/) | SQLite/PostgreSQL queries, schema, data integrity, migrations |
-      | adapters | @rith/adapters | Slack/Telegram/GitHub/Discord message handling, auth, polling |
+      | database | @rith/core (db/) | SQLite queries, schema, data integrity, migrations |
       | core | @rith/core (orchestrator, handlers, clients) | Message routing, session management, AI client streaming |
       | other | Any package not covered above | Cross-cutting concerns, build tooling, config, unknown area |
 
@@ -42,7 +41,7 @@ nodes:
       - If ambiguous between two areas, pick the one closer to the user-facing symptom.
       - Use "other" only when the problem genuinely doesn't fit any specific area.
       - needs_server: Set to "true" if reproducing requires a running Rith Engine server.
-        Typically true for: web-ui, api-server, core, adapters.
+        Typically true for: web-ui, api-server, core.
         Typically false for: cli, isolation, workflows, database.
         For "other": use your judgment based on the description.
       - repro_hint: Extract the user's reproduction steps into a concise instruction.
@@ -59,7 +58,7 @@ nodes:
           enum: ["bug", "regression", "crash", "performance", "configuration"]
         area:
           type: string
-          enum: ["web-ui", "api-server", "cli", "isolation", "workflows", "database", "adapters", "core", "other"]
+          enum: ["web-ui", "api-server", "cli", "isolation", "workflows", "database", "core", "other"]
         title:
           type: string
         keywords:
@@ -160,15 +159,14 @@ nodes:
       ## Instructions
 
       1. Based on the area, search the relevant packages:
-         - web-ui: `packages/web/src/`, `packages/server/src/adapters/web/`, `packages/server/src/routes/`
-         - api-server: `packages/server/src/routes/`, `packages/server/src/`
+         - web-ui: `packages/pi/src/`
+         - api-server: `packages/pi/src/`
          - cli: `packages/cli/src/`
          - isolation: `packages/isolation/src/`, `packages/git/src/`
          - workflows: `packages/workflows/src/`
          - database: `packages/core/src/db/`
-         - adapters: `packages/adapters/src/`
-         - core: `packages/core/src/orchestrator/`, `packages/core/src/handlers/`
          - other: search broadly based on keywords — check `packages/*/src/`, config files, build scripts
+         - core: `packages/core/src/orchestrator/`, `packages/core/src/handlers/`
 
       2. Find: entry points, error handling paths, related type definitions, recent changes
          to the affected area (check git log for the specific files).
@@ -296,15 +294,6 @@ nodes:
          - `sqlite3 ~/.rith/rith.db ".schema <table>" > "$ARTIFACTS_DIR/repro-db-schema.txt"`
          - `sqlite3 ~/.rith/rith.db "SELECT COUNT(*) FROM <table>" > "$ARTIFACTS_DIR/repro-db-counts.txt"`
       3. Check for the specific data condition described in the repro_hint
-      4. If PostgreSQL: use `psql $DATABASE_URL -c "..."` instead
-
-      ### adapters
-      1. Read the server port: `PORT=$(cat "$ARTIFACTS_DIR/.server-port" | tr -d '\n')`
-      2. Check adapter configuration: look for relevant env vars in `.env`
-      3. Check server startup logs: `cat "$ARTIFACTS_DIR/.server-log" | grep -i "adapter\|slack\|telegram\|github\|discord" | head -20`
-      4. If the adapter fails to initialize, capture the error
-      5. Test message routing via web API as a proxy:
-         `curl -s -X POST http://localhost:$PORT/api/conversations/<id>/message -H "Content-Type: application/json" -d '{"message":"/status"}'`
 
       ### core
       1. Read the server port: `PORT=$(cat "$ARTIFACTS_DIR/.server-port" | tr -d '\n')`

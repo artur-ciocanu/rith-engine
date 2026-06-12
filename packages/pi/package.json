@@ -10,7 +10,7 @@
     "./mcp/config": "./src/mcp/config.ts"
   },
   "scripts": {
-    "test": "bun test src/agent-lazy-load.test.ts && bun test src/agent.test.ts src/config.test.ts src/model-ref.test.ts src/options-translator.test.ts src/session-resolver.test.ts src/ui-context-stub.test.ts src/event-bridge.test.ts && bun test src/shared/",
+    "test": "bun test src/agent-lazy-load.test.ts && bun test src/agent.test.ts src/config.test.ts src/model-ref.test.ts src/options-translator.test.ts src/session-resolver.test.ts src/ui-context-stub.test.ts src/event-bridge.test.ts && bun test src/skills.test.ts src/structured-output.test.ts",
     "type-check": "bun x tsc --noEmit"
   },
   "dependencies": {

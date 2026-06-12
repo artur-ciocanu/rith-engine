@@ -221,6 +221,30 @@ main() {
 
   success "Installed to $INSTALL_DIR/$BINARY_NAME"
 
+  # Install default content (skills, workflows) to ~/.rith/
+  # On upgrade, overwrites defaults — user's project-local .rith/ is untouched.
+  local rith_home="${RITH_HOME:-$HOME/.rith}"
+  info "Installing default content to $rith_home..."
+  mkdir -p "$rith_home/skills" "$rith_home/workflows"
+
+  # Download content tarball (packaged by build-binaries.sh)
+  local content_url="${download_url%.tar.gz}-content.tar.gz"
+  content_url="${content_url%-content.tar.gz}"
+  content_url="https://github.com/$REPO/releases/download/$VERSION/rith-content.tar.gz"
+  local content_path="$tmp_dir/content.tar.gz"
+  if curl -fsSL "$content_url" -o "$content_path" 2>/dev/null; then
+    tar -xzf "$content_path" -C "$tmp_dir" 2>/dev/null || true
+    if [ -d "$tmp_dir/content/skills" ]; then
+      cp -r "$tmp_dir/content/skills/"* "$rith_home/skills/" 2>/dev/null || true
+    fi
+    if [ -d "$tmp_dir/content/workflows" ]; then
+      cp "$tmp_dir/content/workflows/"*.yaml "$rith_home/workflows/" 2>/dev/null || true
+    fi
+    success "Default content installed to $rith_home"
+  else
+    warn "Content tarball not available — defaults will be loaded from the app directory"
+  fi
+
   # Verify installation
   echo ""
   info "Verifying installation..."

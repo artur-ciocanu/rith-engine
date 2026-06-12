@@ -17,7 +17,6 @@ Thank you for your interest in contributing to Rith Engine!
 Before submitting a PR, ensure:
 
 ```bash
-bun run check:bundled  # Bundled defaults are up to date (see note below)
 bun run type-check     # TypeScript types
 bun run lint           # ESLint
 bun run format         # Prettier
@@ -26,10 +25,6 @@ bun run test           # All tests (per-package isolation)
 # Or run the full validation suite:
 bun run validate
 ```
-
-**Bundled defaults**: If you added, removed, or edited a file under
-`.rith/commands/defaults/` or `.rith/workflows/defaults/`, run
-`bun run generate:bundled` to refresh the embedded bundle before committing.
 
 **Important:** Use `bun run test` (not `bun test` from the repo root) to avoid mock pollution across packages.
 

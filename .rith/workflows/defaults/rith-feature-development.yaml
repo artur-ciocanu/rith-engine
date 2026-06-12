@@ -7,11 +7,11 @@ description: |
 
 nodes:
   - id: implement
-    command: rith-implement
+    skills: [rith-implement]
     model: anthropic/claude-opus-4-5
 
   - id: create-pr
-    command: rith-create-pr
+    skills: [rith-create-pr]
     depends_on: [implement]
     context: fresh
 

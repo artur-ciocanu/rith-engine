@@ -31,7 +31,6 @@ mockModuleScoped('@rith/paths', realRithPaths, {
 
 import { discoverWorkflows, discoverWorkflowsWithConfig } from './workflow-discovery';
 import { isBashNode, isCancelNode, isLoopNode } from './schemas';
-import * as bundledDefaults from './defaults/bundled-defaults';
 
 describe('Workflow Loader', () => {
   let testDir: string;
@@ -986,95 +985,6 @@ nodes:
         }
         await rm(homeDir, { recursive: true, force: true });
       }
-    });
-  });
-
-  describe('binary build bundled workflows', () => {
-    let isBinaryBuildSpy: Mock<typeof bundledDefaults.isBinaryBuild>;
-
-    beforeEach(() => {
-      isBinaryBuildSpy = spyOn(bundledDefaults, 'isBinaryBuild');
-    });
-
-    afterEach(() => {
-      isBinaryBuildSpy.mockRestore();
-    });
-
-    it('should load bundled workflows when running as binary', async () => {
-      // Simulate binary build
-      isBinaryBuildSpy.mockReturnValue(true);
-
-      const result = await discoverWorkflows(testDir, { loadDefaults: true });
-      const workflows = result.workflows.map(ws => ws.workflow);
-
-      // Should load bundled workflows
-      expect(workflows.length).toBeGreaterThanOrEqual(1);
-      // Check that known bundled workflows are loaded
-      const rithAssist = workflows.find(w => w.name === 'rith-assist');
-      expect(rithAssist).toBeDefined();
-    });
-
-    it('should skip bundled workflows when loadDefaults is false', async () => {
-      // Simulate binary build
-      isBinaryBuildSpy.mockReturnValue(true);
-
-      const result = await discoverWorkflows(testDir, { loadDefaults: false });
-      const workflows = result.workflows.map(ws => ws.workflow);
-
-      // Should not have any bundled defaults
-      const rithWorkflow = workflows.find(w => w.name.startsWith('rith-'));
-      expect(rithWorkflow).toBeUndefined();
-    });
-
-    it('should allow repo workflows to override bundled defaults', async () => {
-      // Simulate binary build
-      isBinaryBuildSpy.mockReturnValue(true);
-
-      // Create repo workflow with same filename as bundled default
-      const repoWorkflowDir = join(testDir, '.rith', 'workflows');
-      await mkdir(repoWorkflowDir, { recursive: true });
-      const repoWorkflowYaml = `name: custom-assist-override
-description: Custom override of rith-assist
-nodes:
-  - id: custom
-    command: custom
-`;
-      await writeFile(join(repoWorkflowDir, 'rith-assist.yaml'), repoWorkflowYaml);
-
-      const result = await discoverWorkflows(testDir, { loadDefaults: true });
-      const workflows = result.workflows.map(ws => ws.workflow);
-
-      // Repo workflow should override bundled default
-      const assistWorkflow = workflows.find(
-        w => w.name === 'custom-assist-override' || w.name === 'rith-assist'
-      );
-      expect(assistWorkflow).toBeDefined();
-      expect(assistWorkflow?.name).toBe('custom-assist-override');
-    });
-
-    it('should combine bundled workflows with repo workflows', async () => {
-      // Simulate binary build
-      isBinaryBuildSpy.mockReturnValue(true);
-
-      // Create repo workflow with unique name
-      const repoWorkflowDir = join(testDir, '.rith', 'workflows');
-      await mkdir(repoWorkflowDir, { recursive: true });
-      const repoWorkflowYaml = `name: my-repo-workflow
-description: A repo-specific workflow
-nodes:
-  - id: custom
-    command: custom
-`;
-      await writeFile(join(repoWorkflowDir, 'my-repo.yaml'), repoWorkflowYaml);
-
-      const result = await discoverWorkflows(testDir, { loadDefaults: true });
-      const workflows = result.workflows.map(ws => ws.workflow);
-
-      // Should have both bundled and repo workflows
-      const rithAssist = workflows.find(w => w.name === 'rith-assist');
-      const repoWorkflow = workflows.find(w => w.name === 'my-repo-workflow');
-      expect(rithAssist).toBeDefined();
-      expect(repoWorkflow).toBeDefined();
     });
   });
 
@@ -2401,7 +2311,7 @@ nodes:
       expect(projectSourced).toHaveLength(0);
 
       // Bundled-source entries must surface — without this assertion the test
-      // would silently pass even if the bundled-defaults loader regressed.
+      // would silently pass even if the app-defaults loader regressed.
       const bundledSourced = result.workflows.filter(w => w.source === 'bundled');
       expect(bundledSourced.length).toBeGreaterThan(0);
     });

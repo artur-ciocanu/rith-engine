@@ -1,7 +1,6 @@
 import { describe, test, expect, mock, beforeEach } from 'bun:test';
 import * as realGit from '@rith/git';
 import * as realPaths from '@rith/paths';
-import * as realBundledDefaults from './defaults/bundled-defaults';
 import * as realCommandValidation from './command-validation';
 import { mockModuleScoped } from './test-mock-module';
 
@@ -30,12 +29,6 @@ mockModuleScoped('@rith/paths', realPaths, {
   getCommandFolderSearchPaths: mock(() => ['.rith/commands']),
   getDefaultCommandsPath: mock(() => '/defaults/commands'),
   findMarkdownFilesRecursive: mock(async () => []),
-});
-
-// Mock defaults and command-validation used by validator
-mockModuleScoped('./defaults/bundled-defaults', realBundledDefaults, {
-  BUNDLED_COMMANDS: {},
-  isBinaryBuild: () => false,
 });
 
 mockModuleScoped('./command-validation', realCommandValidation, {

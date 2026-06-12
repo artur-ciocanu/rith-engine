@@ -17,5 +17,5 @@ export { parsePiConfig } from './config';
 export { PI_CAPABILITIES } from './capabilities';
 
 // Shared utilities
-export { resolveSkillDirectories } from './shared/skills';
+export { resolveSkillDirectories } from './skills';
 export { loadMcpConfig, type LoadedMcpConfig } from './mcp/config';
