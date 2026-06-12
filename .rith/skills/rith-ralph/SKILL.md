@@ -1,3 +1,17 @@
+---
+name: rith-ralph
+description: |
+  PRD generation and story decomposition. Produces prd.md and prd.json through
+  systematic codebase exploration and autonomous decision-making. Use when
+  writing product requirements, decomposing features into stories, or generating
+  PRDs from feature descriptions.
+  Triggers: "create PRD", "write requirements", "generate PRD", "decompose
+  feature", "ralph", "product requirements".
+metadata:
+  author: rith-engine
+  version: "1.0"
+---
+
 # Ralph — PRD Generation & Story Decomposition
 
 Generate production-quality PRD files (`prd.md` + `prd.json`) through systematic codebase exploration and autonomous decision-making.
@@ -63,8 +77,8 @@ Read the project rules file and extract coding standards.
 
 1. Generate a kebab-case slug (max 50 chars)
 2. Create `.rith/ralph/{slug}/`
-3. Write `prd.md` using the [PRD template](prd-template.md)
-4. Write `prd.json` conforming to the [PRD schema](prd-json-schema.md)
+3. Write `prd.md` using the [PRD template](assets/prd-template.md)
+4. Write `prd.json` conforming to the [PRD schema](assets/prd-json-schema.md)
 5. Commit both files
 
 ### 6. Output — Report

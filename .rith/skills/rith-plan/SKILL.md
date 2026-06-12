@@ -1,3 +1,16 @@
+---
+name: rith-plan
+description: |
+  Planning methodology for codebase-first research, primitives inventory, and
+  phased implementation plans. Use when creating plans, researching codebases,
+  designing architecture, or preparing implementation strategies.
+  Triggers: "create plan", "plan implementation", "research codebase",
+  "design approach", "prepare plan", "plan setup".
+metadata:
+  author: rith-engine
+  version: "1.0"
+---
+
 # Plan Creation Skill
 
 Create implementation plans through systematic codebase exploration, pattern extraction, and strategic research. Plans are context-rich documents that enable one-pass implementation success.
@@ -94,7 +107,7 @@ Document: approach chosen with rationale, alternatives rejected with reasons, an
 
 ## Phase 6: Write the Plan
 
-Write to the artifacts directory using the template in `plan-template.md`. Ensure:
+Write to the artifacts directory using the template in `assets/plan-template.md`. Ensure:
 - All patterns from codebase exploration documented with `file:line` references
 - External docs versioned to match package manifest
 - Every task has at least one executable validation command

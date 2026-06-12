@@ -1,3 +1,16 @@
+---
+name: rith-implement
+description: |
+  Implementation methodology with validation loops, dependency detection, and
+  plan adherence. Use when implementing features, fixing issues, executing plan
+  tasks, or running fix-before-proceed workflows.
+  Triggers: "implement", "fix issue", "execute plan", "build feature",
+  "implement tasks", "code the solution".
+metadata:
+  author: rith-engine
+  version: "1.0"
+---
+
 # Implementation
 
 Execute plans and investigation artifacts with rigorous validation. Every change is verified before the next begins.
@@ -11,7 +24,7 @@ Execute plans and investigation artifacts with rigorous validation. Every change
 
 ## Environment Detection
 
-Before any implementation work, detect the project toolchain. See [package-managers.md](package-managers.md) for the full detection matrix.
+Before any implementation work, detect the project toolchain. See [package-managers.md](references/package-managers.md) for the full detection matrix.
 
 Identify available validation scripts from the project config (e.g., `package.json` scripts):
 - Type checking: `type-check`, `typecheck`, `tsc`
@@ -44,7 +57,7 @@ For each file/line reference in the plan:
 
 ## Dependency Installation
 
-Before any validation or implementation, install project dependencies. See [package-managers.md](package-managers.md) for lockfile-based detection.
+Before any validation or implementation, install project dependencies. See [package-managers.md](references/package-managers.md) for lockfile-based detection.
 
 If install fails, stop and report. Do not proceed with missing dependencies.
 

@@ -1,3 +1,17 @@
+---
+name: rith-validate
+description: |
+  Validation sequence: type-check, lint, format, test, build. Detects the
+  project's package manager and runs the appropriate commands. Use when
+  validating code changes, running CI checks locally, or fixing validation
+  failures.
+  Triggers: "validate", "run checks", "type-check", "lint", "run tests",
+  "fix validation", "CI checks".
+metadata:
+  author: rith-engine
+  version: "1.0"
+---
+
 # Validate
 
 Run the full validation suite: type-check → lint → format → test → build.

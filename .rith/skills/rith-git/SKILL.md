@@ -1,3 +1,17 @@
+---
+name: rith-git
+description: |
+  Git workflow conventions for branch management, commits, PRs, rebasing, and
+  conflict resolution. Use when creating branches, making commits, opening or
+  updating pull requests, syncing with main, or resolving merge conflicts.
+  Triggers: "create PR", "open pull request", "sync with main", "resolve
+  conflicts", "rebase", "commit changes", "finalize PR".
+compatibility: Requires git CLI
+metadata:
+  author: rith-engine
+  version: "1.0"
+---
+
 # Git Workflow
 
 Conventions and guardrails for branch management, commits, PRs, rebasing, and conflict resolution in Rith Engine worktrees.
@@ -34,7 +48,7 @@ git diff --cached --name-only   # final review of staged files
 **Never stage** scratch or workflow artifacts:
 - `.pr-body.md`, `*.scratch.md`, `*.tmp.md`
 - `review/`, `*-report.md` at repo root
-- Anything under `$ARTIFACTS_DIR`
+- Anything under the workflow artifacts directory
 - `.env`, credentials, secrets
 
 ---

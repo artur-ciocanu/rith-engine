@@ -1,10 +1,24 @@
+---
+name: rith-review
+description: |
+  Systematic code review across five dimensions: code quality, error handling,
+  test coverage, comment quality, and documentation impact. Use when reviewing
+  PRs, analyzing code changes, synthesizing review findings, or implementing
+  review fixes.
+  Triggers: "review PR", "code review", "review changes", "analyze PR",
+  "synthesize review", "implement review fixes".
+metadata:
+  author: rith-engine
+  version: "1.0"
+---
+
 # Review — Skill
 
 Systematic code review methodology: scoping, multi-dimension analysis, synthesis, and fix implementation.
 
 ## Overview
 
-A review is a structured pass over a PR or changeset across five dimensions (see `review-dimensions.md`). The workflow:
+A review is a structured pass over a PR or changeset across five dimensions (see `references/review-dimensions.md`). The workflow:
 
 1. **Scope** — gather context, verify reviewability
 2. **Analyze** — evaluate each dimension in parallel
@@ -25,7 +39,7 @@ Write a scope manifest capturing: changed files, file categories, project rules 
 
 ## Analyzing Each Dimension
 
-For each dimension in `review-dimensions.md`:
+For each dimension in `references/review-dimensions.md`:
 
 1. Load the PR diff and scope manifest
 2. Read project rules/conventions relevant to that dimension
@@ -95,4 +109,4 @@ Keep working output minimal — the final report is what matters. Do not narrate
 
 ## Assets
 
-- `review-dimensions.md` — criteria, anti-patterns, and pass/fail signals for each review dimension
+- `references/review-dimensions.md` — criteria, anti-patterns, and pass/fail signals for each review dimension
