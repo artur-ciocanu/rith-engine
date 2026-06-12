@@ -12,10 +12,329 @@ description: |
 
 nodes:
   - id: scope
-    command: rith-pr-review-scope
+    bash: |
+      # Ensure artifacts directory exists
+      mkdir -p $ARTIFACTS_DIR/review
+
+      # Write PR number for downstream steps
+      if [ -f "$ARTIFACTS_DIR/.pr-number" ]; then
+        PR_NUMBER=$(cat $ARTIFACTS_DIR/.pr-number | tr -d '\n' | tr -d ' ')
+        if ! echo "$PR_NUMBER" | grep -qE '^[0-9]+$'; then
+          PR_NUMBER=""
+        fi
+      fi
+      if [ -z "$PR_NUMBER" ] && [ -n "$ARGUMENTS" ]; then
+        PR_NUMBER=$(echo "$ARGUMENTS" | grep -oE '[0-9]+' | head -1)
+      fi
+      if [ -z "$PR_NUMBER" ]; then
+        PR_NUMBER=$(gh pr view --json number -q '.number' 2>/dev/null)
+      fi
+      if [ -z "$PR_NUMBER" ]; then
+        echo "ERROR: No PR number found"
+        exit 1
+      fi
+      echo "$PR_NUMBER" > $ARTIFACTS_DIR/.pr-number
+
+      # Clean stale review artifacts older than 7 days
+      find $ARTIFACTS_DIR/../reviews/pr-* -maxdepth 0 -mtime +7 -exec rm -rf {} \; 2>/dev/null || true
+    prompt: |
+      # PR Review Scope
+
+      **Input**: $ARGUMENTS
+
+      ## Your Mission
+
+      Verify the PR is in a reviewable state, gather all context needed for the parallel review agents, and prepare the scope manifest.
+
+      ## Phase 1: IDENTIFY - Determine PR
+
+      The PR number has been resolved and written to `$ARTIFACTS_DIR/.pr-number` by the bash setup step. Read it:
+
+      ```bash
+      PR_NUMBER=$(cat $ARTIFACTS_DIR/.pr-number)
+      ```
+
+      ### 1.2 Fetch PR Details
+
+      ```bash
+      gh pr view $PR_NUMBER --json number,title,body,url,headRefName,baseRefName,files,additions,deletions,changedFiles,state,author,isDraft,mergeable,mergeStateStatus
+      ```
+
+      **Extract:**
+      - PR number and title
+      - Branch names (head → base)
+      - Changed files list
+      - Addition/deletion counts
+      - Draft status
+      - Mergeable status
+
+      **PHASE_1_CHECKPOINT:**
+      - [ ] PR number identified
+      - [ ] PR is open (not merged/closed)
+      - [ ] Basic metadata extracted
+
+      ## Phase 2: VERIFY - Pre-Review Checks
+
+      **Before launching review agents, verify the PR is in a reviewable state.**
+
+      ### 2.1 Check for Merge Conflicts
+
+      ```bash
+      gh pr view $PR_NUMBER --json mergeable,mergeStateStatus --jq '.mergeable, .mergeStateStatus'
+      ```
+
+      | Status        | Action                                          |
+      | ------------- | ----------------------------------------------- |
+      | `MERGEABLE`   | Continue                                        |
+      | `CONFLICTING` | **STOP** - Tell user to resolve conflicts first |
+      | `UNKNOWN`     | Warn, continue (GitHub still calculating)       |
+
+      **If conflicts exist, report and exit workflow.**
+
+      ### 2.2 Check CI Status
+
+      ```bash
+      gh pr checks $PR_NUMBER --json name,state,conclusion --jq '.[] | "\(.name): \(.state) (\(.conclusion // "pending"))"'
+      ```
+
+      | Status       | Action                                  |
+      | ------------ | --------------------------------------- |
+      | All passing  | Continue                                |
+      | Some failing | Warn, continue (note in scope)          |
+      | All failing  | Warn strongly, continue (note in scope) |
+      | Pending      | Note, continue                          |
+
+      ### 2.3 Check Behind Base
+
+      ```bash
+      PR_BASE=$(gh pr view $PR_NUMBER --json baseRefName --jq '.baseRefName')
+      PR_HEAD=$(gh pr view $PR_NUMBER --json headRefName --jq '.headRefName')
+      git fetch origin $PR_BASE --quiet
+      git fetch origin $PR_HEAD --quiet
+      BEHIND=$(git rev-list --count origin/$PR_HEAD..origin/$PR_BASE 2>/dev/null || echo "0")
+      ```
+
+      | Commits Behind | Action                                        |
+      | -------------- | --------------------------------------------- |
+      | 0-5            | Continue                                      |
+      | 6-15           | Warn, suggest rebase, continue                |
+      | 16+            | Warn strongly, recommend rebase before review |
+
+      ### 2.4 Check Draft Status
+
+      ```bash
+      gh pr view $PR_NUMBER --json isDraft --jq '.isDraft'
+      ```
+
+      | Status  | Action                                              |
+      | ------- | --------------------------------------------------- |
+      | `false` | Continue normally                                   |
+      | `true`  | Note in scope, continue (user wants early feedback) |
+
+      ### 2.5 Check PR Size
+
+      | Metric        | Warning Threshold | Action                         |
+      | ------------- | ----------------- | ------------------------------ |
+      | Changed files | 20+               | Warn about review thoroughness |
+      | Lines changed | 1000+             | Warn about review thoroughness |
+
+      ### 2.6 Compile Reviewability Summary
+
+      ```markdown
+      ## Pre-Review Status
+
+      | Check           | Status                                | Notes     |
+      | --------------- | ------------------------------------- | --------- |
+      | Merge Conflicts | ✅ None / ❌ Has conflicts            | {details} |
+      | CI Status       | ✅ Passing / ⚠️ Failing / ⏳ Pending  | {details} |
+      | Behind Base     | ✅ Up to date / ⚠️ {N} commits behind | {details} |
+      | Draft           | ✅ Ready / 📝 Draft                   | {details} |
+      | Size            | ✅ Normal / ⚠️ Large ({N} files)      | {details} |
+      ```
+
+      **PHASE_2_CHECKPOINT:**
+      - [ ] No merge conflicts (or workflow stopped)
+      - [ ] CI status noted
+      - [ ] Behind-base status checked
+      - [ ] Draft status noted
+      - [ ] Size warnings issued if needed
+
+      ## Phase 3: CONTEXT - Gather Review Context
+
+      ### 3.1 Get Full Diff
+
+      ```bash
+      gh pr diff $PR_NUMBER
+      ```
+
+      ### 3.2 List Changed Files by Type
+
+      ```bash
+      gh pr view $PR_NUMBER --json files --jq '.files[].path'
+      ```
+
+      **Categorize files:**
+      - Source code (`.ts`, `.js`, `.py`, etc.)
+      - Test files (`*.test.ts`, `*.spec.ts`, `test_*.py`)
+      - Documentation (`*.md`, `docs/`)
+      - Configuration (`.json`, `.yaml`, `.toml`)
+      - Types/interfaces
+
+      ### 3.3 Check for CLAUDE.md
+
+      ```bash
+      cat CLAUDE.md 2>/dev/null | head -100
+      ```
+
+      Note key rules that reviewers should check against.
+
+      ### 3.4 Identify New Abstractions
+
+      Scan the diff for new abstractions:
+      - New interfaces, types, or abstract classes
+      - New utility modules or helper files
+      - New configuration keys or schema fields
+
+      ```bash
+      gh pr diff $PR_NUMBER | grep "^+" | sed 's/^+//' | grep -E "(^interface |^export interface |^type |^abstract class |^export class )" | head -20
+      ```
+
+      **PHASE_3_CHECKPOINT:**
+      - [ ] Diff available
+      - [ ] Files categorized by type
+      - [ ] CLAUDE.md rules noted
+      - [ ] New abstractions scanned
+
+      ## Phase 3.5: PLAN/ISSUE CONTEXT - Check for Workflow Artifacts
+
+      **CRITICAL**: If this PR was created by a workflow, there will be artifacts with important context for reviewers.
+
+      ### 3.5.1 Find Workflow Artifacts
+
+      ```bash
+      # Plan-based workflow
+      ls -t $ARTIFACTS_DIR/../runs/*/plan-context.md 2>/dev/null | head -1
+      # Issue-based workflow
+      ls -t $ARTIFACTS_DIR/../runs/*/investigation.md 2>/dev/null | head -1
+      ```
+
+      ### 3.5.2 Extract Scope Limits
+
+      **If plan-context.md exists**: Extract "NOT Building" section.
+      **If investigation.md exists**: Extract "Scope Boundaries/OUT OF SCOPE" section.
+      **These are INTENTIONAL exclusions** - do NOT flag them as bugs or missing features!
+
+      ### 3.5.3 Check Implementation Report
+
+      ```bash
+      ls -t $ARTIFACTS_DIR/../runs/*/implementation.md 2>/dev/null | head -1
+      ```
+
+      If found, note any deviations from the implementation plan.
+
+      ## Phase 4: Create Scope Manifest
+
+      Write `$ARTIFACTS_DIR/review/scope.md` with the following structure:
+
+      ```markdown
+      # PR Review Scope: #{number}
+
+      **Title**: {PR title}
+      **URL**: {PR URL}
+      **Branch**: {head} → {base}
+      **Author**: {author}
+      **Date**: {ISO timestamp}
+
+      ---
+
+      ## Pre-Review Status
+
+      | Check           | Status   | Notes                        |
+      | --------------- | -------- | ---------------------------- |
+      | Merge Conflicts | {status} | {details}                    |
+      | CI Status       | {status} | {passing}/{total} checks     |
+      | Behind Base     | {status} | {N} commits behind           |
+      | Draft           | {status} | {Ready/Draft}                |
+      | Size            | {status} | {files} files, +{add}/-{del} |
+
+      ---
+
+      ## Changed Files
+
+      | File               | Type   | Additions | Deletions |
+      | ------------------ | ------ | --------- | --------- |
+      | `src/file.ts`      | source | +10       | -5        |
+      | ...                | ...    | ...       | ...       |
+
+      **Total**: {changedFiles} files, +{additions} -{deletions}
+
+      ---
+
+      ## File Categories
+
+      ### Source Files ({count})
+      ### Test Files ({count})
+      ### Documentation ({count})
+      ### Configuration ({count})
+
+      ---
+
+      ## Review Focus Areas
+
+      1. **Code Quality**: {list key source files}
+      2. **Error Handling**: {files with try/catch, error handling}
+      3. **Test Coverage**: {new functionality needing tests}
+      4. **Comments/Docs**: {files with documentation changes}
+      5. **Docs Impact**: {check if CLAUDE.md or docs need updates}
+      6. **Primitive Alignment**: {If new abstractions found: list them}
+
+      ---
+
+      ## CLAUDE.md Rules to Check
+
+      {Extract key rules from CLAUDE.md that apply to this PR}
+
+      ---
+
+      ## Workflow Context (if from automated workflow)
+
+      {If workflow artifacts found, include scope limits and deviations}
+      {If no workflow artifacts: _No workflow artifacts found - this appears to be a manual PR._}
+
+      ---
+
+      ## CI Details
+
+      {If CI failing, list which checks failed}
+
+      ---
+
+      ## Metadata
+
+      - **Scope created**: {ISO timestamp}
+      - **Artifact path**: `$ARTIFACTS_DIR/review/`
+      ```
+
+      ## Phase 5: OUTPUT - Report to User
+
+      ### If Blocked (Conflicts)
+
+      Report that the PR has merge conflicts and provide resolution instructions. Exit workflow.
+
+      ### If Proceeding
+
+      Report scope summary including pre-review status table, file categories, and note that parallel review agents are launching next.
+
+      ## Success Criteria
+
+      - **PR_IDENTIFIED**: Valid open PR found
+      - **NO_CONFLICTS**: Merge conflicts block workflow
+      - **CONTEXT_GATHERED**: Diff and file list available
+      - **ARTIFACTS_DIR_CREATED**: Directory structure exists
+      - **SCOPE_MANIFEST_WRITTEN**: `scope.md` file created with pre-review status
 
   - id: sync
-    command: rith-sync-pr-with-main
+    skills: [rith-sync-pr-with-main]
     depends_on: [scope]
 
   - id: classify
@@ -80,37 +399,37 @@ nodes:
         - reasoning
 
   - id: code-review
-    command: rith-code-review-agent
+    skills: [rith-code-review]
     depends_on: [classify, sync]
     when: "$classify.output.run_code_review == 'true'"
 
   - id: error-handling
-    command: rith-error-handling-agent
+    skills: [rith-error-handling-review]
     depends_on: [classify, sync]
     when: "$classify.output.run_error_handling == 'true'"
 
   - id: test-coverage
-    command: rith-test-coverage-agent
+    skills: [rith-test-coverage-review]
     depends_on: [classify, sync]
     when: "$classify.output.run_test_coverage == 'true'"
 
   - id: comment-quality
-    command: rith-comment-quality-agent
+    skills: [rith-comment-quality-review]
     depends_on: [classify, sync]
     when: "$classify.output.run_comment_quality == 'true'"
 
   - id: docs-impact
-    command: rith-docs-impact-agent
+    skills: [rith-docs-impact-review]
     depends_on: [classify, sync]
     when: "$classify.output.run_docs_impact == 'true'"
 
   - id: synthesize
-    command: rith-synthesize-review
+    skills: [rith-synthesize-review]
     depends_on: [code-review, error-handling, test-coverage, comment-quality, docs-impact]
     trigger_rule: one_success
 
   - id: implement-fixes
-    command: rith-implement-review-fixes
+    skills: [rith-implement-review-fixes]
     depends_on: [synthesize]
 
   # Optional: push notification when review completes.

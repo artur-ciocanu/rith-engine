@@ -10,14 +10,19 @@
  * value so a doctor failure does not abort setup (the env file was already
  * written successfully).
  */
-import { mkdirSync, writeFileSync, rmSync, existsSync } from 'fs';
+import { mkdirSync, writeFileSync, rmSync, existsSync, readdirSync } from 'fs';
 import { join } from 'path';
 import { homedir } from 'os';
 import { execFileAsync } from '@rith/git';
-import { getRithHome, createLogger, isTelemetryDisabled } from '@rith/paths';
+import {
+  getRithHome,
+  createLogger,
+  isTelemetryDisabled,
+  getDefaultCommandsPath,
+  getDefaultWorkflowsPath,
+} from '@rith/paths';
 import type { Logger } from '@rith/paths';
 import { pool } from '@rith/core';
-import { BUNDLED_COMMANDS, BUNDLED_WORKFLOWS } from '@rith/workflows/defaults';
 
 // Env vars that indicate a Pi backend API key is configured. Mirrors
 // `PI_PROVIDER_ENV_VARS` in packages/pi/src/agent.ts — the keys
@@ -141,13 +146,34 @@ export async function checkWorkspaceWritable(): Promise<CheckResult> {
 
 export async function checkBundledDefaults(): Promise<CheckResult> {
   const label = 'Bundled defaults';
-  const commands = Object.keys(BUNDLED_COMMANDS).length;
-  const workflows = Object.keys(BUNDLED_WORKFLOWS).length;
-  return {
-    label,
-    status: 'pass',
-    message: `${workflows} workflow(s), ${commands} command(s) loaded`,
-  };
+  try {
+    const commandsDir = getDefaultCommandsPath();
+    const workflowsDir = getDefaultWorkflowsPath();
+    let commands = 0;
+    let workflows = 0;
+    try {
+      commands = readdirSync(commandsDir).filter(f => f.endsWith('.md')).length;
+    } catch {
+      /* directory may not exist */
+    }
+    try {
+      workflows = readdirSync(workflowsDir).filter(
+        f => f.endsWith('.yaml') || f.endsWith('.yml')
+      ).length;
+    } catch {
+      /* directory may not exist */
+    }
+    if (commands === 0 && workflows === 0) {
+      return { label, status: 'skip', message: 'No default commands or workflows found on disk' };
+    }
+    return {
+      label,
+      status: 'pass',
+      message: `${workflows} workflow(s), ${commands} command(s) on disk`,
+    };
+  } catch (err) {
+    return { label, status: 'fail', message: `Error checking defaults: ${(err as Error).message}` };
+  }
 }
 
 export async function checkTelemetry(): Promise<CheckResult> {

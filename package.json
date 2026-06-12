@@ -12,16 +12,13 @@
     "build": "bun --filter '*' build",
     "build:binaries": "bash scripts/build-binaries.sh",
     "build:checksums": "bash scripts/checksums.sh",
-    "generate:bundled": "bun run scripts/generate-bundled-defaults.ts",
-    "check:bundled": "bun run scripts/generate-bundled-defaults.ts --check",
-    "check:bundled-skill": "bun run scripts/check-bundled-skill.ts --check",
     "test": "bun --filter '*' --parallel test",
-    "type-check": "bun --filter '*' type-check && bun x tsc --noEmit -p scripts/tsconfig.json",
+    "type-check": "bun --filter '*' type-check",
     "lint": "bun x eslint . --cache",
     "lint:fix": "bun x eslint . --cache --fix",
     "format": "bun x prettier --write .",
     "format:check": "bun x prettier --check .",
-    "validate": "bun run check:bundled && bun run check:bundled-skill && bun run type-check && bun run lint --max-warnings 0 && bun run format:check && bun run test",
+    "validate": "bun run type-check && bun run lint --max-warnings 0 && bun run format:check && bun run test",
     "prepare": "husky"
   },
   "devDependencies": {

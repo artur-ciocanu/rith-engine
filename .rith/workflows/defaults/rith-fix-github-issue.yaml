@@ -87,7 +87,267 @@ nodes:
   # ═══════════════════════════════════════════════════════════════
 
   - id: web-research
-    command: rith-web-research
+    prompt: |
+      # Web Research
+
+      **Input**: $ARGUMENTS
+      **Workflow ID**: $WORKFLOW_ID
+
+      ---
+
+      ## Your Mission
+
+      Search the web for information relevant to the issue or feature being worked on. Find official documentation, known issues, best practices, and solutions that will inform implementation.
+
+      **Output**: `$ARTIFACTS_DIR/web-research.md`
+
+      **Core Principle**: Search strategically, prioritize authoritative sources, cite everything.
+
+      ---
+
+      ## Phase 1: PARSE - Understand What to Research
+
+      ### 1.1 Get Issue Context
+
+      If input looks like a GitHub issue number:
+
+      ```bash
+      gh issue view $ARGUMENTS --json title,body,labels
+      ```
+
+      ### 1.2 Identify Research Targets
+
+      From the issue context, identify:
+
+      - Key technologies, libraries, or APIs mentioned
+      - Error messages or stack traces to search for
+      - Concepts or patterns that need clarification
+      - Version-specific documentation needs
+      - Existing primitives in the ecosystem — what built-in or library-level abstractions already solve part of this? (avoids reinventing)
+
+      ### 1.3 Formulate Search Plan
+
+      Create 3-5 targeted search queries:
+
+      | Query                                    | Why                | Expected Source                            |
+      | ---------------------------------------- | ------------------ | ------------------------------------------ |
+      | "{library} {feature} documentation"      | Official docs      | Library website                            |
+      | "{error message}"                        | Known issues       | Stack Overflow, GitHub issues              |
+      | "{pattern} best practices {year}"        | Current approaches | Blog posts, docs                           |
+      | "{library} built-in {primitive/feature}" | Avoid reinventing  | Official docs, changelog, migration guides |
+
+      **PHASE_1_CHECKPOINT:**
+
+      - [ ] Issue context understood
+      - [ ] Research targets identified
+      - [ ] Search queries formulated
+
+      ---
+
+      ## Phase 2: SEARCH - Execute Research
+
+      ### 2.1 Check for llms.txt
+
+      Many sites publish LLM-optimized documentation:
+
+      ```
+      Try fetching https://{domain}/llms.txt for any known site
+      Read the result and fetch relevant sub-pages linked within
+      ```
+
+      ### 2.2 Search Official Documentation
+
+      For each technology/library involved:
+
+      1. Search for official docs with version constraints
+      2. Use `site:` operator for known authoritative sources
+      3. Look for changelog/release notes for version info
+
+      ### 2.3 Search for Known Issues
+
+      If the issue involves errors or bugs:
+
+      1. Search exact error messages in quotes
+      2. Check GitHub issues for the relevant libraries
+      3. Look for Stack Overflow answers
+
+      ### 2.4 Search for Best Practices
+
+      If the issue involves implementation decisions:
+
+      1. Search for recognized patterns and approaches
+      2. Cross-reference multiple sources
+      3. Look for migration guides if changing approaches
+
+      **PHASE_2_CHECKPOINT:**
+
+      - [ ] At least 3 searches executed
+      - [ ] Authoritative sources found
+      - [ ] Relevant content extracted
+
+      ---
+
+      ## Phase 3: SYNTHESIZE - Compile Findings
+
+      ### 3.1 Organize by Relevance
+
+      For each finding:
+
+      - **Source**: Name and URL
+      - **Authority**: Why this source is credible
+      - **Key information**: Direct quotes or specific facts
+      - **Applies to**: Which part of the issue this informs
+      - **Version/date**: Currency of the information
+
+      ### 3.2 Identify Conflicts or Gaps
+
+      - Note any conflicting information between sources
+      - Flag outdated content
+      - Document what could NOT be found
+
+      **PHASE_3_CHECKPOINT:**
+
+      - [ ] Findings organized
+      - [ ] Conflicts noted
+      - [ ] Gaps documented
+
+      ---
+
+      ## Phase 4: GENERATE - Write Artifact
+
+      Write to `$ARTIFACTS_DIR/web-research.md`:
+
+      ````markdown
+      # Web Research: $ARGUMENTS
+
+      **Researched**: {ISO timestamp}
+      **Workflow ID**: $WORKFLOW_ID
+
+      ---
+
+      ## Summary
+
+      {2-3 sentence overview of key findings}
+
+      ---
+
+      ## Findings
+
+      ### {Source/Topic 1}
+
+      **Source**: [{Name}]({URL})
+      **Authority**: {Why credible}
+      **Relevant to**: {Which part of the issue}
+
+      **Key Information**:
+
+      - {Finding 1}
+      - {Finding 2}
+      - {Version/date context}
+
+      ---
+
+      ### {Source/Topic 2}
+
+      {Same structure...}
+
+      ---
+
+      ## Code Examples
+
+      {If applicable — actual code from sources with attribution}
+
+      ```language
+      // From [{source}]({url})
+      {code example}
+      ```
+      ````
+
+      ---
+
+      ## Gaps and Conflicts
+
+      - {Information that couldn't be found}
+      - {Conflicting claims between sources}
+      - {Areas needing further investigation}
+
+      ---
+
+      ## Recommendations
+
+      Based on research:
+
+      1. {Recommendation 1 — what approach to take and why}
+      2. {Recommendation 2 — what to avoid and why}
+
+      ---
+
+      ## Sources
+
+      | #   | Source | URL   | Relevance         |
+      | --- | ------ | ----- | ----------------- |
+      | 1   | {name} | {url} | {brief relevance} |
+      | 2   | {name} | {url} | {brief relevance} |
+
+      **PHASE_4_CHECKPOINT:**
+
+      - [ ] Artifact written to `$ARTIFACTS_DIR/web-research.md`
+      - [ ] All sources cited with URLs
+      - [ ] Recommendations actionable
+
+      ---
+
+      ## Phase 5: OUTPUT - Report
+
+      ```markdown
+      ## Web Research Complete
+
+      **Queries**: {n} searches executed
+      **Sources**: {n} relevant sources found
+      **Artifact**: `$ARTIFACTS_DIR/web-research.md`
+
+      ### Key Findings
+
+      - {Finding 1}
+      - {Finding 2}
+      - {Finding 3}
+
+      ### Gaps
+
+      - {What couldn't be found, if any}
+      ```
+
+      ---
+
+      ## Quality Standards
+
+      | Standard         | Requirement                                   |
+      | ---------------- | --------------------------------------------- |
+      | **Accuracy**     | Quote sources exactly, provide direct links   |
+      | **Relevance**    | Focus on what directly addresses the issue    |
+      | **Currency**     | Note publication dates and versions           |
+      | **Authority**    | Prioritize official docs, recognized experts  |
+      | **Completeness** | Search multiple angles, note gaps             |
+      | **Transparency** | Flag outdated, conflicting, or uncertain info |
+
+      ---
+
+      ## What NOT To Do
+
+      - Don't guess when you can search
+      - Don't fetch pages without checking search results first
+      - Don't ignore publication dates on technical content
+      - Don't present a single source as definitive without corroboration
+      - Don't skip the Gaps section — be honest about limitations
+
+      ---
+
+      ## Success Criteria
+
+      - **RESEARCH_EXECUTED**: At least 3 targeted searches completed
+      - **SOURCES_CITED**: All findings have source URLs
+      - **ARTIFACT_WRITTEN**: Research saved to `$ARTIFACTS_DIR/web-research.md`
+      - **ACTIONABLE**: Findings directly inform implementation decisions
     depends_on: [classify]
     context: fresh
 
@@ -96,13 +356,13 @@ nodes:
   # ═══════════════════════════════════════════════════════════════
 
   - id: investigate
-    command: rith-investigate-issue
+    skills: [rith-investigate-issue]
     depends_on: [classify, web-research]
     when: "$classify.output.issue_type == 'bug'"
     context: fresh
 
   - id: plan
-    command: rith-create-plan
+    skills: [rith-create-plan]
     depends_on: [classify, web-research]
     when: "$classify.output.issue_type != 'bug'"
     context: fresh
@@ -129,7 +389,7 @@ nodes:
   # ═══════════════════════════════════════════════════════════════
 
   - id: implement
-    command: rith-fix-issue
+    skills: [rith-fix-issue]
     depends_on: [bridge-artifacts]
     context: fresh
     model: anthropic/claude-opus-4-5
@@ -139,7 +399,7 @@ nodes:
   # ═══════════════════════════════════════════════════════════════
 
   - id: validate
-    command: rith-validate
+    skills: [rith-validate]
     depends_on: [implement]
     context: fresh
 
@@ -208,9 +468,477 @@ nodes:
       fi
     depends_on: [create-pr]
 
-  - id: review-scope
-    command: rith-pr-review-scope
+  - id: review-scope-setup
+    bash: |
+      mkdir -p $ARTIFACTS_DIR/review
+      if [ -f "$ARTIFACTS_DIR/.pr-number" ]; then
+        PR_NUMBER=$(cat $ARTIFACTS_DIR/.pr-number | tr -d '\n' | tr -d ' ')
+        echo "PR_NUMBER=$PR_NUMBER"
+      else
+        PR_NUMBER=$(gh pr view --json number -q '.number' 2>/dev/null)
+        echo "$PR_NUMBER" > $ARTIFACTS_DIR/.pr-number
+        echo "PR_NUMBER=$PR_NUMBER (from gh)"
+      fi
+      # Clean stale review artifacts
+      find $ARTIFACTS_DIR/../reviews/pr-* -maxdepth 0 -mtime +7 -exec rm -rf {} \; 2>/dev/null || true
     depends_on: [verify-pr-base]
+
+  - id: review-scope
+    prompt: |
+      # PR Review Scope
+
+      **Input**: $ARGUMENTS
+
+      ---
+
+      ## Your Mission
+
+      Verify the PR is in a reviewable state, gather all context needed for the parallel review agents, and prepare the scope manifest.
+
+      ---
+
+      ## Phase 1: IDENTIFY - Determine PR
+
+      ### 1.1 Get PR Number
+
+      ```bash
+      if [ -f "$ARTIFACTS_DIR/.pr-number" ]; then
+        PR_NUMBER=$(cat $ARTIFACTS_DIR/.pr-number | tr -d '\n' | tr -d ' ')
+        if ! echo "$PR_NUMBER" | grep -qE '^[0-9]+$'; then
+          PR_NUMBER=""
+        fi
+      fi
+
+      # From arguments (standalone review)
+      if [ -z "$PR_NUMBER" ] && [ -n "$ARGUMENTS" ]; then
+        PR_NUMBER=$(echo "$ARGUMENTS" | grep -oE '[0-9]+' | head -1)
+      fi
+
+      # From current branch
+      if [ -z "$PR_NUMBER" ]; then
+        PR_NUMBER=$(gh pr view --json number -q '.number' 2>/dev/null)
+      fi
+
+      if [ -z "$PR_NUMBER" ]; then
+        echo "ERROR: No PR number found"
+        exit 1
+      fi
+
+      # Write to registry for downstream steps (if not already there)
+      echo "$PR_NUMBER" > $ARTIFACTS_DIR/.pr-number
+      ```
+
+      ### 1.2 Fetch PR Details
+
+      ```bash
+      gh pr view {number} --json number,title,body,url,headRefName,baseRefName,files,additions,deletions,changedFiles,state,author,isDraft,mergeable,mergeStateStatus
+      ```
+
+      **Extract:**
+
+      - PR number and title
+      - Branch names (head → base)
+      - Changed files list
+      - Addition/deletion counts
+      - Draft status
+      - Mergeable status
+
+      ---
+
+      ## Phase 2: VERIFY - Pre-Review Checks
+
+      **Before launching review agents, verify the PR is in a reviewable state.**
+
+      ### 2.1 Check for Merge Conflicts
+
+      ```bash
+      gh pr view {number} --json mergeable,mergeStateStatus --jq '.mergeable, .mergeStateStatus'
+      ```
+
+      | Status        | Action                                          |
+      | ------------- | ----------------------------------------------- |
+      | `MERGEABLE`   | Continue                                        |
+      | `CONFLICTING` | **STOP** - Tell user to resolve conflicts first |
+      | `UNKNOWN`     | Warn, continue (GitHub still calculating)       |
+
+      **If conflicts exist:**
+
+      ````markdown
+      ❌ **Cannot review: PR has merge conflicts**
+
+      Please resolve conflicts before requesting a review:
+
+      ```bash
+      git fetch origin {base}
+      git rebase origin/{base}
+      # Resolve conflicts
+      git push --force-with-lease
+      ```
+      ````
+
+      Then re-request the review.
+
+      **Exit workflow if conflicts detected.**
+
+      ### 2.2 Check CI Status
+
+      ```bash
+      gh pr checks {number} --json name,state,conclusion --jq '.[] | "\(.name): \(.state) (\(.conclusion // "pending"))"'
+      ```
+
+      | Status       | Action                                  |
+      | ------------ | --------------------------------------- |
+      | All passing  | Continue                                |
+      | Some failing | Warn, continue (note in scope)          |
+      | All failing  | Warn strongly, continue (note in scope) |
+      | Pending      | Note, continue                          |
+
+      **Flag CI status for review report.**
+
+      ### 2.3 Check Behind Base
+
+      ```bash
+      # Get branch names
+      PR_BASE=$(gh pr view {number} --json baseRefName --jq '.baseRefName')
+      PR_HEAD=$(gh pr view {number} --json headRefName --jq '.headRefName')
+
+      # Fetch and count
+      git fetch origin $PR_BASE --quiet
+      git fetch origin $PR_HEAD --quiet
+
+      # Commits behind base branch
+      BEHIND=$(git rev-list --count origin/$PR_HEAD..origin/$PR_BASE 2>/dev/null || echo "0")
+      ```
+
+      | Commits Behind | Action                                        |
+      | -------------- | --------------------------------------------- |
+      | 0-5            | Continue                                      |
+      | 6-15           | Warn, suggest rebase, continue                |
+      | 16+            | Warn strongly, recommend rebase before review |
+
+      ### 2.4 Check Draft Status
+
+      ```bash
+      gh pr view {number} --json isDraft --jq '.isDraft'
+      ```
+
+      | Status  | Action                                              |
+      | ------- | --------------------------------------------------- |
+      | `false` | Continue normally                                   |
+      | `true`  | Note in scope, continue (user wants early feedback) |
+
+      ### 2.5 Check PR Size
+
+      | Metric        | Warning Threshold | Action                         |
+      | ------------- | ----------------- | ------------------------------ |
+      | Changed files | 20+               | Warn about review thoroughness |
+      | Lines changed | 1000+             | Warn about review thoroughness |
+
+      ### 2.6 Compile Reviewability Summary
+
+      ```markdown
+      ## Pre-Review Status
+
+      | Check           | Status                                | Notes     |
+      | --------------- | ------------------------------------- | --------- |
+      | Merge Conflicts | ✅ None / ❌ Has conflicts            | {details} |
+      | CI Status       | ✅ Passing / ⚠️ Failing / ⏳ Pending  | {details} |
+      | Behind Base     | ✅ Up to date / ⚠️ {N} commits behind | {details} |
+      | Draft           | ✅ Ready / 📝 Draft                   | {details} |
+      | Size            | ✅ Normal / ⚠️ Large ({N} files)      | {details} |
+      ```
+
+      ---
+
+      ## Phase 3: CONTEXT - Gather Review Context
+
+      ### 3.1 Get Full Diff
+
+      ```bash
+      gh pr diff {number}
+      ```
+
+      Store this for reference - parallel agents will re-fetch as needed.
+
+      ### 3.2 List Changed Files by Type
+
+      ```bash
+      gh pr view {number} --json files --jq '.files[].path'
+      ```
+
+      **Categorize files:**
+
+      - Source code (`.ts`, `.js`, `.py`, etc.)
+      - Test files (`*.test.ts`, `*.spec.ts`, `test_*.py`)
+      - Documentation (`*.md`, `docs/`)
+      - Configuration (`.json`, `.yaml`, `.toml`)
+      - Types/interfaces
+
+      ### 3.3 Check for CLAUDE.md
+
+      ```bash
+      cat CLAUDE.md 2>/dev/null | head -100
+      ```
+
+      Note key rules that reviewers should check against.
+
+      ### 3.4 Identify New Abstractions
+
+      Scan the diff for new abstractions introduced by this PR:
+
+      - New interfaces, types, or abstract classes (search diff for `interface `, `type `, `abstract class`)
+      - New utility modules or helper files (new `.ts` files that aren't feature files or tests)
+      - New configuration keys or schema fields
+
+      For each new abstraction found, note it in the scope manifest under "Review Focus Areas" so the code review agent can verify it doesn't duplicate an existing primitive.
+
+      ```bash
+      # Quick scan for new abstractions in diff
+      gh pr diff {number} | grep "^+" | sed 's/^+//' | grep -E "(^interface |^export interface |^type |^abstract class |^export class )" | head -20
+      ```
+
+      ---
+
+      ## Phase 3.5: PLAN/ISSUE CONTEXT - Check for Workflow Artifacts
+
+      **CRITICAL**: If this PR was created by a workflow, there will be artifacts that contain important context for reviewers.
+
+      ### 3.5.1 Find Workflow Artifacts
+
+      Check for artifacts from EITHER workflow type:
+
+      ```bash
+      # Option 1: Plan-based workflow (rith-plan-to-merge)
+      ls -t $ARTIFACTS_DIR/../runs/*/plan-context.md 2>/dev/null | head -1
+
+      # Option 2: Issue-based workflow (rith-fix-github-issue)
+      ls -t $ARTIFACTS_DIR/../runs/*/investigation.md 2>/dev/null | head -1
+      ```
+
+      ### 3.5.2 Extract Scope Limits
+
+      **If plan-context.md exists** (from plan workflow):
+
+      ```bash
+      # Extract the NOT Building section
+      sed -n '/## NOT Building/,/^## /p' $ARTIFACTS_DIR/../runs/*/plan-context.md | head -30
+      ```
+
+      **If investigation.md exists** (from issue workflow):
+
+      ```bash
+      # Extract the Scope Boundaries / OUT OF SCOPE section
+      sed -n '/## Scope Boundaries/,/^## /p' $ARTIFACTS_DIR/../runs/*/investigation.md | head -30
+      ```
+
+      **These are INTENTIONAL exclusions** - do NOT flag them as bugs or missing features!
+
+      ### 3.5.3 Check Implementation Report
+
+      ```bash
+      # Look for implementation report (either workflow)
+      ls -t $ARTIFACTS_DIR/../runs/*/implementation.md 2>/dev/null | head -1
+      ```
+
+      **If implementation.md exists**, note any deviations:
+
+      ```bash
+      # Extract deviations section
+      sed -n '/## Deviations/,/^## /p' $ARTIFACTS_DIR/../runs/*/implementation.md | head -20
+      ```
+
+      ---
+
+      ## Phase 4: CREATE SCOPE MANIFEST
+
+      Write `$ARTIFACTS_DIR/review/scope.md`:
+
+      ```markdown
+      # PR Review Scope: #{number}
+
+      **Title**: {PR title}
+      **URL**: {PR URL}
+      **Branch**: {head} → {base}
+      **Author**: {author}
+      **Date**: {ISO timestamp}
+
+      ---
+
+      ## Pre-Review Status
+
+      | Check           | Status   | Notes                        |
+      | --------------- | -------- | ---------------------------- |
+      | Merge Conflicts | {status} | {details}                    |
+      | CI Status       | {status} | {passing}/{total} checks     |
+      | Behind Base     | {status} | {N} commits behind           |
+      | Draft           | {status} | {Ready/Draft}                |
+      | Size            | {status} | {files} files, +{add}/-{del} |
+
+      ---
+
+      ## Changed Files
+
+      | File               | Type   | Additions | Deletions |
+      | ------------------ | ------ | --------- | --------- |
+      | `src/file.ts`      | source | +10       | -5        |
+      | `src/file.test.ts` | test   | +20       | -0        |
+      | ...                | ...    | ...       | ...       |
+
+      **Total**: {changedFiles} files, +{additions} -{deletions}
+
+      ---
+
+      ## File Categories
+
+      ### Source Files ({count})
+
+      - `src/...`
+
+      ### Test Files ({count})
+
+      - `src/...test.ts`
+
+      ### Documentation ({count})
+
+      - `$DOCS_DIR/...`
+      - `README.md`
+
+      ### Configuration ({count})
+
+      - `package.json`
+
+      ---
+
+      ## Review Focus Areas
+
+      Based on changes, reviewers should focus on:
+
+      1. **Code Quality**: {list key source files}
+      2. **Error Handling**: {files with try/catch, error handling}
+      3. **Test Coverage**: {new functionality needing tests}
+      4. **Comments/Docs**: {files with documentation changes}
+      5. **Docs Impact**: {check if CLAUDE.md or $DOCS_DIR need updates}
+      6. **Primitive Alignment**: {If new abstractions found: list them} — verify no duplication of existing primitives
+
+      ---
+
+      ## CLAUDE.md Rules to Check
+
+      {Extract key rules from CLAUDE.md that apply to this PR}
+
+      ---
+
+      ## Workflow Context (if from automated workflow)
+
+      {If plan-context.md OR investigation.md was found:}
+
+      ### Scope Limits (NOT Building / OUT OF SCOPE)
+
+      **CRITICAL FOR REVIEWERS**: These items are **intentionally excluded** from scope. Do NOT flag them as bugs or missing features.
+
+      {From plan-context.md "NOT Building" section OR investigation.md "Scope Boundaries/OUT OF SCOPE" section}
+
+      **IN SCOPE:**
+
+      - {what we're changing}
+
+      **OUT OF SCOPE (do not touch):**
+
+      - {Explicit exclusion 1 with rationale}
+      - {Explicit exclusion 2 with rationale}
+
+      ### Implementation Deviations
+
+      {If implementation.md was found and has deviations:}
+
+      {Copy the "Deviations" section from implementation.md}
+
+      {If no workflow artifacts found:}
+
+      _No workflow artifacts found - this appears to be a manual PR._
+
+      ---
+
+      ## CI Details
+
+      {If CI failing, list which checks failed}
+
+      ---
+
+      ## Metadata
+
+      - **Scope created**: {ISO timestamp}
+      - **Artifact path**: `$ARTIFACTS_DIR/review/`
+      ```
+
+      ---
+
+      ## Phase 5: OUTPUT - Report
+
+      ### If Blocked (Conflicts)
+
+      ````markdown
+      ## ❌ Review Blocked: Merge Conflicts
+
+      **PR**: #{number} - {title}
+
+      This PR has merge conflicts that must be resolved before review.
+
+      ### To Resolve
+
+      ```bash
+      git fetch origin {base}
+      git checkout {head}
+      git rebase origin/{base}
+      # Resolve conflicts in your editor
+      git add .
+      git rebase --continue
+      git push --force-with-lease
+      ```
+      ````
+
+      Then re-request the review.
+
+      ### If Proceeding
+
+      ```markdown
+      ## PR Review Scope Complete
+
+      **PR**: #{number} - {title}
+      **Files**: {count} changed (+{additions} -{deletions})
+
+      ### Pre-Review Status
+      | Check | Status |
+      |-------|--------|
+      | Conflicts | ✅ None |
+      | CI | {✅ Passing / ⚠️ {N} failing} |
+      | Behind Base | {✅ Up to date / ⚠️ {N} behind} |
+      | Draft | {✅ Ready / 📝 Draft} |
+      | Size | {✅ Normal / ⚠️ Large} |
+
+      ### File Categories
+      - Source: {count} files
+      - Tests: {count} files
+      - Docs: {count} files
+      - Config: {count} files
+
+      ### Artifacts Directory
+      `$ARTIFACTS_DIR/review/`
+
+      ### Next Step
+      Launching 5 parallel review agents...
+      ```
+
+      ---
+
+      ## Success Criteria
+
+      - **PR_IDENTIFIED**: Valid open PR found
+      - **NO_CONFLICTS**: Merge conflicts block workflow
+      - **CONTEXT_GATHERED**: Diff and file list available
+      - **ARTIFACTS_DIR_CREATED**: Directory structure exists
+      - **SCOPE_MANIFEST_WRITTEN**: `scope.md` file created with pre-review status
+    depends_on: [review-scope-setup]
     context: fresh
 
   - id: review-classify
@@ -269,30 +997,30 @@ nodes:
 
   # Code review always runs — mandatory
   - id: code-review
-    command: rith-code-review-agent
+    skills: [rith-code-review]
     depends_on: [review-classify]
     context: fresh
 
   - id: error-handling
-    command: rith-error-handling-agent
+    skills: [rith-error-handling-review]
     depends_on: [review-classify]
     when: "$review-classify.output.run_error_handling == 'true'"
     context: fresh
 
   - id: test-coverage
-    command: rith-test-coverage-agent
+    skills: [rith-test-coverage-review]
     depends_on: [review-classify]
     when: "$review-classify.output.run_test_coverage == 'true'"
     context: fresh
 
   - id: comment-quality
-    command: rith-comment-quality-agent
+    skills: [rith-comment-quality-review]
     depends_on: [review-classify]
     when: "$review-classify.output.run_comment_quality == 'true'"
     context: fresh
 
   - id: docs-impact
-    command: rith-docs-impact-agent
+    skills: [rith-docs-impact-review]
     depends_on: [review-classify]
     when: "$review-classify.output.run_docs_impact == 'true'"
     context: fresh
@@ -302,13 +1030,13 @@ nodes:
   # ═══════════════════════════════════════════════════════════════
 
   - id: synthesize
-    command: rith-synthesize-review
+    skills: [rith-synthesize-review]
     depends_on: [code-review, error-handling, test-coverage, comment-quality, docs-impact]
     trigger_rule: one_success
     context: fresh
 
   - id: self-fix
-    command: rith-self-fix-all
+    skills: [rith-self-fix-all]
     depends_on: [synthesize]
     context: fresh
 
@@ -317,7 +1045,122 @@ nodes:
   # ═══════════════════════════════════════════════════════════════
 
   - id: simplify
-    command: rith-simplify-changes
+    prompt: |
+      # Simplify Changed Code
+
+      ---
+
+      ## IMPORTANT: Output Behavior
+
+      **Your output will be posted as a GitHub comment.** Keep working output minimal:
+
+      - Do NOT narrate each step
+      - Do NOT output verbose progress updates
+      - Only output the final structured report at the end
+
+      ---
+
+      ## Your Mission
+
+      Review ALL code changed on this branch and implement simplifications directly. You are not advisory — you edit files, validate, commit, and push.
+
+      ## Scope
+
+      **Only code changed in this PR** — run `git diff $BASE_BRANCH...HEAD --name-only` to get the file list. Do not touch unrelated files.
+
+      ## What to Simplify
+
+      | Opportunity                | What to Look For                                              |
+      | -------------------------- | ------------------------------------------------------------- |
+      | **Unnecessary complexity** | Deep nesting, convoluted logic paths                          |
+      | **Redundant code**         | Duplicated logic, unused variables/imports                    |
+      | **Over-abstraction**       | Abstractions that obscure rather than clarify                 |
+      | **Poor naming**            | Unclear variable/function names                               |
+      | **Nested ternaries**       | Multiple conditions in ternary chains — use if/else           |
+      | **Dense one-liners**       | Compact code that sacrifices readability                      |
+      | **Obvious comments**       | Comments that describe what code clearly shows                |
+      | **Inconsistent patterns**  | Code that doesn't follow project conventions (read CLAUDE.md) |
+
+      ## Rules
+
+      - **Preserve exact functionality** — simplification must not change behavior
+      - **Clarity over brevity** — readable beats compact
+      - **No speculative refactors** — only simplify what's obviously improvable
+      - **Follow project conventions** — read CLAUDE.md before making changes
+      - **Small, obvious changes** — each simplification should be self-evidently correct
+
+      ## Process
+
+      ### Phase 1: ANALYZE
+
+      1. Read CLAUDE.md for project conventions
+      2. Get changed files: `git diff $BASE_BRANCH...HEAD --name-only`
+      3. Read each changed file
+      4. Identify simplification opportunities per file
+
+      ### Phase 2: IMPLEMENT
+
+      For each simplification:
+
+      1. Edit the file
+      2. Run `bun run type-check` — if it fails, revert that change
+      3. Run `bun run lint` — if it fails, fix or revert
+
+      **Track every path you edit.** You will need this list in Phase 3 to stage only the files you touched.
+
+      ### Phase 3: VALIDATE & COMMIT
+
+      1. Run full validation: `bun run type-check && bun run lint`
+      2. If simplifications were applied, stage **only** the files you edited in Phase 2 — never `git add -A`, `git add .`, or `git add -u`:
+         ```bash
+         # Stage by name, using the list you tracked in Phase 2
+         git add path/to/file1.ts path/to/file2.ts
+         # Verify nothing else snuck in
+         git status --porcelain
+         ```
+      3. **Never stage** report, scratch, or PR-body artifacts, even if they show up as untracked or modified in the worktree:
+         - Anything under `$ARTIFACTS_DIR` (the artifacts directory normally lives outside the worktree, but copies/symlinks may exist)
+         - `review/`, `simplify-report.md`, `*-report.md` at the repo root
+         - `.pr-body.md`, `pr-body.md`, `*.scratch.md`, `*.tmp.md`
+         - If `git status --porcelain` shows files you don't recognize as part of your simplifications, leave them unstaged
+      4. Commit and push only the staged source edits:
+         ```bash
+         git commit -m "simplify: reduce complexity in changed files"
+         git push
+         ```
+      5. If no simplifications were applied, skip the commit entirely
+
+      ### Phase 4: REPORT
+
+      Write report to `$ARTIFACTS_DIR/review/simplify-report.md` and output:
+
+      ```markdown
+      ## Code Simplification Report
+
+      ### Changes Made
+
+      #### 1. [Brief Title]
+
+      **File**: `path/to/file.ts:45-60`
+      **Type**: Reduced nesting / Improved naming / Removed redundancy / etc.
+      **Before**: [snippet]
+      **After**: [snippet]
+
+      ---
+
+      ### Summary
+
+      | Metric                  | Value       |
+      | ----------------------- | ----------- |
+      | Files analyzed          | X           |
+      | Simplifications applied | Y           |
+      | Net line change         | -N lines    |
+      | Validation              | PASS / FAIL |
+
+      ### No Changes Needed
+
+      (If nothing to simplify, say so — "Code is already clean. No simplifications applied.")
+      ```
     depends_on: [self-fix]
     context: fresh
 
@@ -326,6 +1169,340 @@ nodes:
   # ═══════════════════════════════════════════════════════════════
 
   - id: report
-    command: rith-issue-completion-report
+    prompt: |
+      # Issue Completion Report
+
+      **Input**: $ARGUMENTS
+      **Workflow ID**: $WORKFLOW_ID
+
+      ---
+
+      ## Your Mission
+
+      Compile all workflow artifacts into a final report and post it to the original GitHub issue. Summarize what was done, what wasn't addressed (and why), and suggest follow-up issues if needed.
+
+      **GitHub action**: Post completion report as a comment on the original issue
+      **Output artifact**: `$ARTIFACTS_DIR/completion-report.md`
+
+      ---
+
+      ## Phase 1: LOAD — Gather All Artifacts
+
+      ### 1.1 Get Issue Number
+
+      Extract issue number from `$ARGUMENTS`:
+
+      ```bash
+      # $ARGUMENTS should be the issue number or URL
+      echo "$ARGUMENTS"
+      ```
+
+      ### 1.2 Get PR Info
+
+      ```bash
+      PR_NUMBER=$(cat $ARTIFACTS_DIR/.pr-number 2>/dev/null || echo "unknown")
+      PR_URL=$(cat $ARTIFACTS_DIR/.pr-url 2>/dev/null || echo "unknown")
+      echo "PR: $PR_NUMBER ($PR_URL)"
+      ```
+
+      ### 1.3 Read All Available Artifacts
+
+      Check for and read each artifact that may exist:
+
+      ```bash
+      # Investigation/Plan
+      cat $ARTIFACTS_DIR/investigation.md 2>/dev/null
+      cat $ARTIFACTS_DIR/plan.md 2>/dev/null
+
+      # Implementation
+      cat $ARTIFACTS_DIR/implementation.md 2>/dev/null
+
+      # Web research
+      cat $ARTIFACTS_DIR/web-research.md 2>/dev/null
+
+      # Validation
+      cat $ARTIFACTS_DIR/validation.md 2>/dev/null
+
+      # Review artifacts
+      ls $ARTIFACTS_DIR/review/ 2>/dev/null
+      cat $ARTIFACTS_DIR/review/consolidated-review.md 2>/dev/null
+      cat $ARTIFACTS_DIR/review/fix-report.md 2>/dev/null
+      ```
+
+      ### 1.4 Get Git Info
+
+      ```bash
+      git branch --show-current
+      git log --oneline -5
+      ```
+
+      **PHASE_1_CHECKPOINT:**
+
+      - [ ] Issue number identified
+      - [ ] PR info loaded
+      - [ ] All available artifacts read
+      - [ ] Git state captured
+
+      ---
+
+      ## Phase 2: COMPILE — Build Report
+
+      ### 2.1 Summarize What Was Done
+
+      From the artifacts, compile:
+
+      - **Classification**: What type of issue (bug/feature/etc)
+      - **Investigation/Plan**: Key findings and approach
+      - **Implementation**: What was changed, files modified
+      - **Validation**: Test results, lint, type-check
+      - **Review**: What was reviewed, findings count
+      - **Self-fix**: What review findings were fixed
+
+      ### 2.2 Identify Unaddressed Items
+
+      From the fix report and consolidated review:
+
+      - Findings that were SKIPPED (with reasons)
+      - Findings that were BLOCKED (with reasons)
+      - MEDIUM/LOW findings not auto-fixed
+      - Any validation issues that persisted
+
+      ### 2.3 Suggest Follow-up Issues
+
+      For each unaddressed item, determine if it warrants a follow-up issue:
+
+      | Item              | Warrants Issue? | Why      |
+      | ----------------- | --------------- | -------- |
+      | {skipped finding} | YES/NO          | {reason} |
+
+      **PHASE_2_CHECKPOINT:**
+
+      - [ ] Summary compiled
+      - [ ] Unaddressed items identified
+      - [ ] Follow-up suggestions prepared
+
+      ---
+
+      ## Phase 3: GENERATE — Write Artifact
+
+      Write to `$ARTIFACTS_DIR/completion-report.md`:
+
+      ```markdown
+      # Completion Report: Issue $ARGUMENTS
+
+      **Date**: {ISO timestamp}
+      **Workflow ID**: $WORKFLOW_ID
+      **PR**: #{pr-number} ({pr-url})
+
+      ---
+
+      ## Summary
+
+      {3-5 sentence overview of the entire workflow execution}
+
+      ---
+
+      ## Classification
+
+      | Field      | Value                         |
+      | ---------- | ----------------------------- |
+      | Type       | {bug/feature/enhancement/...} |
+      | Complexity | {LOW/MEDIUM/HIGH}             |
+      | Confidence | {HIGH/MEDIUM/LOW}             |
+
+      ---
+
+      ## What Was Done
+
+      ### Investigation/Planning
+
+      {Brief summary of root cause or plan}
+
+      ### Implementation
+
+      | File     | Action          | Description    |
+      | -------- | --------------- | -------------- |
+      | `{file}` | {CREATE/UPDATE} | {what changed} |
+
+      ### Validation
+
+      | Check      | Result               |
+      | ---------- | -------------------- |
+      | Type check | ✅ / ❌              |
+      | Lint       | ✅ / ❌              |
+      | Tests      | ✅ ({n} passed) / ❌ |
+
+      ### Review & Self-Fix
+
+      - **Findings**: {n} total from review agents
+      - **Fixed**: {n} (including tests, docs, simplification)
+      - **Skipped**: {n}
+      - **Blocked**: {n}
+
+      ---
+
+      ## Unaddressed Items
+
+      {If none: "All findings were addressed."}
+
+      ### Skipped
+
+      | Finding | Severity | Reason   |
+      | ------- | -------- | -------- |
+      | {title} | {sev}    | {reason} |
+
+      ### Blocked
+
+      | Finding | Severity | Reason   |
+      | ------- | -------- | -------- |
+      | {title} | {sev}    | {reason} |
+
+      ---
+
+      ## Suggested Follow-up Issues
+
+      | Title     | Priority   | Description         |
+      | --------- | ---------- | ------------------- |
+      | "{title}" | {P1/P2/P3} | {brief description} |
+
+      _(none)_ if everything was addressed
+
+      ---
+
+      ## Artifacts
+
+      | Artifact            | Path                                           |
+      | ------------------- | ---------------------------------------------- |
+      | Investigation/Plan  | `$ARTIFACTS_DIR/{investigation or plan}.md`    |
+      | Web Research        | `$ARTIFACTS_DIR/web-research.md`               |
+      | Implementation      | `$ARTIFACTS_DIR/implementation.md`             |
+      | Consolidated Review | `$ARTIFACTS_DIR/review/consolidated-review.md` |
+      | Fix Report          | `$ARTIFACTS_DIR/review/fix-report.md`          |
+      ```
+
+      **PHASE_3_CHECKPOINT:**
+
+      - [ ] Completion report written
+
+      ---
+
+      ## Phase 4: POST — GitHub Issue Comment
+
+      Post to the original GitHub issue:
+
+      ```bash
+      ISSUE_NUMBER=$(echo "$ARGUMENTS" | grep -oE '[0-9]+')
+
+      gh issue comment $ISSUE_NUMBER --body "$(cat <<'EOF'
+      ## ✅ Issue Resolution Report
+
+      **PR**: #{pr-number} ({pr-url})
+      **Status**: COMPLETE
+
+      ---
+
+      ### Summary
+
+      {Brief overview of what was done to resolve this issue}
+
+      ---
+
+      ### Changes Made
+
+      | File | Change |
+      |------|--------|
+      | `{file}` | {description} |
+
+      ---
+
+      ### Validation
+
+      ✅ Type check | ✅ Lint | ✅ Tests ({n} passed)
+
+      ---
+
+      ### Review & Self-Fix
+
+      - **{n}** review findings addressed
+      - **{n}** tests added
+      - **{n}** docs updated
+      - **{n}** code simplifications applied
+
+      ---
+
+      ### Unaddressed Items
+
+      {If none: "All review findings were addressed in the PR."}
+
+      {If any:}
+
+      | Finding | Severity | Reason |
+      |---------|----------|--------|
+      | {title} | {sev} | {why not addressed} |
+
+      ---
+
+      ### Suggested Follow-up Issues
+
+      {If any:}
+
+      1. **{Issue Title}** ({priority}) — {brief description}
+
+      {If none: "No follow-up issues needed."}
+
+      ---
+
+      *Resolved by Rith Engine workflow `$WORKFLOW_ID`*
+      EOF
+      )"
+      ```
+
+      **PHASE_4_CHECKPOINT:**
+
+      - [ ] GitHub comment posted to issue
+
+      ---
+
+      ## Phase 5: OUTPUT — Final Summary
+
+      ```markdown
+      ## Issue Resolution Complete
+
+      **Issue**: $ARGUMENTS
+      **PR**: #{pr-number}
+      **Workflow**: $WORKFLOW_ID
+
+      ### Results
+
+      - Implementation: ✅
+      - Validation: ✅
+      - Review: ✅
+      - Self-fix: ✅
+
+      ### Unaddressed: {n} items
+
+      ### Follow-up issues suggested: {n}
+
+      ### Artifacts
+
+      - Completion report: `$ARTIFACTS_DIR/completion-report.md`
+      - GitHub comment: Posted to issue
+
+      ### Next Steps
+
+      1. Review the PR: #{pr-number}
+      2. Create suggested follow-up issues if agreed
+      3. Merge when ready
+      ```
+
+      ---
+
+      ## Success Criteria
+
+      - **ALL_ARTIFACTS_READ**: All workflow artifacts loaded and parsed
+      - **REPORT_COMPILED**: Comprehensive completion report written
+      - **GITHUB_POSTED**: Comment posted to original issue
+      - **UNADDRESSED_DOCUMENTED**: Clear reasons for anything not fixed
+      - **FOLLOWUPS_SUGGESTED**: Actionable follow-up issues recommended where appropriate
     depends_on: [simplify]
     context: fresh

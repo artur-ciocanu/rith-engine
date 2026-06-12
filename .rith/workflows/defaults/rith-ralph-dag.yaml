@@ -95,7 +95,7 @@ nodes:
   - id: generate-prd
     depends_on: [detect-input]
     when: "$detect-input.output.input_type != 'ready'"
-    command: rith-ralph-generate
+    skills: [rith-ralph-generate]
     context: fresh
 
   # ═══════════════════════════════════════════════════════════════

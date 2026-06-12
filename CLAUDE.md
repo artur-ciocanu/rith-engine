@@ -133,7 +133,7 @@ bun run format:check
 bun run validate
 ```
 
-This runs `check:bundled`, `check:bundled-skill`, type-check, lint, format check, and tests. All six must pass for CI to succeed.
+This runs type-check, lint, format check, and tests. All four must pass for CI to succeed.
 
 ### ESLint Guidelines
 
@@ -572,12 +572,19 @@ async function createSession(conversationId: string, codebaseId: string) {
    - Claude routing calls use `tools: []` to prevent tool use at the API level; Codex tool bypass is detected and triggers the same fallback
 
 **Defaults:**
-- Bundled in `.rith/commands/defaults/` and `.rith/workflows/defaults/`
-- Binary builds: Embedded at compile time (no filesystem access needed) via `packages/workflows/src/defaults/bundled-defaults.generated.ts`
-- Source builds: Loaded from filesystem at runtime
+- Default commands in `.rith/commands/defaults/` and default workflows in `.rith/workflows/defaults/`
+- Skills in `.rith/skills/` (agentskills.io standard layout with SKILL.md per skill directory)
+- Always loaded from filesystem at runtime
 - Merged with repo-specific commands/workflows (repo overrides defaults by name)
 - Opt-out: Set `defaults.loadDefaultCommands: false` or `defaults.loadDefaultWorkflows: false` in `.rith/config.yaml`
-- **After adding, removing, or editing a default file, run `bun run generate:bundled`** to refresh the embedded bundle. `bun run validate` (and CI) run `check:bundled` and `check:bundled-skill` and will fail loudly if either generated file is stale.
+
+**Skill resolution order** (first match wins):
+1. `<cwd>/.rith/skills/` — project-local, Rith Engine
+2. `~/.rith/skills/` — user-global, Rith Engine (installed defaults)
+3. `<cwd>/.claude/skills/` — project-local, Claude convention
+4. `~/.claude/skills/` — user-global, Claude convention
+5. `<cwd>/.agents/skills/` — project-local, agentskills.io standard
+6. `~/.agents/skills/` — user-global, agentskills.io standard
 
 **Home-scoped ("global") workflows, commands, and scripts** (user-level, applies to every project):
 - Workflows: `~/.rith/workflows/` (or `$RITH_HOME/workflows/`)

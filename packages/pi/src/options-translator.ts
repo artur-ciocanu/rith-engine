@@ -248,5 +248,5 @@ export function resolvePiTools(
 // Skill resolution is shared across providers. Re-export `resolvePiSkills` as
 // an alias of the shared `resolveSkillDirectories` so existing Pi callers and
 // tests keep their import path stable.
-export { resolveSkillDirectories as resolvePiSkills } from './shared/skills';
-export type { ResolvedSkills } from './shared/skills';
+export { resolveSkillDirectories as resolvePiSkills } from './skills';
+export type { ResolvedSkills } from './skills';
