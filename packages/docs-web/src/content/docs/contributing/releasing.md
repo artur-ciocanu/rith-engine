@@ -15,7 +15,7 @@ This guide covers how to create a new release of the Rith Engine CLI.
 
 Versions follow [Semantic Versioning](https://semver.org/):
 - **Major** (1.0.0): Breaking changes to CLI interface or workflow format
-- **Minor** (0.1.0): New features, new workflows, new commands
+- **Minor** (0.1.0): New features, new workflows, new skills
 - **Patch** (0.0.1): Bug fixes, documentation updates
 
 Version is stored in the root `package.json` only -- this is the single source of truth.

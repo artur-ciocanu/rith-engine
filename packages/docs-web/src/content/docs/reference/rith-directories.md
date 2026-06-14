@@ -145,18 +145,18 @@ Key configuration options:
 |--------|--------------|---------|
 | `RITH_HOME` | `RITH_HOME` | `~/.rith` |
 
-## Command Folders
+## Skills Folders
 
-Command detection searches in priority order:
+Skills detection searches in priority order:
 
-1. `.rith/commands/` - Always searched first
-2. Configured folder from `commands.folder` in `.rith/config.yaml` (if specified)
+1. `.rith/skills/` - Always searched first
+2. Configured folder from `skills.folder` in `.rith/config.yaml` (if specified)
 
 Example configuration:
 ```yaml
 # .rith/config.yaml
-commands:
-  folder: .claude/commands/rith  # Additional folder to search
+skills:
+  folder: .claude/skills/rith  # Additional folder to search
 ```
 
 ## Extension Points

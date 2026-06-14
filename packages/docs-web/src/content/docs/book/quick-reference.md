@@ -53,8 +53,6 @@ This chapter collects every CLI command, variable, and YAML option in one place.
 | `rith validate workflows` | Validate all workflow definitions |
 | `rith validate workflows <name>` | Validate a single workflow |
 | `rith validate workflows <name> --json` | Machine-readable validation output |
-| `rith validate commands` | Validate all command files |
-| `rith validate commands <name>` | Validate a single command |
 
 ### `rith version`
 
@@ -120,7 +118,6 @@ All nodes share these base fields:
 | Field | Required | Type | Description |
 |-------|----------|------|-------------|
 | `id` | Yes | string | Unique node identifier; used in `depends_on` and `$nodeId.output` |
-| `command` | One of | string | Name of a command file in `.rith/commands/` |
 | `prompt` | One of | string | Inline AI instructions |
 | `bash` | One of | string | Shell script (runs without AI; stdout captured as `$nodeId.output`) |
 | `script` | One of | string | TypeScript/JavaScript (bun) or Python (uv) — inline or named ref to `.rith/scripts/`. Requires `runtime`. See [Script Nodes](/guides/script-nodes/) |
@@ -286,8 +283,7 @@ defaults:
 | Error | Likely Cause | Fix |
 |-------|-------------|-----|
 | `Workflow "X" not found` | YAML file not discovered | Check file is in `.rith/workflows/` and `rith workflow list` shows it |
-| `Command "X" not found` | Command file missing | Check `.rith/commands/X.md` exists and `rith validate commands X` passes |
-| `Routing unclear — falling back to rith-assist` | No workflow matched the input | Use an explicit workflow name: `rith workflow run my-workflow "..."` |
+| Skill "X" not found | Skill directory missing | Check \`.rith/skills/X/SKILL.md\` exists |
 | `Worktree already exists for branch X` | Prior run left a worktree | Run `rith complete X` or `rith isolation cleanup` |
 | `Not a git repository` | Running outside a repo | `cd` into a git repo first — workflow and isolation commands require one |
 | `$BASE_BRANCH referenced but could not be detected` | No base branch set and auto-detection failed | Set `worktree.baseBranch` in `.rith/config.yaml` or ensure `main`/`master` exists |
