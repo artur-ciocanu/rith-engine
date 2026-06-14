@@ -28,7 +28,7 @@ const mockLogger = {
 // Mock @rith/paths (createLogger moved here from @rith/core)
 mock.module('@rith/paths', () => ({
   createLogger: mock(() => mockLogger),
-  getRithHome: mock(() => '/home/test/.rith'),
+  getRithHome: mock(() => '/tmp/rith-test/.rith'),
 }));
 
 // Mock @rith/isolation (getIsolationProvider moved here from @rith/core)
@@ -930,8 +930,8 @@ describe('workflowRunCommand', () => {
     (gitModule.findRepoRoot as ReturnType<typeof mock>).mockResolvedValueOnce('/test/path');
     (registerRepository as ReturnType<typeof mock>).mockRejectedValueOnce(
       new Error(
-        'Source symlink at /home/test/.rith/workspaces/acme/widget/source already points to ' +
-          '/home/test/.rith/workspaces/widget, expected /test/path'
+        'Source symlink at /tmp/rith-test/.rith/workspaces/acme/widget/source already points to ' +
+          '/tmp/rith-test/.rith/workspaces/widget, expected /test/path'
       )
     );
 
@@ -942,7 +942,7 @@ describe('workflowRunCommand', () => {
     expect(error).toBeInstanceOf(Error);
     expect(error.message).toContain('Cannot create worktree: repository registration failed.');
     expect(error.message).toContain(
-      'Remove the stale workspace entry at /home/test/.rith/workspaces/acme/widget and retry'
+      'Remove the stale workspace entry at /tmp/rith-test/.rith/workspaces/acme/widget and retry'
     );
     expect(error.message).not.toContain('not in a git repository');
   });
@@ -961,8 +961,8 @@ describe('workflowRunCommand', () => {
     (gitModule.findRepoRoot as ReturnType<typeof mock>).mockResolvedValueOnce('/test/path');
     (registerRepository as ReturnType<typeof mock>).mockRejectedValueOnce(
       new Error(
-        'Source symlink at /home/test/.rith/workspaces/acme/widget/source already points to ' +
-          '/home/test/.rith/workspaces/widget, expected /test/path'
+        'Source symlink at /tmp/rith-test/.rith/workspaces/acme/widget/source already points to ' +
+          '/tmp/rith-test/.rith/workspaces/widget, expected /test/path'
       )
     );
 
@@ -973,7 +973,7 @@ describe('workflowRunCommand', () => {
     expect(error).toBeInstanceOf(Error);
     expect(error.message).toContain('Cannot resume: repository registration failed.');
     expect(error.message).toContain(
-      'Remove the stale workspace entry at /home/test/.rith/workspaces/acme/widget and retry'
+      'Remove the stale workspace entry at /tmp/rith-test/.rith/workspaces/acme/widget and retry'
     );
     expect(error.message).not.toContain('Not in a git repository');
   });
@@ -991,7 +991,7 @@ describe('workflowRunCommand', () => {
     (codebaseDb.findCodebaseByDefaultCwd as ReturnType<typeof mock>).mockResolvedValueOnce(null);
     (gitModule.findRepoRoot as ReturnType<typeof mock>).mockResolvedValueOnce('/test/path');
     (registerRepository as ReturnType<typeof mock>).mockRejectedValueOnce(
-      new Error("EACCES: permission denied, mkdir '/home/test/.rith/workspaces/acme'")
+      new Error("EACCES: permission denied, mkdir '/tmp/rith-test/.rith/workspaces/acme'")
     );
 
     const error = await workflowRunCommand('/test/path', 'assist', 'hello', {}).catch(
@@ -2199,6 +2199,7 @@ describe('workflowRejectCommand', () => {
     }
 
     expect(workflowDb.updateWorkflowRun).toHaveBeenCalledWith('run-on-reject', {
+      fromStatus: 'paused',
       status: 'failed',
       metadata: { rejection_reason: 'needs work', rejection_count: 1 },
     });
