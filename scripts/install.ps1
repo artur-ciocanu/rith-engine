@@ -271,6 +271,33 @@ function Main {
         }
         Write-Ok "Installed to $destBinary"
 
+        # --- Install default content (skills, workflows) to ~/.rith/ ---
+        # On upgrade, overwrites defaults — user's project-local .rith/ is untouched.
+        $rithHome = if ($env:RITH_HOME) { $env:RITH_HOME } else { "$env:USERPROFILE\.rith" }
+        Write-Info "Installing default content to $rithHome..."
+        @("$rithHome\skills", "$rithHome\workflows") | ForEach-Object {
+            if (-not (Test-Path $_)) { New-Item -ItemType Directory -Path $_ -Force | Out-Null }
+        }
+
+        # Download content tarball (packaged by build-binaries.sh)
+        $contentUrl = "https://github.com/$REPO/releases/download/$VERSION/rith-content.tar.gz"
+        $contentPath = Join-Path $tmpDir "content.tar.gz"
+        $contentExtract = Join-Path $tmpDir "content"
+        try {
+            Invoke-Download -Url $contentUrl -OutFile $contentPath
+            if (-not (Test-Path $contentExtract)) { New-Item -ItemType Directory -Path $contentExtract -Force | Out-Null }
+            tar -xzf $contentPath -C $contentExtract 2>$null
+            if (Test-Path "$contentExtract\content\skills") {
+                Copy-Item -Path "$contentExtract\content\skills\*" -Destination "$rithHome\skills" -Recurse -Force
+            }
+            if (Test-Path "$contentExtract\content\workflows") {
+                Copy-Item -Path "$contentExtract\content\workflows\*.yaml" -Destination "$rithHome\workflows" -Force
+            }
+            Write-Ok "Default content installed to $rithHome"
+        } catch {
+            Write-Warn "Content tarball not available - defaults will be loaded from the app directory"
+        }
+
         # --- Add to PATH ---
         try {
             Add-ToUserPath -Dir $INSTALL_DIR
