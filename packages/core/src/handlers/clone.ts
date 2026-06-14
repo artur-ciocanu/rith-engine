@@ -9,13 +9,11 @@ import { sanitizeError } from '../utils/credential-sanitizer';
 import { execFileAsync } from '@rith/git';
 import {
   expandTilde,
-  getCommandFolderSearchPaths,
   ensureProjectStructure,
   getProjectSourcePath,
   createProjectSourceSymlink,
   parseOwnerRepo,
 } from '@rith/paths';
-import { findMarkdownFilesRecursive } from '../utils/commands';
 import { createLogger } from '@rith/paths';
 
 /** Lazy-initialized logger (deferred so test mocks can intercept createLogger) */
@@ -158,37 +156,12 @@ async function registerRepoAtPath(
       await codebaseDb.updateCodebase(existing.id, updates);
     }
 
-    // Still reload commands for the existing codebase
-    const effectiveCwd = shouldUpdateCwd ? targetPath : existing.default_cwd;
-    let commandsLoaded = 0;
-    for (const folder of getCommandFolderSearchPaths()) {
-      const commandPath = join(effectiveCwd, folder);
-      try {
-        await access(commandPath);
-      } catch {
-        continue;
-      }
-      const markdownFiles = await findMarkdownFilesRecursive(commandPath);
-      if (markdownFiles.length > 0) {
-        const commands = { ...(await codebaseDb.getCodebaseCommands(existing.id)) };
-        markdownFiles.forEach(({ commandName, relativePath }) => {
-          commands[commandName] = {
-            path: join(folder, relativePath),
-            description: `From ${folder}`,
-          };
-        });
-        await codebaseDb.updateCodebaseCommands(existing.id, commands);
-        commandsLoaded = markdownFiles.length;
-        break;
-      }
-    }
-
     return {
       codebaseId: existing.id,
       name: existing.name,
       repositoryUrl: existing.repository_url,
       defaultCwd: shouldUpdateCwd ? targetPath : existing.default_cwd,
-      commandCount: commandsLoaded,
+      commandCount: 0,
       alreadyExisted: true,
     };
   }
@@ -200,37 +173,12 @@ async function registerRepoAtPath(
     default_cwd: targetPath,
   });
 
-  // Auto-load commands if found
-  let commandsLoaded = 0;
-  for (const folder of getCommandFolderSearchPaths()) {
-    const commandPath = join(targetPath, folder);
-    try {
-      await access(commandPath);
-    } catch {
-      continue; // Folder doesn't exist, try next
-    }
-    // Command loading errors should NOT be swallowed
-    const markdownFiles = await findMarkdownFilesRecursive(commandPath);
-    if (markdownFiles.length > 0) {
-      const commands = { ...(await codebaseDb.getCodebaseCommands(codebase.id)) };
-      markdownFiles.forEach(({ commandName, relativePath }) => {
-        commands[commandName] = {
-          path: join(folder, relativePath),
-          description: `From ${folder}`,
-        };
-      });
-      await codebaseDb.updateCodebaseCommands(codebase.id, commands);
-      commandsLoaded = markdownFiles.length;
-      break;
-    }
-  }
-
   return {
     codebaseId: codebase.id,
     name: codebase.name,
     repositoryUrl: repositoryUrl,
     defaultCwd: targetPath,
-    commandCount: commandsLoaded,
+    commandCount: 0,
     alreadyExisted: false,
   };
 }

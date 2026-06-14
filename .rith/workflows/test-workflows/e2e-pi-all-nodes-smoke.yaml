@@ -1,5 +1,5 @@
 # E2E smoke test — Pi provider, every node type
-# Covers: prompt, command, loop (AI node types) + bash, script bun/uv
+# Covers: prompt, loop (AI node types) + bash, script bun/uv
 #   (deterministic node types) + depends_on / when / trigger_rule / $nodeId.output
 #   (DAG features).
 # Skipped: `approval:` — pauses for human input, incompatible with CI.
@@ -19,10 +19,15 @@ nodes:
     effort: low
     idle_timeout: 30000
 
-  # 2. command: named command file (.rith/commands/e2e-echo-command.md)
-  #    The command echoes back $ARGUMENTS (the workflow invocation message).
-  - id: command-node
-    command: e2e-echo-command
+  # 2. prompt: inline prompt (second AI node, replacing former command node)
+  - id: prompt-echo-node
+    prompt: |
+      You are a simple echo agent for testing. Your ONLY job is to repeat back the user's message.
+
+      User message: $ARGUMENTS
+
+      Respond with EXACTLY this format and nothing else:
+      command-echo: <the user message above>
     allowed_tools: []
     idle_timeout: 30000
 
@@ -90,7 +95,7 @@ nodes:
         fi
       }
       check prompt-node "$prompt-node.output"
-      check command-node "$command-node.output"
+      check prompt-echo-node "$prompt-echo-node.output"
       check loop-node "$loop-node.output"
       check bash-json-node "$bash-json-node.output"
       check script-bun-node "$script-bun-node.output"
@@ -100,5 +105,5 @@ nodes:
       check merge "$merge.output"
       if [ "$fail" -eq 1 ]; then exit 1; fi
       echo "PASS: all 9 node types produced output"
-    depends_on: [merge, loop-node, command-node]
+    depends_on: [merge, loop-node, prompt-echo-node]
     trigger_rule: all_success

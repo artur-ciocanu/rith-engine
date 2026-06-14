@@ -243,9 +243,9 @@ describe('Workflow Loader', () => {
 description: A test workflow
 nodes:
   - id: plan
-    command: plan
+    prompt: plan
   - id: implement
-    command: implement
+    prompt: implement
     depends_on: [plan]
 `;
       await writeFile(join(workflowDir, 'test.yaml'), validYaml);
@@ -268,7 +268,7 @@ nodes:
       const invalidYaml = `description: Missing name
 nodes:
   - id: plan
-    command: plan
+    prompt: plan
 `;
       await writeFile(join(workflowDir, 'invalid.yaml'), invalidYaml);
 
@@ -285,7 +285,7 @@ nodes:
       const invalidYaml = `name: no-description
 nodes:
   - id: plan
-    command: plan
+    prompt: plan
 `;
       await writeFile(join(workflowDir, 'invalid.yaml'), invalidYaml);
 
@@ -302,8 +302,8 @@ nodes:
       const stepsYaml = `name: legacy-workflow
 description: Uses deprecated steps format
 steps:
-  - command: plan
-  - command: implement
+  - prompt: plan
+  - prompt: implement
 `;
       await writeFile(join(workflowDir, 'legacy.yaml'), stepsYaml);
 
@@ -329,7 +329,7 @@ additionalDirectories:
   - 123
 nodes:
   - id: test
-    command: test
+    prompt: test
 `;
       await writeFile(join(workflowDir, 'options.yaml'), yaml);
 
@@ -352,7 +352,7 @@ nodes:
 description: Discovered workflow
 nodes:
   - id: test
-    command: test
+    prompt: test
 `;
       await writeFile(join(workflowDir, 'workflow.yaml'), validYaml);
 
@@ -377,13 +377,13 @@ nodes:
 description: First workflow
 nodes:
   - id: one
-    command: one
+    prompt: one
 `;
       const yaml2 = `name: workflow-two
 description: Second workflow
 nodes:
   - id: two
-    command: two
+    prompt: two
 `;
       await writeFile(join(workflowDir, 'one.yaml'), yaml1);
       await writeFile(join(workflowDir, 'two.yml'), yaml2);
@@ -404,14 +404,14 @@ nodes:
 description: Root level workflow
 nodes:
   - id: root
-    command: root
+    prompt: root
 `;
       // Workflow in subdirectory
       const subWorkflow = `name: sub-workflow
 description: Subdirectory workflow
 nodes:
   - id: sub
-    command: sub
+    prompt: sub
 `;
       await writeFile(join(workflowDir, 'root.yaml'), rootWorkflow);
       await writeFile(join(defaultsDir, 'sub.yaml'), subWorkflow);
@@ -425,69 +425,6 @@ nodes:
     });
   });
 
-  describe('command name validation (Issue #129)', () => {
-    it('should reject DAG workflow with path traversal command name', async () => {
-      const workflowDir = join(testDir, '.rith', 'workflows');
-      await mkdir(workflowDir, { recursive: true });
-
-      const pathTraversalYaml = `name: path-traversal
-description: Has invalid command name
-nodes:
-  - id: bad
-    command: ../../../etc/passwd
-`;
-      await writeFile(join(workflowDir, 'invalid.yaml'), pathTraversalYaml);
-
-      const result = await discoverWorkflows(testDir, { loadDefaults: false });
-      const workflows = result.workflows.map(ws => ws.workflow);
-
-      expect(workflows).toHaveLength(0);
-    });
-
-    it('should reject DAG workflow with dotfile command name', async () => {
-      const workflowDir = join(testDir, '.rith', 'workflows');
-      await mkdir(workflowDir, { recursive: true });
-
-      const dotfileYaml = `name: dotfile-workflow
-description: Has dotfile command name
-nodes:
-  - id: bad
-    command: .hidden
-`;
-      await writeFile(join(workflowDir, 'dotfile.yaml'), dotfileYaml);
-
-      const result = await discoverWorkflows(testDir, { loadDefaults: false });
-      const workflows = result.workflows.map(ws => ws.workflow);
-
-      expect(workflows).toHaveLength(0);
-    });
-
-    it('should accept valid command names in DAG nodes', async () => {
-      const workflowDir = join(testDir, '.rith', 'workflows');
-      await mkdir(workflowDir, { recursive: true });
-
-      const validYaml = `name: valid-commands
-description: Has valid command names
-nodes:
-  - id: plan
-    command: plan
-  - id: implement
-    command: implement
-    depends_on: [plan]
-  - id: review
-    command: review-pr
-    depends_on: [implement]
-`;
-      await writeFile(join(workflowDir, 'valid.yaml'), validYaml);
-
-      const result = await discoverWorkflows(testDir, { loadDefaults: false });
-      const workflows = result.workflows.map(ws => ws.workflow);
-
-      expect(workflows).toHaveLength(1);
-      expect(workflows[0].nodes).toHaveLength(3);
-    });
-  });
-
   describe('edge cases', () => {
     it('should ignore non-yaml files in workflows directory', async () => {
       const workflowDir = join(testDir, '.rith', 'workflows');
@@ -498,7 +435,7 @@ nodes:
 description: Valid workflow
 nodes:
   - id: test
-    command: test
+    prompt: test
 `;
       await writeFile(join(workflowDir, 'valid.yaml'), validYaml);
       await writeFile(join(workflowDir, 'readme.md'), '# Readme');
@@ -520,7 +457,7 @@ nodes:
 description: test
 nodes:
   - id: invalid
-    command: invalid
+    prompt: invalid
     invalid yaml here: [
 `;
       await writeFile(join(workflowDir, 'malformed.yaml'), malformedYaml);
@@ -540,9 +477,9 @@ nodes:
 description: A workflow with all fields
 nodes:
   - id: step-one
-    command: step-one
+    prompt: step-one
   - id: step-two
-    command: step-two
+    prompt: step-two
     depends_on: [step-one]
 `;
       await writeFile(join(workflowDir, 'full.yaml'), fullWorkflow);
@@ -587,7 +524,7 @@ description: Missing nodes
 description: ~
 nodes:
   - id: test
-    command: test
+    prompt: test
 `;
       await writeFile(join(workflowDir, 'nulltest.yaml'), nullValues);
 
@@ -609,7 +546,7 @@ nodes:
     bash: 'echo hi'
     always_run: true
   - id: consumer
-    command: consume
+    prompt: consume
     depends_on: [persist]
 `;
       await writeFile(join(workflowDir, 'always-run.yaml'), yaml);
@@ -645,7 +582,7 @@ nodes:
 description: My custom assist (overrides rith-assist)
 nodes:
   - id: custom
-    command: custom-command
+    prompt: custom-command
 `;
       // Use exact same filename as app default to override
       await writeFile(join(repoWorkflowDir, 'rith-assist.yaml'), repoWorkflowYaml);
@@ -680,7 +617,7 @@ nodes:
 description: My custom workflow
 nodes:
   - id: custom
-    command: custom-command
+    prompt: custom-command
 `;
       await writeFile(join(repoWorkflowDir, 'my-custom.yaml'), repoWorkflowYaml);
 
@@ -741,11 +678,11 @@ nodes:
 
       await writeFile(
         join(homeWorkflowDir, 'home-wf.yaml'),
-        'name: home-workflow\ndescription: From home\nnodes:\n  - id: foo\n    command: foo\n'
+        'name: home-workflow\ndescription: From home\nnodes:\n  - id: foo\n    prompt: foo\n'
       );
       await writeFile(
         join(repoWorkflowDir, 'repo-wf.yaml'),
-        'name: repo-workflow\ndescription: From repo\nnodes:\n  - id: bar\n    command: bar\n'
+        'name: repo-workflow\ndescription: From repo\nnodes:\n  - id: bar\n    prompt: bar\n'
       );
 
       const result = await discoverWorkflows(testDir, { loadDefaults: false });
@@ -759,7 +696,7 @@ nodes:
       await mkdir(homeWorkflowDir, { recursive: true });
       await writeFile(
         join(homeWorkflowDir, 'only-home.yaml'),
-        'name: only-home\ndescription: From home\nnodes:\n  - id: n\n    command: c\n'
+        'name: only-home\ndescription: From home\nnodes:\n  - id: n\n    prompt: c\n'
       );
 
       const result = await discoverWorkflows(testDir, { loadDefaults: false });
@@ -775,11 +712,11 @@ nodes:
 
       await writeFile(
         join(homeWorkflowDir, 'shared.yaml'),
-        'name: home-version\ndescription: Home version\nnodes:\n  - id: h\n    command: c\n'
+        'name: home-version\ndescription: Home version\nnodes:\n  - id: h\n    prompt: c\n'
       );
       await writeFile(
         join(repoWorkflowDir, 'shared.yaml'),
-        'name: repo-version\ndescription: Repo override\nnodes:\n  - id: r\n    command: c\n'
+        'name: repo-version\ndescription: Repo override\nnodes:\n  - id: r\n    prompt: c\n'
       );
 
       const result = await discoverWorkflows(testDir, { loadDefaults: false });
@@ -801,7 +738,7 @@ nodes:
       await mkdir(homeWorkflowDir, { recursive: true });
       await writeFile(
         join(homeWorkflowDir, 'grouped.yaml'),
-        'name: grouped-workflow\ndescription: In a subfolder\nnodes:\n  - id: n\n    command: c\n'
+        'name: grouped-workflow\ndescription: In a subfolder\nnodes:\n  - id: n\n    prompt: c\n'
       );
 
       const result = await discoverWorkflows(testDir, { loadDefaults: false });
@@ -815,7 +752,7 @@ nodes:
       await mkdir(nestedDir, { recursive: true });
       await writeFile(
         join(nestedDir, 'too-deep.yaml'),
-        'name: too-deep\ndescription: Nested too deep\nnodes:\n  - id: n\n    command: c\n'
+        'name: too-deep\ndescription: Nested too deep\nnodes:\n  - id: n\n    prompt: c\n'
       );
 
       const result = await discoverWorkflows(testDir, { loadDefaults: false });
@@ -862,7 +799,7 @@ nodes:
       await mkdir(legacyDir, { recursive: true });
       await writeFile(
         join(legacyDir, 'stranded.yaml'),
-        'name: stranded\ndescription: At the old path\nnodes:\n  - id: n\n    command: c\n'
+        'name: stranded\ndescription: At the old path\nnodes:\n  - id: n\n    prompt: c\n'
       );
 
       await discoverWorkflows(testDir, { loadDefaults: false });
@@ -882,7 +819,7 @@ nodes:
       await mkdir(legacyDir, { recursive: true });
       await writeFile(
         join(legacyDir, 'stranded.yaml'),
-        'name: stranded\ndescription: At the old path\nnodes:\n  - id: n\n    command: c\n'
+        'name: stranded\ndescription: At the old path\nnodes:\n  - id: n\n    prompt: c\n'
       );
 
       const result = await discoverWorkflows(testDir, { loadDefaults: false });
@@ -956,7 +893,7 @@ nodes:
       await mkdir(homeWorkflowDir, { recursive: true });
       await writeFile(
         join(homeWorkflowDir, 'home-only.yaml'),
-        'name: home-only\ndescription: From home\nnodes:\n  - id: foo\n    command: foo\n'
+        'name: home-only\ndescription: From home\nnodes:\n  - id: foo\n    prompt: foo\n'
       );
 
       const originalRithHome = process.env.RITH_HOME;
@@ -995,7 +932,7 @@ nodes:
 
       await writeFile(
         join(workflowDir, 'invalid.yaml'),
-        'description: Missing name\nnodes:\n  - id: plan\n    command: plan\n'
+        'description: Missing name\nnodes:\n  - id: plan\n    prompt: plan\n'
       );
 
       const result = await discoverWorkflows(testDir, { loadDefaults: false });
@@ -1013,11 +950,11 @@ nodes:
 
       await writeFile(
         join(workflowDir, 'good.yaml'),
-        'name: good\ndescription: Works\nnodes:\n  - id: plan\n    command: plan\n'
+        'name: good\ndescription: Works\nnodes:\n  - id: plan\n    prompt: plan\n'
       );
       await writeFile(
         join(workflowDir, 'bad.yaml'),
-        'description: Bad name type\nnodes:\n  - id: plan\n    command: plan\n'
+        'description: Bad name type\nnodes:\n  - id: plan\n    prompt: plan\n'
       );
 
       const result = await discoverWorkflows(testDir, { loadDefaults: false });
@@ -1034,7 +971,7 @@ nodes:
 
       await writeFile(
         join(workflowDir, 'valid.yaml'),
-        'name: valid\ndescription: Valid\nnodes:\n  - id: plan\n    command: plan\n'
+        'name: valid\ndescription: Valid\nnodes:\n  - id: plan\n    prompt: plan\n'
       );
 
       const result = await discoverWorkflows(testDir, { loadDefaults: false });
@@ -1073,12 +1010,12 @@ nodes:
       // Invalid in root
       await writeFile(
         join(workflowDir, 'root-bad.yaml'),
-        'description: No name\nnodes:\n  - id: plan\n    command: plan\n'
+        'description: No name\nnodes:\n  - id: plan\n    prompt: plan\n'
       );
       // Invalid in subdirectory
       await writeFile(
         join(subDir, 'sub-bad.yaml'),
-        'name: sub\nnodes:\n  - id: plan\n    command: plan\n'
+        'name: sub\nnodes:\n  - id: plan\n    prompt: plan\n'
       );
 
       const result = await discoverWorkflows(testDir, { loadDefaults: false });
@@ -1157,7 +1094,7 @@ nodes:
   - id: stats
     bash: "echo hello"
   - id: process
-    command: my-cmd
+    prompt: my-cmd
     depends_on: [stats]
 `
       );
@@ -1201,7 +1138,7 @@ nodes:
       }
     });
 
-    it('should reject bash + command combination', async () => {
+    it('should reject bash + prompt combination', async () => {
       const workflowDir = join(testDir, '.rith', 'workflows');
       await mkdir(workflowDir, { recursive: true });
 
@@ -1213,7 +1150,7 @@ description: Bash and command
 nodes:
   - id: bad
     bash: "echo hi"
-    command: my-cmd
+    prompt: my-cmd
 `
       );
 
@@ -1285,7 +1222,7 @@ nodes:
       expect(result.errors[0].error).toMatch(/timeout/i);
     });
 
-    it('should parse idle_timeout on command node', async () => {
+    it('should parse idle_timeout on prompt node', async () => {
       const workflowDir = join(testDir, '.rith', 'workflows');
       await mkdir(workflowDir, { recursive: true });
 
@@ -1296,7 +1233,7 @@ name: idle-timeout
 description: Node with idle timeout
 nodes:
   - id: long-running
-    command: my-cmd
+    prompt: my-cmd
     idle_timeout: 1800000
 `
       );
@@ -1367,7 +1304,7 @@ name: bad-idle-timeout
 description: Invalid idle timeout
 nodes:
   - id: bad
-    command: my-cmd
+    prompt: my-cmd
     idle_timeout: -1
 `
       );
@@ -1684,7 +1621,7 @@ nodes:
   });
 
   describe('retry config parsing', () => {
-    it('should parse retry config on DAG command node', async () => {
+    it('should parse retry config on DAG prompt node', async () => {
       const workflowDir = join(testDir, '.rith', 'workflows');
       await mkdir(workflowDir, { recursive: true });
 
@@ -1695,7 +1632,7 @@ name: retry-dag
 description: DAG node with retry
 nodes:
   - id: sync
-    command: sync-cmd
+    prompt: sync-cmd
     retry:
       max_attempts: 2
 `
@@ -1778,7 +1715,7 @@ name: bad-retry
 description: Missing required field
 nodes:
   - id: my-cmd
-    command: my-cmd
+    prompt: my-cmd
     retry:
       delay_ms: 5000
 `
@@ -1800,7 +1737,7 @@ name: bad-retry-range
 description: max_attempts too high
 nodes:
   - id: my-cmd
-    command: my-cmd
+    prompt: my-cmd
     retry:
       max_attempts: 10
 `
@@ -1822,7 +1759,7 @@ name: bad-retry-onerror
 description: Invalid on_error value
 nodes:
   - id: my-cmd
-    command: my-cmd
+    prompt: my-cmd
     retry:
       max_attempts: 2
       on_error: always
@@ -1845,7 +1782,7 @@ name: bad-retry-delay
 description: delay_ms too low
 nodes:
   - id: my-cmd
-    command: my-cmd
+    prompt: my-cmd
     retry:
       max_attempts: 2
       delay_ms: 100
@@ -1868,7 +1805,7 @@ name: retry-defaults
 description: Minimal retry config
 nodes:
   - id: my-cmd
-    command: my-cmd
+    prompt: my-cmd
     retry:
       max_attempts: 1
 `
@@ -2020,7 +1957,7 @@ nodes:
       expect(result.errors[0].error).toContain('max_iterations');
     });
 
-    it('should reject node with both loop and command', async () => {
+    it('should reject node with both loop and prompt', async () => {
       const workflowDir = join(testDir, '.rith', 'workflows');
       await mkdir(workflowDir, { recursive: true });
 
@@ -2031,7 +1968,7 @@ name: loop-cmd-conflict
 description: Loop + command
 nodes:
   - id: bad
-    command: my-cmd
+    prompt: my-cmd
     loop:
       prompt: "Do stuff"
       until: DONE

@@ -7,7 +7,6 @@
  */
 import {
   buildPromptWithContext,
-  loadCommandPrompt,
   classifyError,
   detectCreditExhaustion,
   safeSendMessage,
@@ -17,7 +16,7 @@ import { logNodeStart, logNodeComplete, logNodeError, logAssistant, logTool } fr
 import { getWorkflowEventEmitter } from '../../event-emitter';
 import { formatToolCall } from '../../utils/tool-formatter';
 import { withIdleTimeout, STEP_IDLE_TIMEOUT_MS } from '../../utils/idle-timeout';
-import type { DagNode, CommandNode, PromptNode } from '../../schemas';
+import type { DagNode, PromptNode } from '../../schemas';
 import type { SendQueryOptions, NodeConfig, TokenUsage } from '@rith/pi/types';
 import type { WorkflowConfig, WorkflowMessageMetadata } from '../../deps';
 import type { DagRunContext, NodeRunContext, WorkflowLevelOptions } from '../context';
@@ -151,35 +150,26 @@ export async function resolveNodeModelAndOptions(
  */
 export async function executeNodeInternal(
   ctx: DagRunContext,
-  node: CommandNode | PromptNode,
+  node: PromptNode,
   nodeOptions: SendQueryOptions | undefined,
   resumeSessionId: string | undefined
 ): Promise<NodeExecutionResult> {
-  const {
-    deps,
-    platform,
-    conversationId,
-    cwd,
-    workflowRun,
-    logDir,
-    nodeOutputs,
-    configuredCommandFolder,
-    promptContext,
-  } = ctx;
+  const { deps, platform, conversationId, cwd, workflowRun, logDir, nodeOutputs, promptContext } =
+    ctx;
   const nodeStartTime = Date.now();
   const nodeContext: SendMessageContext = { workflowId: workflowRun.id, nodeName: node.id };
 
   const configuredMcpNames = await loadConfiguredMcpServerNames(node.mcp, cwd);
 
   getLog().info({ nodeId: node.id, provider: 'pi' }, 'dag_node_started');
-  await logNodeStart(logDir, workflowRun.id, node.id, node.command ?? '<inline>');
+  await logNodeStart(logDir, workflowRun.id, node.id, node.id);
 
   deps.store
     .createWorkflowEvent({
       workflow_run_id: workflowRun.id,
       event_type: 'node_started',
       step_name: node.id,
-      data: { command: node.command ?? null, provider: 'pi' },
+      data: { provider: 'pi' },
     })
     .catch((err: Error) => {
       getLog().error(
@@ -193,44 +183,11 @@ export async function executeNodeInternal(
     type: 'node_started',
     runId: workflowRun.id,
     nodeId: node.id,
-    nodeName: node.command ?? node.id,
+    nodeName: node.id,
   });
 
-  // Load prompt
-  let rawPrompt: string;
-  if (node.command !== undefined) {
-    const promptResult = await loadCommandPrompt(deps, cwd, node.command, configuredCommandFolder);
-    if (!promptResult.success) {
-      const errMsg = promptResult.message;
-      getLog().error({ nodeId: node.id, error: errMsg }, 'dag_node_command_load_failed');
-      await logNodeError(logDir, workflowRun.id, node.id, errMsg);
-      deps.store
-        .createWorkflowEvent({
-          workflow_run_id: workflowRun.id,
-          event_type: 'node_failed',
-          step_name: node.id,
-          data: { error: errMsg },
-        })
-        .catch((err: Error) => {
-          getLog().error(
-            { err, workflowRunId: workflowRun.id, eventType: 'node_failed' },
-            'workflow_event_persist_failed'
-          );
-        });
-      emitter.emit({
-        type: 'node_failed',
-        runId: workflowRun.id,
-        nodeId: node.id,
-        nodeName: node.command,
-        error: errMsg,
-      });
-      return { state: 'failed', output: '', error: errMsg };
-    }
-    rawPrompt = promptResult.content;
-  } else {
-    // node is PromptNode — prompt: string is guaranteed by the discriminated union
-    rawPrompt = node.prompt;
-  }
+  // Load prompt — node is PromptNode, prompt: string is guaranteed by the discriminated union
+  const rawPrompt = node.prompt;
 
   // Standard variable substitution
   let substitutedPrompt: string;
@@ -646,7 +603,7 @@ export async function executeNodeInternal(
         type: 'node_failed',
         runId: workflowRun.id,
         nodeId: node.id,
-        nodeName: node.command ?? node.id,
+        nodeName: node.id,
         error: 'Cancelled by user',
       });
 
@@ -687,7 +644,7 @@ export async function executeNodeInternal(
         type: 'node_failed',
         runId: workflowRun.id,
         nodeId: node.id,
-        nodeName: node.command ?? node.id,
+        nodeName: node.id,
         error: creditError,
       });
 
@@ -727,7 +684,7 @@ export async function executeNodeInternal(
         type: 'node_failed',
         runId: workflowRun.id,
         nodeId: node.id,
-        nodeName: node.command ?? node.id,
+        nodeName: node.id,
         error: emptyError,
       });
 
@@ -736,7 +693,7 @@ export async function executeNodeInternal(
 
     const duration = Date.now() - nodeStartTime;
     getLog().info({ nodeId: node.id, durationMs: duration }, 'dag_node_completed');
-    await logNodeComplete(logDir, workflowRun.id, node.id, node.command ?? '<inline>', {
+    await logNodeComplete(logDir, workflowRun.id, node.id, node.id, {
       durationMs: duration,
       tokens: nodeTokens,
     });
@@ -766,7 +723,7 @@ export async function executeNodeInternal(
       type: 'node_completed',
       runId: workflowRun.id,
       nodeId: node.id,
-      nodeName: node.command ?? node.id,
+      nodeName: node.id,
       duration,
       ...(nodeCostUsd !== undefined ? { costUsd: nodeCostUsd } : {}),
       ...(nodeStopReason ? { stopReason: nodeStopReason } : {}),
@@ -815,7 +772,7 @@ export async function executeNodeInternal(
       type: 'node_failed',
       runId: workflowRun.id,
       nodeId: node.id,
-      nodeName: node.command ?? node.id,
+      nodeName: node.id,
       error: err.message,
     });
 
@@ -826,7 +783,7 @@ export async function executeNodeInternal(
 export class AiNodeRunner implements NodeRunner {
   async run(rc: NodeRunContext, node: DagNode): Promise<NodeRunResult> {
     const ctx = rc.run;
-    const aiNode = node as CommandNode | PromptNode;
+    const aiNode = node as PromptNode;
 
     // Resolve per-node model/options.
     const { options: nodeOptions } = await resolveNodeModelAndOptions(

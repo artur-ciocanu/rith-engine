@@ -269,12 +269,11 @@ hooks:
     └── my-workflow.yaml
 ```
 
-**Bundled defaults** — built-in commands and workflows ship with Rith Engine and load automatically. Repo-level files with the same name override the bundled version. To disable defaults entirely:
+**Bundled defaults** — built-in workflows and skills ship with Rith Engine and load automatically. Repo-level files with the same name override the bundled version. To disable default workflows:
 
 ```yaml
 # .rith/config.yaml
 defaults:
-  loadDefaultCommands: false
   loadDefaultWorkflows: false
 ```
 

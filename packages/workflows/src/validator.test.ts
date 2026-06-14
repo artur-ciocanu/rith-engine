@@ -3,13 +3,7 @@ import { mkdtemp, mkdir, writeFile, rm } from 'fs/promises';
 import { join } from 'path';
 import { tmpdir } from 'os';
 
-import {
-  levenshtein,
-  findSimilar,
-  validateWorkflowResources,
-  validateCommand,
-  discoverAvailableCommands,
-} from './validator';
+import { levenshtein, findSimilar, validateWorkflowResources } from './validator';
 import type { WorkflowDefinition, DagNode } from './schemas';
 
 // =============================================================================
@@ -33,12 +27,6 @@ function makeWorkflow(name: string, nodes: DagNode[], provider?: string): Workfl
     nodes,
     ...(provider && { provider }),
   } as WorkflowDefinition;
-}
-
-async function createCommandFile(name: string, content = '# Do something'): Promise<void> {
-  const dir = join(tmpDir, '.rith', 'commands');
-  await mkdir(dir, { recursive: true });
-  await writeFile(join(dir, `${name}.md`), content);
 }
 
 // =============================================================================
@@ -116,50 +104,6 @@ describe('findSimilar', () => {
 });
 
 // =============================================================================
-// validateWorkflowResources — command nodes
-// =============================================================================
-
-describe('validateWorkflowResources — command nodes', () => {
-  test('no issues when command file exists', async () => {
-    await createCommandFile('my-command');
-    const workflow = makeWorkflow('test', [{ id: 'step1', command: 'my-command' } as DagNode]);
-    const issues = await validateWorkflowResources(workflow, tmpDir);
-    const errors = issues.filter(i => i.level === 'error');
-    expect(errors).toHaveLength(0);
-  });
-
-  test('error when command file is missing', async () => {
-    const workflow = makeWorkflow('test', [{ id: 'step1', command: 'nonexistent' } as DagNode]);
-    const issues = await validateWorkflowResources(workflow, tmpDir, {
-      loadDefaultCommands: false,
-    });
-    const errors = issues.filter(i => i.level === 'error');
-    expect(errors).toHaveLength(1);
-    expect(errors[0].field).toBe('command');
-    expect(errors[0].message).toContain('not found');
-  });
-
-  test('suggests similar command names', async () => {
-    await createCommandFile('assist');
-    const workflow = makeWorkflow('test', [{ id: 'step1', command: 'asist' } as DagNode]);
-    const issues = await validateWorkflowResources(workflow, tmpDir, {
-      loadDefaultCommands: false,
-    });
-    const errors = issues.filter(i => i.level === 'error');
-    expect(errors).toHaveLength(1);
-    expect(errors[0].suggestions).toContain('assist');
-  });
-
-  test('error for invalid command name', async () => {
-    const workflow = makeWorkflow('test', [{ id: 'step1', command: '../escape' } as DagNode]);
-    const issues = await validateWorkflowResources(workflow, tmpDir);
-    const errors = issues.filter(i => i.level === 'error');
-    expect(errors).toHaveLength(1);
-    expect(errors[0].message).toContain('Invalid command name');
-  });
-});
-
-// =============================================================================
 // validateWorkflowResources — MCP validation
 // =============================================================================
 
@@ -205,126 +149,6 @@ describe('validateWorkflowResources — MCP validation', () => {
     const issues = await validateWorkflowResources(workflow, tmpDir);
     const mcpErrors = issues.filter(i => i.field === 'mcp' && i.level === 'error');
     expect(mcpErrors).toHaveLength(0);
-  });
-});
-
-// =============================================================================
-// validateCommand
-// =============================================================================
-
-describe('validateCommand', () => {
-  test('valid for non-empty command file', async () => {
-    await createCommandFile('my-command', '# Do something useful');
-    const result = await validateCommand('my-command', tmpDir, { loadDefaultCommands: false });
-    expect(result.valid).toBe(true);
-    expect(result.issues).toHaveLength(0);
-  });
-
-  test('error for empty command file', async () => {
-    await createCommandFile('empty-cmd', '   \n  ');
-    const result = await validateCommand('empty-cmd', tmpDir, { loadDefaultCommands: false });
-    expect(result.valid).toBe(false);
-    expect(result.issues[0].field).toBe('content');
-  });
-
-  test('error for invalid command name', async () => {
-    const result = await validateCommand('../escape', tmpDir);
-    expect(result.valid).toBe(false);
-    expect(result.issues[0].field).toBe('name');
-  });
-
-  test('error for missing command with suggestions', async () => {
-    await createCommandFile('assist');
-    const result = await validateCommand('asist', tmpDir, { loadDefaultCommands: false });
-    expect(result.valid).toBe(false);
-    expect(result.issues[0].suggestions).toContain('assist');
-  });
-});
-
-// =============================================================================
-// discoverAvailableCommands
-// =============================================================================
-
-describe('discoverAvailableCommands', () => {
-  test('finds commands in .rith/commands/', async () => {
-    await createCommandFile('my-command');
-    await createCommandFile('other-command');
-    const commands = await discoverAvailableCommands(tmpDir, { loadDefaultCommands: false });
-    expect(commands).toContain('my-command');
-    expect(commands).toContain('other-command');
-  });
-
-  test('returns sorted list', async () => {
-    await createCommandFile('zebra');
-    await createCommandFile('alpha');
-    const commands = await discoverAvailableCommands(tmpDir, { loadDefaultCommands: false });
-    expect(commands).toEqual(['alpha', 'zebra']);
-  });
-
-  test('returns empty array when no commands directory', async () => {
-    const commands = await discoverAvailableCommands(tmpDir, { loadDefaultCommands: false });
-    expect(commands).toEqual([]);
-  });
-
-  test('loadDefaultCommands: false suppresses bundled commands', async () => {
-    const withDefaults = await discoverAvailableCommands(tmpDir, { loadDefaultCommands: true });
-    const without = await discoverAvailableCommands(tmpDir, { loadDefaultCommands: false });
-    expect(withDefaults.length).toBeGreaterThanOrEqual(without.length);
-  });
-
-  // --- Home-scoped commands (~/.rith/commands/) — new capability
-  describe('home-scoped commands', () => {
-    let homeDir: string;
-    const originalRithHome = process.env.RITH_HOME;
-    const originalRithDocker = process.env.RITH_DOCKER;
-
-    beforeEach(async () => {
-      homeDir = await mkdtemp(join(tmpdir(), 'validator-home-'));
-      process.env.RITH_HOME = homeDir;
-      delete process.env.RITH_DOCKER;
-    });
-
-    afterEach(async () => {
-      await rm(homeDir, { recursive: true, force: true });
-      if (originalRithHome === undefined) {
-        delete process.env.RITH_HOME;
-      } else {
-        process.env.RITH_HOME = originalRithHome;
-      }
-      if (originalRithDocker === undefined) {
-        delete process.env.RITH_DOCKER;
-      } else {
-        process.env.RITH_DOCKER = originalRithDocker;
-      }
-    });
-
-    async function createHomeCommand(name: string, content = '# Home helper'): Promise<void> {
-      const dir = join(homeDir, 'commands');
-      await mkdir(dir, { recursive: true });
-      await writeFile(join(dir, `${name}.md`), content);
-    }
-
-    test('discovers commands placed at ~/.rith/commands/', async () => {
-      await createHomeCommand('my-personal-helper');
-      const commands = await discoverAvailableCommands(tmpDir, { loadDefaultCommands: false });
-      expect(commands).toContain('my-personal-helper');
-    });
-
-    test('resolveCommand (via validateCommand) finds home-scoped commands when repo has none', async () => {
-      await createHomeCommand('only-in-home');
-      const result = await validateCommand('only-in-home', tmpDir, { loadDefaultCommands: false });
-      expect(result.valid).toBe(true);
-    });
-
-    test('repo command overrides home command with the same name', async () => {
-      await createHomeCommand('shared', '# Home version');
-      await createCommandFile('shared', '# Repo version');
-      // Both resolve but the repo wins — validator only asserts existence, so the
-      // strong behavioral assertion lives in the executor-shared loadCommand tests.
-      // Here we just confirm that having both doesn't error.
-      const result = await validateCommand('shared', tmpDir, { loadDefaultCommands: false });
-      expect(result.valid).toBe(true);
-    });
   });
 });
 

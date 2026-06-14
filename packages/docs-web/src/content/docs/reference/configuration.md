@@ -109,7 +109,6 @@ docs:
 
 # Defaults configuration
 defaults:
-  loadDefaultCommands: true   # Load app's bundled default commands at runtime
   loadDefaultWorkflows: true  # Load app's bundled default workflows at runtime
 
 # Per-project environment variables for workflow execution
@@ -149,7 +148,7 @@ worktree:
 
 **Interaction with `worktree.path`:** The copy step runs identically whether worktrees live under `~/.rith/workspaces/<owner>/<repo>/worktrees/` (default) or inside the repo at `<repoRoot>/<worktree.path>/` (repo-local). Both layouts get the same gitignored-file treatment.
 
-**Defaults behavior:** The app's bundled default commands and workflows are loaded at runtime and merged with repo-specific ones. Repo commands/workflows override app defaults by name. Set `defaults.loadDefaultCommands: false` or `defaults.loadDefaultWorkflows: false` to disable runtime loading.
+**Defaults behavior:** The app's bundled default workflows and skills are loaded at runtime and merged with repo-specific ones. Repo workflows override app defaults by name. Set `defaults.loadDefaultWorkflows: false` to disable runtime loading.
 
 **Submodule behavior:** When a repo contains `.gitmodules`, submodules are initialized in new worktrees by default (git's `worktree add` does not do this). The check is a cheap filesystem probe — repos without submodules pay zero cost. Submodule init failure throws a classified error (credentials, network, timeout) rather than silently producing a worktree with empty submodule directories. Set `worktree.initSubmodules: false` to opt out.
 

@@ -47,7 +47,6 @@ const mockLogger = createMockLogger();
 mock.module('@rith/paths', () => ({
   createLogger: mock(() => mockLogger),
   expandTilde: mock((p: string) => p.replace(/^~/, '/home/test')),
-  getCommandFolderSearchPaths: mock(() => ['.rith/commands']),
   ensureProjectStructure: mock(() => Promise.resolve()),
   getProjectSourcePath: mock(
     (owner: string, repo: string) => `/home/test/.rith/workspaces/${owner}/${repo}/source`
@@ -691,54 +690,18 @@ describe('cloneRepository', () => {
   });
 
   // ── Command auto-loading ───────────────────────────────────────────────
-  describe('command auto-loading', () => {
-    test('loads commands when .rith/commands directory exists with markdown files', async () => {
-      // access(): .git → ENOENT (proceed to clone), everything else → success (assistant + commands)
-      spyFsAccess.mockImplementation((path: string) => {
-        if (typeof path === 'string' && path.endsWith('.git')) {
-          return Promise.reject(Object.assign(new Error('ENOENT'), { code: 'ENOENT' }));
-        }
-        return Promise.resolve(undefined);
-      });
-      mockFindMarkdownFilesRecursive.mockResolvedValue([
-        { commandName: 'build', relativePath: 'build.md' },
-        { commandName: 'test', relativePath: 'test.md' },
-      ]);
-      mockCreateCodebase.mockResolvedValueOnce(makeCodebase() as ReturnType<typeof makeCodebase>);
-
-      const result = await cloneRepository('https://github.com/owner/repo');
-
-      expect(result.commandCount).toBe(2);
-      expect(mockUpdateCodebaseCommands.mock.calls.length).toBe(1);
+  test('commandCount is always 0 (commands removed, replaced by skills)', async () => {
+    spyFsAccess.mockImplementation((path: string) => {
+      if (typeof path === 'string' && path.endsWith('.git')) {
+        return Promise.reject(Object.assign(new Error('ENOENT'), { code: 'ENOENT' }));
+      }
+      return Promise.resolve(undefined);
     });
+    mockCreateCodebase.mockResolvedValueOnce(makeCodebase() as ReturnType<typeof makeCodebase>);
 
-    test('returns commandCount 0 when no command folders exist', async () => {
-      // access() always rejects → no command folder found (and no pre-existing .git)
-      spyFsAccess.mockRejectedValue(Object.assign(new Error('ENOENT'), { code: 'ENOENT' }));
-      mockCreateCodebase.mockResolvedValueOnce(makeCodebase() as ReturnType<typeof makeCodebase>);
+    const result = await cloneRepository('https://github.com/owner/repo');
 
-      const result = await cloneRepository('https://github.com/owner/repo');
-
-      expect(result.commandCount).toBe(0);
-      expect(mockUpdateCodebaseCommands.mock.calls.length).toBe(0);
-    });
-
-    test('returns commandCount 0 when command folder exists but contains no markdown files', async () => {
-      // access(): .git → ENOENT, command folder → success
-      spyFsAccess.mockImplementation((path: string) => {
-        if (typeof path === 'string' && path.endsWith('.git')) {
-          return Promise.reject(Object.assign(new Error('ENOENT'), { code: 'ENOENT' }));
-        }
-        return Promise.resolve(undefined);
-      });
-      mockFindMarkdownFilesRecursive.mockResolvedValue([]);
-      mockCreateCodebase.mockResolvedValueOnce(makeCodebase() as ReturnType<typeof makeCodebase>);
-
-      const result = await cloneRepository('https://github.com/owner/repo');
-
-      expect(result.commandCount).toBe(0);
-      expect(mockUpdateCodebaseCommands.mock.calls.length).toBe(0);
-    });
+    expect(result.commandCount).toBe(0);
   });
 });
 
@@ -887,32 +850,20 @@ describe('registerRepository', () => {
     expect(createArg.name).toBe('acme/backend');
   });
 
-  // ── Command auto-loading ───────────────────────────────────────────────
-  test('auto-loads markdown commands found in .rith/commands', async () => {
+  test('commandCount is always 0 (commands removed, replaced by skills)', async () => {
     spyExecFileAsync.mockImplementation((cmd: string, args: string[]) => {
       if (args.includes('rev-parse')) return Promise.resolve({ stdout: '.git', stderr: '' });
       if (args.includes('get-url'))
         return Promise.resolve({ stdout: 'https://github.com/owner/repo', stderr: '' });
       return Promise.resolve({ stdout: '', stderr: '' });
     });
-    // access(): only the command folder path succeeds; .codex/.claude → ENOENT
-    spyFsAccess.mockImplementation((path: string) => {
-      const normalized = typeof path === 'string' ? path.replace(/\\/g, '/') : '';
-      if (normalized.includes('.rith/commands')) {
-        return Promise.resolve(undefined);
-      }
-      return Promise.reject(Object.assign(new Error('ENOENT'), { code: 'ENOENT' }));
-    });
-    mockFindMarkdownFilesRecursive.mockResolvedValue([
-      { commandName: 'deploy', relativePath: 'deploy.md' },
-    ]);
+    spyFsAccess.mockRejectedValue(Object.assign(new Error('ENOENT'), { code: 'ENOENT' }));
     mockFindCodebaseByDefaultCwd.mockResolvedValueOnce(null);
     mockCreateCodebase.mockResolvedValueOnce(makeCodebase() as ReturnType<typeof makeCodebase>);
 
     const result = await registerRepository('/home/user/myrepo');
 
-    expect(result.commandCount).toBe(1);
-    expect(mockUpdateCodebaseCommands.mock.calls.length).toBe(1);
+    expect(result.commandCount).toBe(0);
   });
 });
 

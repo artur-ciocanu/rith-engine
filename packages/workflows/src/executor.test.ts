@@ -512,11 +512,11 @@ describe('executeWorkflow', () => {
         'db-conv-1',
         { preCreatedRun: resumed, priorCompletedNodes }
       );
-      // dag-executor receives the priorCompletedNodes map at arg index 14.
+      // dag-executor receives the priorCompletedNodes map at arg index 13.
       // dag-executor signature: deps, platform, conversationId, cwd, workflow,
       // workflowRun, model, artifactsDir, logDir, baseBranch,
-      // docsDir, config, configuredCommandFolder, issueContext, priorCompletedNodes
-      const passedPriors = mockExecuteDagWorkflow.mock.calls[0]?.[14] as
+      // docsDir, config, issueContext, priorCompletedNodes
+      const passedPriors = mockExecuteDagWorkflow.mock.calls[0]?.[13] as
         | Map<string, string>
         | undefined;
       expect(passedPriors).toBe(priorCompletedNodes);

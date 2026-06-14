@@ -26,13 +26,6 @@ mockModuleScoped('@rith/paths', realPaths, {
     debug: mock(() => undefined),
     trace: mock(() => undefined),
   })),
-  getCommandFolderSearchPaths: mock(() => ['.rith/commands']),
-  getDefaultCommandsPath: mock(() => '/defaults/commands'),
-  findMarkdownFilesRecursive: mock(async () => []),
-});
-
-mockModuleScoped('./command-validation', realCommandValidation, {
-  isValidCommandName: () => true,
 });
 
 import { checkRuntimeAvailable, clearRuntimeCache } from './validator';

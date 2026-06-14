@@ -62,14 +62,15 @@ export interface WorkflowConfig {
   baseBranch?: string;
   docsPath?: string;
   envVars?: Record<string, string>;
-  commands: { folder?: string };
   defaults?: {
     loadDefaultWorkflows?: boolean;
-    loadDefaultCommands?: boolean;
   };
-  pi: {
+  pi?: {
     model?: string;
     [key: string]: unknown;
+  };
+  commands?: {
+    folder?: string;
   };
 }
 

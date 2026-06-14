@@ -3,8 +3,8 @@
  *
  * Design: a flat "raw" schema validates all fields (with mutual exclusivity enforced via
  * superRefine), then a transform produces one of the six concrete variant types
- * (CommandNode, PromptNode, BashNode, LoopNode, ApprovalNode, CancelNode) as the DagNode union.
- * Per-variant schemas (commandNodeSchema etc.) are exported for type derivation only —
+ * (PromptNode, BashNode, LoopNode, ApprovalNode, CancelNode, ScriptNode) as the DagNode union.
+ * Per-variant schemas (promptNodeSchema etc.) are exported for type derivation only —
  * use dagNodeSchema for validation.
  *
  * z.union() is NOT used here — YAML nodes lack an explicit `type` discriminant,
@@ -13,7 +13,6 @@
 import { z } from '@hono/zod-openapi';
 import { stepRetryConfigSchema } from './retry';
 import { loopNodeConfigSchema } from './loop';
-import { isValidCommandName } from '../command-validation';
 
 // ---------------------------------------------------------------------------
 // TriggerRule
@@ -173,27 +172,12 @@ export type DagNodeBase = z.infer<typeof dagNodeBaseSchema>;
 // Per-variant schemas — exported for type derivation only (use dagNodeSchema for validation)
 // ---------------------------------------------------------------------------
 
-export const commandNodeSchema = dagNodeBaseSchema.extend({
-  command: z.string(),
-});
-
-/** DAG node that runs a named command from .rith/commands/ */
-export type CommandNode = z.infer<typeof commandNodeSchema> & {
-  prompt?: never;
-  bash?: never;
-  loop?: never;
-  approval?: never;
-  cancel?: never;
-  script?: never;
-};
-
 export const promptNodeSchema = dagNodeBaseSchema.extend({
   prompt: z.string(),
 });
 
 /** DAG node with an inline prompt (no command file) */
 export type PromptNode = z.infer<typeof promptNodeSchema> & {
-  command?: never;
   bash?: never;
   loop?: never;
   approval?: never;
@@ -212,7 +196,6 @@ export const bashNodeSchema = dagNodeBaseSchema.extend({
 
 /** DAG node that runs a shell script without AI */
 export type BashNode = z.infer<typeof bashNodeSchema> & {
-  command?: never;
   prompt?: never;
   loop?: never;
   approval?: never;
@@ -234,7 +217,6 @@ export const scriptNodeSchema = dagNodeBaseSchema.extend({
 
 /** DAG node that runs a TypeScript or Python script via bun or uv */
 export type ScriptNode = z.infer<typeof scriptNodeSchema> & {
-  command?: never;
   prompt?: never;
   bash?: never;
   loop?: never;
@@ -253,7 +235,6 @@ export const loopNodeSchema = dagNodeBaseSchema.extend({
 
 /** DAG node that runs an AI prompt in a loop until a completion condition is met */
 export type LoopNode = z.infer<typeof loopNodeSchema> & {
-  command?: never;
   prompt?: never;
   bash?: never;
   approval?: never;
@@ -283,7 +264,6 @@ export const approvalNodeSchema = dagNodeBaseSchema.extend({
 
 /** DAG node that pauses workflow execution for human approval */
 export type ApprovalNode = z.infer<typeof approvalNodeSchema> & {
-  command?: never;
   prompt?: never;
   bash?: never;
   loop?: never;
@@ -301,7 +281,6 @@ export const cancelNodeSchema = dagNodeBaseSchema.extend({
 
 /** DAG node that cancels the workflow run with a reason string */
 export type CancelNode = z.infer<typeof cancelNodeSchema> & {
-  command?: never;
   prompt?: never;
   bash?: never;
   loop?: never;
@@ -309,15 +288,8 @@ export type CancelNode = z.infer<typeof cancelNodeSchema> & {
   script?: never;
 };
 
-/** A single node in a DAG workflow. command, prompt, bash, loop, approval, cancel, and script are mutually exclusive. */
-export type DagNode =
-  | CommandNode
-  | PromptNode
-  | BashNode
-  | LoopNode
-  | ApprovalNode
-  | CancelNode
-  | ScriptNode;
+/** A single node in a DAG workflow. prompt, bash, loop, approval, cancel, and script are mutually exclusive. */
+export type DagNode = PromptNode | BashNode | LoopNode | ApprovalNode | CancelNode | ScriptNode;
 
 // ---------------------------------------------------------------------------
 // AI-specific fields that are meaningless on non-AI nodes
@@ -363,8 +335,7 @@ export const LOOP_NODE_AI_FIELDS: readonly string[] = BASH_NODE_AI_FIELDS.filter
  *
  * Enforces:
  * - Non-empty id
- * - Exactly one of command/prompt/bash/loop (mutual exclusivity)
- * - command name validity (via isValidCommandName)
+ * - Exactly one of prompt/bash/loop/approval/cancel/script (mutual exclusivity)
  * - idle_timeout must be a finite positive number
  * - retry not allowed on loop nodes
  * - timeout on bash must be positive
@@ -375,7 +346,6 @@ export const LOOP_NODE_AI_FIELDS: readonly string[] = BASH_NODE_AI_FIELDS.filter
 export const dagNodeSchema = dagNodeBaseSchema
   .extend({
     // Mode fields (exactly one required)
-    command: z.string().optional(),
     prompt: z.string().optional(),
     bash: z.string().optional(),
     loop: loopNodeConfigSchema.optional(),
@@ -407,7 +377,6 @@ export const dagNodeSchema = dagNodeBaseSchema
       return z.NEVER;
     }
 
-    const hasCommand = typeof data.command === 'string' && data.command.trim().length > 0;
     const hasPrompt = typeof data.prompt === 'string' && data.prompt.trim().length > 0;
     const hasBash = typeof data.bash === 'string' && data.bash.trim().length > 0;
     const hasLoop = data.loop !== undefined;
@@ -415,21 +384,15 @@ export const dagNodeSchema = dagNodeBaseSchema
     const hasCancel = typeof data.cancel === 'string' && data.cancel.trim().length > 0;
     const hasScript = typeof data.script === 'string' && data.script.trim().length > 0;
 
-    const modeCount = [
-      hasCommand,
-      hasPrompt,
-      hasBash,
-      hasLoop,
-      hasApproval,
-      hasCancel,
-      hasScript,
-    ].filter(Boolean).length;
+    const modeCount = [hasPrompt, hasBash, hasLoop, hasApproval, hasCancel, hasScript].filter(
+      Boolean
+    ).length;
 
     if (modeCount > 1) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         message:
-          "'command', 'prompt', 'bash', 'loop', 'approval', 'cancel', and 'script' are mutually exclusive",
+          "'prompt', 'bash', 'loop', 'approval', 'cancel', and 'script' are mutually exclusive",
       });
       return z.NEVER;
     }
@@ -460,19 +423,9 @@ export const dagNodeSchema = dagNodeBaseSchema
       }
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
-        message:
-          "must have either 'command', 'prompt', 'bash', 'loop', 'approval', 'cancel', or 'script'",
+        message: "must have either 'prompt', 'bash', 'loop', 'approval', 'cancel', or 'script'",
       });
       return z.NEVER;
-    }
-
-    // Command name validation
-    if (hasCommand && !isValidCommandName((data.command ?? '').trim())) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: `invalid command name "${(data.command ?? '').trim()}"`,
-        path: ['command'],
-      });
     }
 
     // Bash node validations
@@ -564,9 +517,6 @@ export const dagNodeSchema = dagNodeBaseSchema
       ...(data.sandbox !== undefined ? { sandbox: data.sandbox } : {}),
     };
 
-    if (data.command !== undefined && data.command.trim().length > 0) {
-      return { ...base, ...shared, ...aiOnly, command: data.command.trim() } as CommandNode;
-    }
     if (data.prompt !== undefined && data.prompt.trim().length > 0) {
       return { ...base, ...shared, ...aiOnly, prompt: data.prompt.trim() } as PromptNode;
     }

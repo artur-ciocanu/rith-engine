@@ -1,5 +1,5 @@
 /**
- * CLI commands for `rith validate workflows` and `rith validate commands`.
+ * CLI commands for `rith validate workflows` and `rith validate scripts`.
  *
  * Thin layer over @rith/workflows validator: discovers, validates, formats output.
  */
@@ -7,9 +7,7 @@
 import { discoverWorkflowsWithConfig } from '@rith/workflows/workflow-discovery';
 import {
   validateWorkflowResources,
-  validateCommand,
   validateScript,
-  discoverAvailableCommands,
   discoverAvailableScripts,
   findSimilar,
   makeWorkflowResult,
@@ -17,29 +15,9 @@ import {
 import type {
   ValidationIssue,
   WorkflowValidationResult,
-  ValidationConfig,
   ScriptValidationResult,
 } from '@rith/workflows/validator';
-import { loadConfig, loadRepoConfig } from '@rith/core';
-
-/**
- * Build ValidationConfig from the repo's .rith/config.yaml
- */
-async function buildValidationConfig(cwd: string): Promise<ValidationConfig> {
-  try {
-    const repoConfig = await loadRepoConfig(cwd);
-    return {
-      loadDefaultCommands: repoConfig?.defaults?.loadDefaultCommands,
-      commandFolder: repoConfig?.commands?.folder,
-    };
-  } catch (e) {
-    const err = e as NodeJS.ErrnoException;
-    if (err.code === 'ENOENT') return {};
-    console.error(`Warning: failed to load .rith/config.yaml: ${(e as Error).message}`);
-    console.error('Validation will proceed with defaults (your config settings will not apply)');
-    return {};
-  }
-}
+import { loadConfig } from '@rith/core';
 
 // =============================================================================
 // Output formatting
@@ -84,7 +62,6 @@ export async function validateWorkflowsCommand(
   name?: string,
   json?: boolean
 ): Promise<number> {
-  const config = await buildValidationConfig(cwd);
   const { workflows: workflowEntries, errors: loadErrors } = await discoverWorkflowsWithConfig(
     cwd,
     loadConfig
@@ -105,7 +82,7 @@ export async function validateWorkflowsCommand(
 
   // Validate successfully parsed workflows (Level 3)
   for (const { workflow } of workflowEntries) {
-    const issues = await validateWorkflowResources(workflow, cwd, config);
+    const issues = await validateWorkflowResources(workflow, cwd);
     results.push(makeWorkflowResult(workflow.name, issues));
   }
 
@@ -195,17 +172,18 @@ export async function validateCommandsCommand(
   name?: string,
   jsonOutput?: boolean
 ): Promise<number> {
-  const config = await buildValidationConfig(cwd);
+  // Validate all scripts
+  const allScripts = await discoverAvailableScripts(cwd);
 
   if (name) {
-    // Validate a single command
-    const result = await validateCommand(name, cwd, config);
+    // Validate a single script by name
+    const result = await validateScript(name, cwd);
 
     if (jsonOutput) {
       console.log(JSON.stringify(result));
     } else {
       const statusLabel = result.valid ? 'ok' : 'ERRORS';
-      console.log(`\n  ${result.commandName.padEnd(40, ' ')} ${statusLabel}`);
+      console.log(`\n  ${result.scriptName.padEnd(40, ' ')} ${statusLabel}`);
       for (const issue of result.issues) {
         console.log(formatIssue(issue));
       }
@@ -214,51 +192,32 @@ export async function validateCommandsCommand(
     return result.valid ? 0 : 1;
   }
 
-  // Validate all commands
-  const allCommands = await discoverAvailableCommands(cwd, config);
-  const commandResults = await Promise.all(
-    allCommands.map(cmd => validateCommand(cmd, cwd, config))
-  );
-
-  // Validate all scripts
-  const allScripts = await discoverAvailableScripts(cwd);
   const scriptResults = await Promise.all(allScripts.map(s => validateScript(s.name, cwd)));
-
-  const totalCommandErrors = commandResults.filter(r => !r.valid).length;
-  const totalScriptErrors = scriptResults.filter(r => !r.valid).length;
-  const totalErrors = totalCommandErrors + totalScriptErrors;
+  const totalErrors = scriptResults.filter(r => !r.valid).length;
 
   if (jsonOutput) {
     console.log(
       JSON.stringify({
-        results: commandResults,
         scripts: scriptResults,
         summary: {
-          total: commandResults.length + scriptResults.length,
-          valid: commandResults.length + scriptResults.length - totalErrors,
+          total: scriptResults.length,
+          valid: scriptResults.length - totalErrors,
           errors: totalErrors,
         },
       })
     );
   } else {
-    if (commandResults.length === 0 && scriptResults.length === 0) {
-      console.log('\nNo commands or scripts found.');
+    if (scriptResults.length === 0) {
+      console.log('\nNo scripts found.');
       return 0;
     }
 
-    console.log(`\nValidating commands and scripts in ${cwd}\n`);
-    for (const result of commandResults) {
-      const statusLabel = result.valid ? 'ok' : 'ERRORS';
-      console.log(`  ${result.commandName.padEnd(40, ' ')} ${statusLabel}`);
-      for (const issue of result.issues) {
-        console.log(formatIssue(issue));
-      }
-    }
+    console.log(`\nValidating scripts in ${cwd}\n`);
     for (const result of scriptResults) {
       console.log(formatScriptResult(result));
     }
     console.log(
-      `\nResults: ${commandResults.length + scriptResults.length - totalErrors} valid, ${totalErrors} with errors`
+      `\nResults: ${scriptResults.length - totalErrors} valid, ${totalErrors} with errors`
     );
   }
 
