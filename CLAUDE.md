@@ -108,7 +108,7 @@ bun run dev
 ```bash
 bun run test                # Run all tests (per-package, isolated processes)
 bun test --watch            # Watch mode (single package)
-bun test packages/core/src/handlers/command-handler.test.ts  # Single file
+bun test packages/core/src/handlers/clone.test.ts  # Single file
 ```
 
 **Test isolation (mock.module pollution):** Bun's `mock.module()` permanently replaces modules in the process-wide cache — `mock.restore()` does NOT undo it ([oven-sh/bun#7823](https://github.com/oven-sh/bun/issues/7823)). To prevent cross-file pollution, packages that have conflicting `mock.module()` calls split their tests into separate `bun test` invocations: `@rith/core` (7 batches), `@rith/workflows` (5), `@rith/adapters` (6), `@rith/isolation` (3). See each package's `package.json` for the exact splits.
@@ -215,9 +215,6 @@ bun run cli validate workflows              # All workflows
 bun run cli validate workflows my-workflow  # Single workflow
 bun run cli validate workflows my-workflow --json  # Machine-readable output
 
-# Validate command files
-bun run cli validate commands               # All commands
-bun run cli validate commands my-command    # Single command
 
 # Complete branch lifecycle (remove worktree + local/remote branches)
 bun run cli complete <branch-name>
@@ -280,8 +277,7 @@ packages/
 │       ├── deps.ts           # WorkflowDeps injection types (IWorkflowPlatform, imports from @rith/pi/types)
 │       ├── event-emitter.ts  # Workflow observability events
 │       ├── logger.ts         # JSONL file logger
-│       ├── validator.ts      # Resource validation (command files, MCP configs, skill dirs)
-│       ├── defaults/         # Bundled default commands and workflows
+│       ├── validator.ts      # Resource validation (MCP configs, skill dirs)
 │       └── utils/            # Variable substitution, tool formatting, execution utilities
 ├── git/                      # @rith/git - Git operations (no @rith/core dep)
 │   └── src/
@@ -339,13 +335,13 @@ import * as core from '@rith/core';  // Don't do this
 ### Database Schema
 
 **Database Tables (all prefixed with `remote_agent_`):**
-- `codebases` - Repository metadata and commands (JSONB)
+- `codebases` - Repository metadata (JSONB)
 - `conversations` - Track platform conversations with titles and soft-delete
 - `sessions` - Track AI SDK sessions with resume capability
 - `isolation_environments` - Git worktree isolation tracking
 - `workflow_runs` - Workflow execution tracking and state
 - `workflow_events` - Step-level workflow event log
-- `codebase_env_vars` - Per-project env vars injected into workflow commands, managed via `env:` in config
+- `codebase_env_vars` - Per-project env vars injected into workflow nodes, managed via `env:` in config
 
 **Session Transitions:**
 - Sessions are immutable - transitions create new linked sessions
@@ -436,7 +432,7 @@ assistants:
 **Repo-level (`.rith/` in any repository):**
 ```
 .rith/
-├── commands/       # Custom commands
+├── skills/         # Reusable skills (SKILL.md per directory)
 ├── workflows/      # Workflow definitions (YAML files)
 ├── scripts/        # Named scripts for script: nodes (.ts/.js for bun, .py for uv)
 ├── state/          # Cross-run workflow state (gitignored — never in git)

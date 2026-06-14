@@ -213,7 +213,6 @@ rith workflow run <name> --cwd /path/to/repo "<message>"
 | `rith isolation cleanup --merged --include-closed` | Also remove closed (abandoned) PR branches |
 | `rith complete <branch>` | Complete branch lifecycle |
 | `rith validate workflows [name]` | Validate workflow definitions |
-| `rith validate commands [name]` | Validate command files |
 | `rith version` | Show version info |
 
 ### Worktree Management
@@ -237,20 +236,17 @@ rith complete <branch> --force   # skip uncommitted-changes check
 | `rith-idea-to-pr` | Feature idea, plan, implement, validate, PR, parallel reviews, self-fix |
 | `rith-plan-to-pr` | Execute existing plan, implement, validate, PR, review |
 | `rith-feature-development` | Implement feature from plan, validate, create PR |
-| `rith-comprehensive-pr-review` | Multi-agent PR review (5 parallel reviewers) with automatic fixes |
 | `rith-smart-pr-review` | Complexity-adaptive PR review — routes to relevant agents only |
 | `rith-create-issue` | Classify problem, gather context, investigate, create GitHub issue |
-| `rith-validate-pr` | Thorough PR validation testing both main and feature branches |
-| `rith-resolve-conflicts` | Detect, analyze, and resolve merge conflicts in PRs |
+| `rith-issue-review-full` | Comprehensive fix + full multi-agent review for GitHub issues |
 | `rith-refactor-safely` | Safe refactoring with type-check hooks and behavior verification |
 | `rith-architect` | Architectural sweep, complexity reduction, codebase health |
 | `rith-ralph-dag` | PRD implementation loop (iterate through stories until done) |
-| `rith-issue-review-full` | Comprehensive fix + full multi-agent review for GitHub issues |
-| `rith-test-loop-dag` | Iterative test-fix cycle until all tests pass |
 | `rith-remotion-generate` | Generate or modify Remotion video compositions with AI |
 | `rith-interactive-prd` | Create a PRD through guided conversation |
 | `rith-piv-loop` | Guided Plan-Implement-Validate development with human-in-the-loop |
 | `rith-adversarial-dev` | Build a complete application from scratch using adversarial development |
+| `rith-workflow-builder` | Create new workflow YAML files with AI assistance |
 
 These bundled workflows work for most projects. To customize, copy one from `.rith/workflows/defaults/` into `.rith/workflows/` and modify it — same-named files override the defaults.
 
@@ -266,7 +262,7 @@ Add an `.rith/` directory to your target repo for repo-specific behavior:
 your-repo/
 └── .rith/
     ├── config.yaml         # AI assistant, worktree copy rules
-    ├── commands/            # Custom commands (.md files)
+    ├── skills/             # Reusable skills (SKILL.md directories)
     └── workflows/           # Custom multi-step workflows (.yaml files)
 ```
 
@@ -275,8 +271,6 @@ your-repo/
 ```yaml
 pi:
   model: anthropic/claude-sonnet-4-5   # AI provider model
-commands:
-  folder: .claude/commands/rith    # additional command search path
 worktree:
   copyFiles:                         # gitignored files/dirs to copy into worktrees
     - .env                           # (`.rith/` is copied automatically — no need to list it)
@@ -285,9 +279,9 @@ worktree:
 
 Without any `.rith/` config, Rith Engine uses sensible defaults (bundled commands and workflows).
 
-### Custom Commands
+### Custom Skills
 
-Place `.md` files in your repo's `.rith/commands/`:
+Place `SKILL.md` files in your repo's `.rith/skills/`:
 
 ```markdown
 ---
@@ -434,18 +428,18 @@ bun install
 
 ## What's Next?
 
-### Create custom commands and workflows
+### Create custom skills and workflows
 
 Add AI prompts to your repo that Rith Engine can execute:
 
 ```
 your-repo/
 └── .rith/
-    ├── commands/        # Markdown files with AI instructions
-    └── workflows/       # YAML files chaining commands together
+    ├── skills/          # Reusable skills (SKILL.md directories)
+    └── workflows/       # YAML files chaining skills together
 ```
 
-See [Authoring Workflows](/guides/authoring-workflows/) and [Authoring Commands](/guides/authoring-commands/).
+See [Authoring Workflows](/guides/authoring-workflows/) and [Authoring Skills](/guides/authoring-skills/).
 
 ---
 

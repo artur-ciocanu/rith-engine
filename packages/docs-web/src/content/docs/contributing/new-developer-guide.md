@@ -173,9 +173,9 @@ A workflow is a YAML file that chains AI prompts together:
 │   │                                                                 │  │
 │   │ nodes:                                                          │  │
 │   │   - id: investigate                                             │  │
-│   │     command: investigate-issue    ◀── Node 1: Research         │  │
+│   │     skills: [rith-investigate-issue]    ◀── Node 1: Research         │  │
 │   │   - id: implement                                               │  │
-│   │     command: implement-issue      ◀── Node 2: Fix              │  │
+│   │     skills: [rith-fix-issue]            ◀── Node 2: Fix              │  │
 │   │     depends_on: [investigate]                                   │  │
 │   │     context: fresh                                              │  │
 │   └─────────────────────────────────────────────────────────────────┘  │
@@ -186,8 +186,8 @@ A workflow is a YAML file that chains AI prompts together:
 │   EXECUTION FLOW:                                                       │
 │                                                                         │
 │   ┌──────────────────┐      ┌──────────────────┐      ┌────────────┐  │
-│   │  investigate-    │      │   implement-     │      │            │  │
-│   │  issue.md        │─────▶│   issue.md       │─────▶│  PR #127   │  │
+│   │  rith-investigate │      │   rith-fix-    │      │            │  │
+│   │  -issue (skill)   │─────▶│   issue (skill)│─────▶│  PR #127   │  │
 │   │                  │      │                  │      │            │  │
 │   │  - Read issue    │      │  - Read artifact │      │  Created!  │  │
 │   │  - Explore code  │      │  - Make changes  │      │            │  │
@@ -196,7 +196,7 @@ A workflow is a YAML file that chains AI prompts together:
 │   │  - Save artifact │      │  - Create PR     │      │            │  │
 │   └──────────────────┘      └──────────────────┘      └────────────┘  │
 │                                                                         │
-│   Each "command" is a markdown file with AI instructions.              │
+│   Each skill is a reusable SOP loaded from .rith/skills/.                │
 │   The workflow executor runs nodes in dependency order.                │
 │                                                                         │
 └─────────────────────────────────────────────────────────────────────────┘
@@ -453,7 +453,6 @@ Each workflow run gets its own isolated copy of the repo:
 │   │ 3. REPO CONFIG (.rith/config.yaml)                             │  │
 │   │    pi:                       # This repo's AI settings          │  │
 │   │      model: anthropic/claude-sonnet-4-5                         │  │
-│   │    commands: { folder: .rith/commands/custom }                  │  │
 │   └─────────────────────────────────────────────────────────────────┘  │
 │                              │                                          │
 │                              ▼                                          │
@@ -477,10 +476,10 @@ Each workflow run gets its own isolated copy of the repo:
 │   my-app/                           ~/.rith/                            │
 │   ├── .rith/                        ├── config.yaml      (global cfg)  │
 │   │   ├── config.yaml               ├── rith.db          (SQLite)      │
-│   │   ├── commands/                 ├── workspaces/      (worktrees)   │
-│   │   │   ├── investigate-issue.md  │   └── user/repo/                 │
-│   │   │   ├── implement-issue.md   │       ├── source/    (clone)      │
-│   │   │   └── assist.md            │       └── worktrees/ (isolation)  │
+│   │   ├── skills/                    ├── workspaces/      (worktrees)   │
+│   │   │   ├── rith-investigate-issue/│   └── user/repo/                 │
+│   │   │   ├── rith-fix-issue/       │       ├── source/    (clone)      │
+│   │   │   └── rith-implement/       │       └── worktrees/ (isolation)  │
 │   │   ├── workflows/               │           ├── fix/issue-42/       │
 │   │   │   ├── fix-github-issue.yaml│           └── feat/dark-mode/     │
 │   │   │   └── assist.yaml          │                                   │
@@ -565,5 +564,5 @@ Each workflow run gets its own isolated copy of the repo:
 
 1. **Read**: [Getting Started](/getting-started/overview/) - Set up your first instance
 2. **Explore**: `.rith/workflows/` - See example workflows
-3. **Customize**: `.rith/commands/` - Create your own prompts
+3. **Customize**: `.rith/skills/` - Create your own skills
 4. **Configure**: `.rith/config.yaml` - Tweak settings

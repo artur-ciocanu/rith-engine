@@ -290,19 +290,6 @@ Checks: YAML syntax, DAG structure (cycles, dependency refs), command file exist
 
 Exit code: 0 = all valid, 1 = errors found.
 
-### `validate commands [name]`
-
-Validate command files (.md) in `.rith/commands/`.
-
-```bash
-rith validate commands                  # Validate all commands
-rith validate commands my-command       # Validate a single command
-```
-
-Checks: file exists, non-empty, valid name.
-
-Exit code: 0 = all valid, 1 = errors found.
-
 ### `complete <branch> [branch2 ...]`
 
 Remove a branch's worktree, local branch, and remote branch, and mark its isolation environment as destroyed.

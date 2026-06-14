@@ -83,10 +83,6 @@ pi:
   model: anthropic/claude-sonnet-4-5
   enableExtensions: true
 
-# Commands configuration
-commands:
-  folder: .rith/commands
-  autoLoad: true
 
 # Worktree settings
 worktree:
@@ -280,7 +276,7 @@ Environment variables still work and override defaults.
 
 When cloning or switching repositories, Rith Engine looks for commands in this priority order:
 
-1. `.rith/commands/` - Always searched first
+1. `.rith/skills/` - Always searched first
 2. Configured folder from `commands.folder` in `.rith/config.yaml` (if specified)
 
 Example `.rith/config.yaml`:

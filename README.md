@@ -70,7 +70,7 @@ bun build --compile --minify packages/cli/src/cli.ts --outfile dist/rith
 - **Global config**: `~/.rith/config.yaml`
 - **Global env**: `~/.rith/.env`
 - **Per-repo workflows**: `.rith/workflows/`
-- **Per-repo commands**: `.rith/commands/`
+- **Per-repo skills**: `.rith/skills/`
 - **Per-repo env**: `.rith/.env`
 
 Override the home directory with `RITH_HOME`.
@@ -78,22 +78,19 @@ Override the home directory with `RITH_HOME`.
 ## Architecture
 
 ```
-CLI / Web UI / Platform Adapters
-         │
-         ▼
-    Orchestrator (message routing)
-         │
-    ┌────┴────┐
-    ▼         ▼
- Workflow   Command
- Executor   Handler
-    │         │
-    └────┬────┘
-         ▼
-   AI Provider (Pi / Claude / Codex)
-         │
-         ▼
-   SQLite / PostgreSQL
+CLI
+ │
+ ▼
+Orchestrator (message routing)
+ │
+ ▼
+Workflow Executor (DAG nodes: bash, prompt, skills)
+ │
+ ▼
+AI Provider (Pi)
+ │
+ ▼
+SQLite
 ```
 
 ## License
