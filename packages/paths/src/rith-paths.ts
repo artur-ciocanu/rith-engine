@@ -120,16 +120,6 @@ export function getHomeWorkflowsPath(): string {
 }
 
 /**
- * Get the home-scoped commands directory (`~/.rith/commands/`).
- * Commands placed here are resolvable from every repo and apply globally —
- * overridden per-filename by the same name under `<repoRoot>/.rith/commands/`.
- * Command resolution precedence: repo > home > bundled.
- */
-export function getHomeCommandsPath(): string {
-  return join(getRithHome(), 'commands');
-}
-
-/**
  * Get the home-scoped scripts directory (`~/.rith/scripts/`).
  * Scripts placed here are available to every workflow's `script:` nodes —
  * overridden per-name by the same name under `<repoRoot>/.rith/scripts/`.
@@ -167,32 +157,6 @@ export function getRithEnvPath(): string {
  */
 export function getRepoRithEnvPath(cwd: string): string {
   return join(cwd, '.rith', '.env');
-}
-
-/**
- * Get command folder search paths for a repository
- * Returns folders in priority order (first match wins)
- *
- * Order:
- * 1. .rith/commands (always - user's custom commands)
- * 2. .rith/commands/defaults (bundled default commands)
- * 3. configuredFolder (if specified in config)
- *
- * @param configuredFolder - Optional additional folder from config
- */
-export function getCommandFolderSearchPaths(configuredFolder?: string): string[] {
-  const paths = ['.rith/commands', '.rith/commands/defaults'];
-
-  // Add configured folder if specified (and not already in paths)
-  if (
-    configuredFolder &&
-    configuredFolder !== '.rith/commands' &&
-    configuredFolder !== '.rith/commands/defaults'
-  ) {
-    paths.push(configuredFolder);
-  }
-
-  return paths;
 }
 
 /**

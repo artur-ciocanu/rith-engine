@@ -87,7 +87,6 @@ export async function executeDagWorkflow(
   baseBranch: string,
   docsDir: string,
   config: WorkflowConfig,
-  configuredCommandFolder?: string,
   issueContext?: string,
   priorCompletedNodes?: Map<string, string>
 ): Promise<string | undefined> {
@@ -148,7 +147,6 @@ export async function executeDagWorkflow(
     config,
     workflowModel,
     workflowLevelOptions,
-    configuredCommandFolder,
     issueContext,
     runAggregate: new WorkflowRunAggregate(deps, platform, conversationId, workflowRun, logDir),
   };

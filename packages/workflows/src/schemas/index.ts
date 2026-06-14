@@ -23,7 +23,6 @@ export {
   triggerRuleSchema,
   TRIGGER_RULES,
   dagNodeBaseSchema,
-  commandNodeSchema,
   promptNodeSchema,
   bashNodeSchema,
   loopNodeSchema,
@@ -49,7 +48,6 @@ export {
 export type {
   TriggerRule,
   DagNodeBase,
-  CommandNode,
   PromptNode,
   BashNode,
   LoopNode,

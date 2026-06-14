@@ -222,8 +222,6 @@ export async function executeWorkflow(
     ...fileConfig,
     envVars: { ...fileConfig.envVars, ...dbEnvVars },
   };
-  const configuredCommandFolder = config.commands.folder;
-
   // Auto-detect base branch when not configured. Config takes priority.
   // If detection fails, leave empty — substituteWorkflowVariables throws only if $BASE_BRANCH is referenced.
   let baseBranch: string;
@@ -255,10 +253,6 @@ export async function executeWorkflow(
     },
     'workflow_model_resolved'
   );
-
-  if (configuredCommandFolder) {
-    getLog().debug({ configuredCommandFolder }, 'command_folder_configured');
-  }
 
   // Workflow run + resume state. Caller decides whether to resume by passing
   // preCreatedRun (from hydrateResumableRun) + priorCompletedNodes via opts.
@@ -583,7 +577,6 @@ export async function executeWorkflow(
       baseBranch,
       docsDir,
       config,
-      configuredCommandFolder,
       issueContext,
       dagPriorCompletedNodes
     );

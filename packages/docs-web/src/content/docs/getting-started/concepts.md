@@ -1,6 +1,6 @@
 ---
 title: Core Concepts
-description: Key concepts in Rith Engine — workflows, nodes, commands, and isolation.
+description: Key concepts in Rith Engine — workflows, nodes, skills, and isolation.
 category: getting-started
 audience: [user]
 sidebar:
@@ -19,10 +19,10 @@ description: Investigate and fix a GitHub issue
 
 nodes:
   - id: investigate
-    command: investigate-issue
+    prompt: "Investigate the reported GitHub issue. Identify root cause and affected files."
 
   - id: implement
-    command: implement-issue
+    prompt: "Implement the fix based on the investigation."
     depends_on: [investigate]
     context: fresh
 ```
@@ -33,11 +33,10 @@ Rith Engine ships with bundled default workflows. Run `rith workflow list` to se
 
 ## Nodes
 
-Nodes are the building blocks of workflows. Each node does exactly one thing, and every node must specify exactly one of six types:
+Nodes are the building blocks of workflows. Each node does exactly one thing, and every node must specify exactly one of these types:
 
 | Type | What it does |
 |------|-------------|
-| `command:` | Loads a command file from `.rith/commands/` and sends it to an AI agent |
 | `prompt:` | Sends an inline prompt string to an AI agent |
 | `bash:` | Runs a shell script (no AI). Stdout is captured as `$nodeId.output` |
 | `loop:` | Runs an AI prompt repeatedly until a completion signal is detected |
@@ -49,7 +48,7 @@ Nodes connect through `depends_on` to form a DAG. You can add conditional branch
 ```yaml
 nodes:
   - id: classify
-    command: classify-issue
+    prompt: "Classify the issue as BUG or FEATURE."
     output_format:
       type: object
       properties:
@@ -57,33 +56,23 @@ nodes:
       required: [type]
 
   - id: fix-bug
-    command: fix-bug
+    prompt: "Investigate and fix the bug."
     depends_on: [classify]
     when: "$classify.output.type == 'BUG'"
 
   - id: build-feature
-    command: build-feature
+    prompt: "Plan and build the feature."
     depends_on: [classify]
     when: "$classify.output.type == 'FEATURE'"
 ```
 
-## Commands
+## Skills
 
-A **command** is a markdown file in `.rith/commands/` that serves as an AI prompt template. When a workflow node references `command: investigate-issue`, Rith Engine loads `.rith/commands/investigate-issue.md`, substitutes variables, and sends the result to the AI.
+A **skill** is a directory in `.rith/skills/` containing a `SKILL.md` file that provides domain expertise to AI nodes. When a workflow node references `skills: [my-skill]`, Rith Engine loads `.rith/skills/my-skill/SKILL.md` and includes it as context for the AI.
 
-Commands support variable substitution. The most commonly used variables:
+Skills are the reusable knowledge units of Rith Engine. They encode best practices, conventions, and domain-specific instructions that AI agents use to produce better results.
 
-| Variable | Resolves to |
-|----------|-------------|
-| `$ARGUMENTS` | The user's input message |
-| `$ARTIFACTS_DIR` | Pre-created directory for workflow artifacts |
-| `$BASE_BRANCH` | The base branch (auto-detected or configured) |
-| `$DOCS_DIR` | Documentation directory path (default: `docs/`) |
-| `$WORKFLOW_ID` | Unique ID for the current workflow run |
-
-See the [Variable Reference](/reference/variables/) for the complete list.
-
-Rith Engine ships with bundled default commands for common operations like investigation, implementation, and code review. Repo-level commands in `.rith/commands/` override bundled defaults with the same name.
+Rith Engine ships with bundled default skills. Repo-level skills in `.rith/skills/` override bundled defaults with the same name.
 
 ## Isolation (Worktrees)
 
@@ -113,5 +102,4 @@ rith complete <branch-name>
 
 - [Quick Start](/getting-started/quick-start/) -- Run your first workflow
 - [Authoring Workflows](/guides/authoring-workflows/) -- Create your own multi-step workflows
-- [Authoring Commands](/guides/authoring-commands/) -- Write effective prompt templates
 - [Variable Reference](/reference/variables/) -- All supported variables

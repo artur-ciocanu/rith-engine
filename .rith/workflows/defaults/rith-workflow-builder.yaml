@@ -9,11 +9,11 @@ description: |
 nodes:
   - id: scan-codebase
     bash: |
-      echo "=== Existing Commands ==="
-      if [ -d ".rith/commands" ]; then
-        find .rith/commands -type f -name "*.md" 2>/dev/null | head -30
+      echo "=== Existing Workflows ==="
+      if [ -d ".rith/workflows" ]; then
+        find .rith/workflows -type f \( -name "*.yaml" -o -name "*.yml" \) 2>/dev/null | head -30
       else
-        echo "(no .rith/commands/ directory)"
+        echo "(no .rith/workflows/ directory)"
       fi
 
       echo ""
@@ -61,7 +61,7 @@ nodes:
       5. Whether this should be a simple DAG or include a loop node
 
       Be specific and concrete. Each proposed node should have a clear type
-      (bash, prompt, command, script, loop, or approval) and a one-line
+      (bash, prompt, script, loop, or approval) and a one-line
       description of what it does.
     model: anthropic/claude-haiku-4-5
     allowed_tools: []
@@ -115,8 +115,7 @@ nodes:
 
       nodes:
         - id: node-id-kebab-case
-          # Choose ONE of: prompt, bash, command, script, loop, approval
-
+          # Choose ONE of: prompt, bash, script, loop, approval
           # --- prompt node (AI-executed) ---
           prompt: |
             Instructions for the AI...
@@ -127,9 +126,6 @@ nodes:
             #!/bin/bash
             set -e
             echo "result"
-
-          # --- command node (references a .rith/commands/ file) ---
-          command: command-name
 
           # --- script node (TypeScript via bun, or Python via uv — no AI, stdout = $<nodeId>.output) ---
           # Use for deterministic data transforms the shell would mangle (JSON parsing, etc.)

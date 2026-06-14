@@ -20,13 +20,7 @@ const mockLogger = {
 };
 mockModuleScoped('@rith/paths', realPaths, {
   createLogger: mock(() => mockLogger),
-  getCommandFolderSearchPaths: (folder?: string) => {
-    const paths = ['.rith/commands'];
-    if (folder) paths.unshift(folder);
-    return paths;
-  },
   getWorkflowFolderSearchPaths: () => ['.rith/workflows'],
-  getDefaultCommandsPath: () => '/nonexistent/defaults',
   getDefaultWorkflowsPath: () => '/nonexistent/defaults/workflows',
   getHomeWorkflowsPath: () => '/nonexistent/home/workflows',
   getLegacyHomeWorkflowsPath: () => '/nonexistent/home/.rith/workflows',
@@ -118,8 +112,7 @@ function createMockDeps(storeOverride?: IWorkflowStore): WorkflowDeps {
     getAgent: mockGetAgentDag,
     loadConfig: mock(() =>
       Promise.resolve({
-        commands: {},
-        defaults: { loadDefaultCommands: false, loadDefaultWorkflows: false },
+        defaults: { loadDefaultWorkflows: false },
         provider: {},
       })
     ),
@@ -137,14 +130,13 @@ function createMockPlatform(): IWorkflowPlatform {
 
 const minimalConfig: WorkflowConfig = {
   provider: {},
-  commands: {},
-  defaults: { loadDefaultCommands: false, loadDefaultWorkflows: false },
+  defaults: { loadDefaultWorkflows: false },
 };
 
 // --- Helpers ---
 
 function node(id: string, depends_on?: string[], opts?: Partial<DagNode>): DagNode {
-  return { id, command: id, ...(depends_on?.length ? { depends_on } : {}), ...opts };
+  return { id, prompt: id, ...(depends_on?.length ? { depends_on } : {}), ...opts };
 }
 
 /**
@@ -392,10 +384,10 @@ name: cyclic-dag
 description: A cyclic dag
 nodes:
   - id: a
-    command: plan
+    prompt: plan
     depends_on: [b]
   - id: b
-    command: implement
+    prompt: implement
     depends_on: [a]
 `
     );
@@ -416,7 +408,7 @@ name: bad-ref
 description: Bad dep ref
 nodes:
   - id: a
-    command: plan
+    prompt: plan
     depends_on: [nonexistent]
 `
     );
@@ -437,36 +429,15 @@ name: dup-ids
 description: Duplicate node IDs
 nodes:
   - id: a
-    command: plan
+    prompt: plan
   - id: a
-    command: implement
+    prompt: implement
 `
     );
 
     const result = await discoverWorkflows(testDir, { loadDefaults: false });
     expect(result.errors).toHaveLength(1);
     expect(result.errors[0].error).toMatch(/duplicate/i);
-  });
-
-  it('rejects node with both command and prompt', async () => {
-    const wfDir = join(testDir, '.rith', 'workflows');
-    await mkdir(wfDir, { recursive: true });
-
-    await writeFile(
-      join(wfDir, 'both.yaml'),
-      `
-name: both-cmd-prompt
-description: Both command and prompt
-nodes:
-  - id: a
-    command: plan
-    prompt: "do something"
-`
-    );
-
-    const result = await discoverWorkflows(testDir, { loadDefaults: false });
-    expect(result.errors).toHaveLength(1);
-    expect(result.errors[0].error).toMatch(/mutually exclusive/i);
   });
 
   it('rejects node with neither command nor prompt', async () => {
@@ -500,7 +471,7 @@ name: classify-and-fix
 description: Classify then fix or plan
 nodes:
   - id: classify
-    command: classify-issue
+    prompt: classify-issue
     output_format:
       type: object
       properties:
@@ -509,15 +480,15 @@ nodes:
           enum: [BUG, FEATURE]
       required: [type]
   - id: investigate
-    command: investigate-bug
+    prompt: investigate-bug
     depends_on: [classify]
     when: "$classify.output.type == 'BUG'"
   - id: plan
-    command: plan-feature
+    prompt: plan-feature
     depends_on: [classify]
     when: "$classify.output.type == 'FEATURE'"
   - id: implement
-    command: implement-changes
+    prompt: implement-changes
     depends_on: [investigate, plan]
     trigger_rule: none_failed_min_one_success
 `
@@ -574,7 +545,7 @@ name: extra-fields
 description: Has extra top-level fields that are ignored
 nodes:
   - id: a
-    command: plan
+    prompt: plan
 loop:
   until: COMPLETE
   max_iterations: 5
@@ -599,9 +570,9 @@ name: bad-trigger-rule
 description: Invalid trigger rule
 nodes:
   - id: a
-    command: plan
+    prompt: plan
   - id: b
-    command: implement
+    prompt: implement
     depends_on: [a]
     trigger_rule: all-success
 `
@@ -623,13 +594,13 @@ name: tool-restriction-test
 description: Test tool restrictions
 nodes:
   - id: review
-    command: code-review
+    prompt: code-review
     allowed_tools: [Read, Grep, Glob]
   - id: implement
-    command: implement-feature
+    prompt: implement-feature
     denied_tools: [WebSearch, WebFetch]
   - id: mcp-only
-    command: mcp-command
+    prompt: mcp-command
     allowed_tools: []
 `
     );
@@ -966,10 +937,6 @@ describe('executeDagWorkflow -- tool restrictions', () => {
 
   beforeEach(async () => {
     testDir = join(tmpdir(), `dag-exec-test-${Date.now()}-${Math.random().toString(36).slice(2)}`);
-    const commandsDir = join(testDir, '.rith', 'commands');
-    await mkdir(commandsDir, { recursive: true });
-    await writeFile(join(commandsDir, 'my-cmd.md'), 'My command prompt for $USER_MESSAGE');
-
     mockSendQueryDag.mockClear();
     mockGetAgentDag.mockClear();
 
@@ -1003,7 +970,7 @@ describe('executeDagWorkflow -- tool restrictions', () => {
       testDir,
       {
         name: 'dag-tool-restriction',
-        nodes: [{ id: 'review', command: 'my-cmd', allowed_tools: ['Read', 'Grep'] }],
+        nodes: [{ id: 'review', prompt: 'my-cmd', allowed_tools: ['Read', 'Grep'] }],
       },
       workflowRun,
       'claude',
@@ -1030,7 +997,7 @@ describe('executeDagWorkflow -- tool restrictions', () => {
       platform,
       'conv-dag',
       testDir,
-      { name: 'dag-empty-tools', nodes: [{ id: 'review', command: 'my-cmd', allowed_tools: [] }] },
+      { name: 'dag-empty-tools', nodes: [{ id: 'review', prompt: 'my-cmd', allowed_tools: [] }] },
       workflowRun,
       'claude',
       join(testDir, 'artifacts'),
@@ -1117,14 +1084,9 @@ describe('executeDagWorkflow -- bash nodes', () => {
       user_message: 'bash test message',
     });
 
-    // Write a command file for the downstream AI node
-    const commandsDir = join(testDir, '.rith', 'commands');
-    await mkdir(commandsDir, { recursive: true });
-    await writeFile(join(commandsDir, 'my-cmd.md'), 'Process: $stats.output');
-
     const nodes: DagNode[] = [
       { id: 'stats', bash: 'echo "42 files"' },
-      { id: 'process', command: 'my-cmd', depends_on: ['stats'] },
+      { id: 'process', prompt: 'Process: $stats.output', depends_on: ['stats'] },
     ];
 
     await executeDagWorkflow(
@@ -1275,14 +1237,9 @@ describe('executeDagWorkflow -- bash nodes', () => {
       user_message: 'bash test message',
     });
 
-    // Write a command file for the AI node
-    const commandsDir = join(testDir, '.rith', 'commands');
-    await mkdir(commandsDir, { recursive: true });
-    await writeFile(join(commandsDir, 'my-cmd.md'), 'Do something');
-
     const nodes: DagNode[] = [
       { id: 'bash-a', bash: 'echo "from bash"' },
-      { id: 'ai-b', command: 'my-cmd' },
+      { id: 'ai-b', prompt: 'Do something' },
     ];
 
     await executeDagWorkflow(
@@ -1435,10 +1392,6 @@ describe('executeDagWorkflow -- output_format structured output', () => {
 
   beforeEach(async () => {
     testDir = join(tmpdir(), `dag-output-fmt-${Date.now()}-${Math.random().toString(36).slice(2)}`);
-    const commandsDir = join(testDir, '.rith', 'commands');
-    await mkdir(commandsDir, { recursive: true });
-    await writeFile(join(commandsDir, 'classify.md'), 'Classify this: $USER_MESSAGE');
-
     mockSendQueryDag.mockClear();
     mockGetAgentDag.mockClear();
   });
@@ -1473,7 +1426,7 @@ describe('executeDagWorkflow -- output_format structured output', () => {
     const nodes: DagNode[] = [
       {
         id: 'classify',
-        command: 'classify',
+        prompt: 'classify',
         output_format: {
           type: 'object',
           properties: {
@@ -1531,7 +1484,7 @@ describe('executeDagWorkflow -- output_format structured output', () => {
     });
 
     const nodes: DagNode[] = [
-      { id: 'a', command: 'classify' },
+      { id: 'a', prompt: 'classify' },
       {
         id: 'b',
         prompt: 'Got: $a.output',
@@ -1576,7 +1529,7 @@ describe('executeDagWorkflow -- output_format structured output', () => {
     });
 
     const nodes: DagNode[] = [
-      { id: 'a', command: 'classify' },
+      { id: 'a', prompt: 'classify' },
       {
         id: 'b',
         prompt: 'Use output: $a.output',
@@ -1627,7 +1580,7 @@ describe('executeDagWorkflow -- output_format structured output', () => {
     const nodes: DagNode[] = [
       {
         id: 'classify',
-        command: 'classify',
+        prompt: 'classify',
         output_format: {
           type: 'object',
           properties: {
@@ -1695,7 +1648,7 @@ describe('executeDagWorkflow -- output_format structured output', () => {
     const nodes: DagNode[] = [
       {
         id: 'check',
-        command: 'classify',
+        prompt: 'classify',
         output_format: { type: 'object', properties: { status: { type: 'string' } } },
       },
     ];
@@ -1730,10 +1683,6 @@ describe('executeDagWorkflow -- when condition parse errors (fail-closed)', () =
 
   beforeEach(async () => {
     testDir = join(tmpdir(), `dag-parse-err-${Date.now()}-${Math.random().toString(36).slice(2)}`);
-    const commandsDir = join(testDir, '.rith', 'commands');
-    await mkdir(commandsDir, { recursive: true });
-    await writeFile(join(commandsDir, 'my-cmd.md'), 'Do something for $USER_MESSAGE');
-
     mockSendQueryDag.mockClear();
     mockGetAgentDag.mockClear();
     mockGetAgentDag.mockImplementation(() => ({
@@ -1762,11 +1711,11 @@ describe('executeDagWorkflow -- when condition parse errors (fail-closed)', () =
     const workflowRun = makeWorkflowRun('parse-err-skip-run');
 
     const nodes: DagNode[] = [
-      { id: 'unconditional', command: 'my-cmd' },
+      { id: 'unconditional', prompt: 'my-cmd' },
       // Single = is not valid syntax — will fail to parse
       {
         id: 'guarded',
-        command: 'my-cmd',
+        prompt: 'my-cmd',
         depends_on: ['unconditional'],
         when: "$unconditional.output = 'yes'",
       },
@@ -1797,7 +1746,7 @@ describe('executeDagWorkflow -- when condition parse errors (fail-closed)', () =
     const platform = createMockPlatform();
     const workflowRun = makeWorkflowRun('parse-err-warn-run');
 
-    const nodes: DagNode[] = [{ id: 'gate', command: 'my-cmd', when: 'not a valid condition' }];
+    const nodes: DagNode[] = [{ id: 'gate', prompt: 'my-cmd', when: 'not a valid condition' }];
 
     await executeDagWorkflow(
       mockDeps,
@@ -1827,7 +1776,7 @@ describe('executeDagWorkflow -- when condition parse errors (fail-closed)', () =
     const platform = createMockPlatform();
     const workflowRun = makeWorkflowRun('parse-err-all-skip-run');
 
-    const nodes: DagNode[] = [{ id: 'only', command: 'my-cmd', when: 'bad expression' }];
+    const nodes: DagNode[] = [{ id: 'only', prompt: 'my-cmd', when: 'bad expression' }];
 
     await expect(
       executeDagWorkflow(
@@ -1853,10 +1802,6 @@ describe('executeDagWorkflow -- node-level retry for transient errors', () => {
 
   beforeEach(async () => {
     testDir = join(tmpdir(), `dag-retry-test-${Date.now()}-${Math.random().toString(36).slice(2)}`);
-    const commandsDir = join(testDir, '.rith', 'commands');
-    await mkdir(commandsDir, { recursive: true });
-    await writeFile(join(commandsDir, 'my-cmd.md'), 'Do something for $USER_MESSAGE');
-
     mockSendQueryDag.mockClear();
     mockGetAgentDag.mockClear();
     mockGetAgentDag.mockImplementation(() => ({
@@ -1895,7 +1840,7 @@ describe('executeDagWorkflow -- node-level retry for transient errors', () => {
     const workflowRun = makeWorkflowRun('dag-retry-succeed-run');
 
     const nodes: DagNode[] = [
-      { id: 'my-node', command: 'my-cmd', retry: { max_attempts: 2, delay_ms: 1 } },
+      { id: 'my-node', prompt: 'my-cmd', retry: { max_attempts: 2, delay_ms: 1 } },
     ];
 
     await executeDagWorkflow(
@@ -1930,7 +1875,7 @@ describe('executeDagWorkflow -- node-level retry for transient errors', () => {
     const workflowRun = makeWorkflowRun('dag-retry-exhaust-run');
 
     const nodes: DagNode[] = [
-      { id: 'my-node', command: 'my-cmd', retry: { max_attempts: 2, delay_ms: 1 } },
+      { id: 'my-node', prompt: 'my-cmd', retry: { max_attempts: 2, delay_ms: 1 } },
     ];
 
     await executeDagWorkflow(
@@ -1965,7 +1910,7 @@ describe('executeDagWorkflow -- node-level retry for transient errors', () => {
     const workflowRun = makeWorkflowRun('dag-retry-fatal-run');
 
     const nodes: DagNode[] = [
-      { id: 'my-node', command: 'my-cmd', retry: { max_attempts: 2, delay_ms: 1 } },
+      { id: 'my-node', prompt: 'my-cmd', retry: { max_attempts: 2, delay_ms: 1 } },
     ];
 
     await executeDagWorkflow(
@@ -2004,7 +1949,7 @@ describe('executeDagWorkflow -- node-level retry for transient errors', () => {
     const workflowRun = makeWorkflowRun('dag-retry-notify-run');
 
     const nodes: DagNode[] = [
-      { id: 'my-node', command: 'my-cmd', retry: { max_attempts: 2, delay_ms: 1 } },
+      { id: 'my-node', prompt: 'my-cmd', retry: { max_attempts: 2, delay_ms: 1 } },
     ];
 
     await executeDagWorkflow(
@@ -2036,10 +1981,6 @@ describe('executeDagWorkflow -- tool_called event persistence', () => {
 
   beforeEach(async () => {
     testDir = join(tmpdir(), `dag-tool-test-${Date.now()}-${Math.random().toString(36).slice(2)}`);
-    const commandsDir = join(testDir, '.rith', 'commands');
-    await mkdir(commandsDir, { recursive: true });
-    await writeFile(join(commandsDir, 'my-cmd.md'), 'My command prompt for $USER_MESSAGE');
-
     mockSendQueryDag.mockClear();
     mockGetAgentDag.mockClear();
     mockGetAgentDag.mockImplementation(() => ({
@@ -2141,10 +2082,6 @@ describe('executeDagWorkflow -- tool_completed event emission', () => {
       tmpdir(),
       `dag-toolcomplete-test-${Date.now()}-${Math.random().toString(36).slice(2)}`
     );
-    const commandsDir = join(testDir, '.rith', 'commands');
-    await mkdir(commandsDir, { recursive: true });
-    await writeFile(join(commandsDir, 'my-cmd.md'), 'My command prompt for $USER_MESSAGE');
-
     mockSendQueryDag.mockClear();
     mockGetAgentDag.mockClear();
     mockGetAgentDag.mockImplementation(() => ({
@@ -2528,10 +2465,6 @@ describe('executeDagWorkflow -- skills options', () => {
 
   beforeEach(async () => {
     testDir = join(tmpdir(), `dag-exec-test-${Date.now()}-${Math.random().toString(36).slice(2)}`);
-    const commandsDir = join(testDir, '.rith', 'commands');
-    await mkdir(commandsDir, { recursive: true });
-    await writeFile(join(commandsDir, 'my-cmd.md'), 'My command prompt for $USER_MESSAGE');
-
     mockSendQueryDag.mockClear();
     mockGetAgentDag.mockClear();
 
@@ -2564,7 +2497,7 @@ describe('executeDagWorkflow -- skills options', () => {
       testDir,
       {
         name: 'dag-skills',
-        nodes: [{ id: 'review', command: 'my-cmd', skills: ['codebase-search', 'test-runner'] }],
+        nodes: [{ id: 'review', prompt: 'my-cmd', skills: ['codebase-search', 'test-runner'] }],
       },
       workflowRun,
       'claude',
@@ -2597,7 +2530,7 @@ describe('executeDagWorkflow -- skills options', () => {
         nodes: [
           {
             id: 'review',
-            command: 'my-cmd',
+            prompt: 'my-cmd',
             skills: ['codebase-search'],
             allowed_tools: ['Read', 'Grep'],
           },
@@ -2641,7 +2574,7 @@ describe('executeDagWorkflow -- skills options', () => {
       testDir,
       {
         name: 'dag-agents',
-        nodes: [{ id: 'review', command: 'my-cmd', agents: agentsMap }],
+        nodes: [{ id: 'review', prompt: 'my-cmd', agents: agentsMap }],
       },
       workflowRun,
       'claude',
@@ -2921,11 +2854,6 @@ describe('executeDagWorkflow -- resume with priorCompletedNodes', () => {
       tmpdir(),
       `dag-resume-test-${Date.now()}-${Math.random().toString(36).slice(2)}`
     );
-    const commandsDir = join(testDir, '.rith', 'commands');
-    await mkdir(commandsDir, { recursive: true });
-    await writeFile(join(commandsDir, 'step1.md'), 'Step 1 prompt');
-    await writeFile(join(commandsDir, 'step2.md'), 'Step 2 prompt using $step1.output');
-
     mockSendQueryDag.mockClear();
     mockGetAgentDag.mockClear();
 
@@ -2962,8 +2890,8 @@ describe('executeDagWorkflow -- resume with priorCompletedNodes', () => {
       {
         name: 'two-step',
         nodes: [
-          { id: 'step1', command: 'step1' },
-          { id: 'step2', command: 'step2', depends_on: ['step1'] },
+          { id: 'step1', prompt: 'step1' },
+          { id: 'step2', prompt: 'step2', depends_on: ['step1'] },
         ],
       },
       workflowRun,
@@ -2973,7 +2901,6 @@ describe('executeDagWorkflow -- resume with priorCompletedNodes', () => {
       'main',
       'docs/',
       minimalConfig,
-      undefined,
       undefined,
       priorCompletedNodes
     );
@@ -3005,7 +2932,7 @@ describe('executeDagWorkflow -- resume with priorCompletedNodes', () => {
       {
         name: 'two-step',
         nodes: [
-          { id: 'step1', command: 'step1' },
+          { id: 'step1', prompt: 'step1' },
           { id: 'step2', prompt: 'Use this: $step1.output', depends_on: ['step1'] },
         ],
       },
@@ -3016,7 +2943,6 @@ describe('executeDagWorkflow -- resume with priorCompletedNodes', () => {
       'main',
       'docs/',
       minimalConfig,
-      undefined,
       undefined,
       priorCompletedNodes
     );
@@ -3041,8 +2967,8 @@ describe('executeDagWorkflow -- resume with priorCompletedNodes', () => {
       {
         name: 'two-step',
         nodes: [
-          { id: 'step1', command: 'step1' },
-          { id: 'step2', command: 'step2', depends_on: ['step1'] },
+          { id: 'step1', prompt: 'step1' },
+          { id: 'step2', prompt: 'step2', depends_on: ['step1'] },
         ],
       },
       workflowRun,
@@ -3052,7 +2978,6 @@ describe('executeDagWorkflow -- resume with priorCompletedNodes', () => {
       'main',
       'docs/',
       minimalConfig,
-      undefined,
       undefined,
       priorCompletedNodes
     );
@@ -3086,8 +3011,8 @@ describe('executeDagWorkflow -- resume with priorCompletedNodes', () => {
       {
         name: 'two-step',
         nodes: [
-          { id: 'step1', command: 'step1' },
-          { id: 'step2', command: 'step2', depends_on: ['step1'] },
+          { id: 'step1', prompt: 'step1' },
+          { id: 'step2', prompt: 'step2', depends_on: ['step1'] },
         ],
       },
       workflowRun,
@@ -3097,7 +3022,6 @@ describe('executeDagWorkflow -- resume with priorCompletedNodes', () => {
       'main',
       'docs/',
       minimalConfig,
-      undefined,
       undefined,
       priorCompletedNodes
     );
@@ -3127,8 +3051,8 @@ describe('executeDagWorkflow -- resume with priorCompletedNodes', () => {
       {
         name: 'two-step',
         nodes: [
-          { id: 'step1', command: 'step1' },
-          { id: 'step2', command: 'step2', depends_on: ['step1'] },
+          { id: 'step1', prompt: 'step1' },
+          { id: 'step2', prompt: 'step2', depends_on: ['step1'] },
         ],
       },
       workflowRun,
@@ -3198,7 +3122,7 @@ describe('executeDagWorkflow -- resume with priorCompletedNodes', () => {
       platform,
       'conv-output',
       testDir,
-      { name: 'single-node', nodes: [{ id: 'step1', command: 'step1' }] },
+      { name: 'single-node', nodes: [{ id: 'step1', prompt: 'step1' }] },
       workflowRun,
       'claude',
       join(testDir, 'artifacts'),
@@ -4514,11 +4438,6 @@ describe('executeDagWorkflow -- always_run resume opt-out', () => {
       tmpdir(),
       `dag-always-run-test-${Date.now()}-${Math.random().toString(36).slice(2)}`
     );
-    const commandsDir = join(testDir, '.rith', 'commands');
-    await mkdir(commandsDir, { recursive: true });
-    await writeFile(join(commandsDir, 'producer.md'), 'Producer prompt');
-    await writeFile(join(commandsDir, 'consumer.md'), 'Consumer prompt $producer.output');
-
     mockSendQueryDag.mockClear();
     mockGetAgentDag.mockClear();
 
@@ -4555,8 +4474,8 @@ describe('executeDagWorkflow -- always_run resume opt-out', () => {
       {
         name: 'always-run-producer',
         nodes: [
-          { id: 'producer', command: 'producer', always_run: true },
-          { id: 'consumer', command: 'consumer', depends_on: ['producer'] },
+          { id: 'producer', prompt: 'producer', always_run: true },
+          { id: 'consumer', prompt: 'consumer', depends_on: ['producer'] },
         ],
       },
       workflowRun,
@@ -4566,7 +4485,6 @@ describe('executeDagWorkflow -- always_run resume opt-out', () => {
       'main',
       'docs/',
       minimalConfig,
-      undefined,
       undefined,
       priorCompletedNodes
     );
@@ -4595,7 +4513,6 @@ describe('executeDagWorkflow -- always_run resume opt-out', () => {
   });
 
   it('still skips non-always_run nodes in the same priorCompletedNodes set', async () => {
-    await writeFile(join(testDir, '.rith', 'commands', 'cached.md'), 'Cached prompt');
     const store = createMockStore();
     const mockDeps = createMockDeps(store);
     const platform = createMockPlatform();
@@ -4614,8 +4531,8 @@ describe('executeDagWorkflow -- always_run resume opt-out', () => {
       {
         name: 'mixed',
         nodes: [
-          { id: 'producer', command: 'producer', always_run: true },
-          { id: 'cached', command: 'cached' },
+          { id: 'producer', prompt: 'producer', always_run: true },
+          { id: 'cached', prompt: 'cached' },
         ],
       },
       workflowRun,
@@ -4625,7 +4542,6 @@ describe('executeDagWorkflow -- always_run resume opt-out', () => {
       'main',
       'docs/',
       minimalConfig,
-      undefined,
       undefined,
       priorCompletedNodes
     );
@@ -4671,7 +4587,7 @@ describe('executeDagWorkflow -- always_run resume opt-out', () => {
       {
         name: 'always-run-fresh',
         nodes: [
-          { id: 'producer', command: 'producer', always_run: true },
+          { id: 'producer', prompt: 'producer', always_run: true },
           { id: 'consumer', prompt: 'See: $producer.output', depends_on: ['producer'] },
         ],
       },
@@ -4682,7 +4598,6 @@ describe('executeDagWorkflow -- always_run resume opt-out', () => {
       'main',
       'docs/',
       minimalConfig,
-      undefined,
       undefined,
       priorCompletedNodes
     );
@@ -4699,10 +4614,6 @@ describe('executeDagWorkflow -- break after result (no hang on subprocess exit)'
 
   beforeEach(async () => {
     testDir = join(tmpdir(), `dag-break-test-${Date.now()}-${Math.random().toString(36).slice(2)}`);
-    const commandsDir = join(testDir, '.rith', 'commands');
-    await mkdir(commandsDir, { recursive: true });
-    await writeFile(join(commandsDir, 'my-cmd.md'), 'Command prompt $ARGUMENTS');
-
     mockSendQueryDag.mockClear();
     mockGetAgentDag.mockClear();
 
@@ -4727,7 +4638,7 @@ describe('executeDagWorkflow -- break after result (no hang on subprocess exit)'
     }
   });
 
-  it('command/prompt node completes immediately after result — does not block on post-result messages', async () => {
+  it('prompt node completes immediately after result — does not block on post-result messages', async () => {
     // Generator yields result then hangs forever (simulates subprocess that won't exit)
     mockSendQueryDag.mockImplementation(async function* () {
       yield { type: 'assistant', content: 'response' };
@@ -4747,7 +4658,7 @@ describe('executeDagWorkflow -- break after result (no hang on subprocess exit)'
         platform,
         'conv-dag',
         testDir,
-        { name: 'break-test', nodes: [{ id: 'n1', command: 'my-cmd' }] },
+        { name: 'break-test', nodes: [{ id: 'n1', prompt: 'my-cmd' }] },
         workflowRun,
         'claude',
         join(testDir, 'artifacts'),
@@ -4817,10 +4728,6 @@ describe('executeDagWorkflow -- terminal node output selection', () => {
       tmpdir(),
       `dag-terminal-test-${Date.now()}-${Math.random().toString(36).slice(2)}`
     );
-    const commandsDir = join(testDir, '.rith', 'commands');
-    await mkdir(commandsDir, { recursive: true });
-    await writeFile(join(commandsDir, 'my-cmd.md'), 'Command prompt $ARGUMENTS');
-
     mockSendQueryDag.mockClear();
     mockGetAgentDag.mockClear();
 
@@ -4862,8 +4769,8 @@ describe('executeDagWorkflow -- terminal node output selection', () => {
       {
         name: 'linear-dag',
         nodes: [
-          { id: 'step1', command: 'my-cmd' },
-          { id: 'step2', command: 'my-cmd', depends_on: ['step1'] },
+          { id: 'step1', prompt: 'my-cmd' },
+          { id: 'step2', prompt: 'my-cmd', depends_on: ['step1'] },
         ],
       },
       workflowRun,
@@ -4879,7 +4786,7 @@ describe('executeDagWorkflow -- terminal node output selection', () => {
   });
 
   it('fails node when the AI stream closes with no assistant output', async () => {
-    // Empty assistant output on AI nodes (`command:`/`prompt:`) typically
+    // Empty assistant output on AI nodes (`prompt:`) typically
     // indicates a silent provider rejection or stream interruption that
     // didn't yield a result.isError chunk. Treat it as a node failure
     // rather than a successful empty completion.
@@ -4897,7 +4804,7 @@ describe('executeDagWorkflow -- terminal node output selection', () => {
       platform,
       'conv-dag',
       testDir,
-      { name: 'empty-dag', nodes: [{ id: 'only', command: 'my-cmd' }] },
+      { name: 'empty-dag', nodes: [{ id: 'only', prompt: 'my-cmd' }] },
       workflowRun,
       'claude',
       join(testDir, 'artifacts'),
@@ -4998,9 +4905,9 @@ describe('executeDagWorkflow -- terminal node output selection', () => {
       {
         name: 'fanin-dag',
         nodes: [
-          { id: 'a', command: 'my-cmd' },
-          { id: 'b', command: 'my-cmd' },
-          { id: 'c', command: 'my-cmd', depends_on: ['a', 'b'] },
+          { id: 'a', prompt: 'my-cmd' },
+          { id: 'b', prompt: 'my-cmd' },
+          { id: 'c', prompt: 'my-cmd', depends_on: ['a', 'b'] },
         ],
       },
       workflowRun,
@@ -5129,8 +5036,6 @@ describe('executeDagWorkflow -- credit exhaustion', () => {
       tmpdir(),
       `dag-credit-test-${Date.now()}-${Math.random().toString(36).slice(2)}`
     );
-    const commandsDir = join(testDir, '.rith', 'commands');
-    await mkdir(commandsDir, { recursive: true });
 
     mockSendQueryDag.mockClear();
     mockGetAgentDag.mockClear();
@@ -5572,10 +5477,6 @@ describe('executeDagWorkflow -- approval node', () => {
       frontend_port: 3012,
     };
 
-    const commandsDir = join(testDir, '.rith', 'commands');
-    await mkdir(commandsDir, { recursive: true });
-    await writeFile(join(commandsDir, 'gather-context.md'), 'Gather context: $USER_MESSAGE');
-
     mockSendQueryDag.mockImplementation(function* () {
       yield { type: 'assistant', content: JSON.stringify(structuredJson) };
       yield { type: 'result', sessionId: 'sid-approval-sub', structuredOutput: structuredJson };
@@ -5596,7 +5497,7 @@ describe('executeDagWorkflow -- approval node', () => {
         nodes: [
           {
             id: 'gather-context',
-            command: 'gather-context',
+            prompt: 'gather-context',
             output_format: {
               type: 'object',
               properties: {
@@ -5672,12 +5573,6 @@ describe('executeDagWorkflow -- env var injection', () => {
   beforeEach(async () => {
     testDir = join(tmpdir(), `dag-env-test-${Date.now()}`);
     await mkdir(testDir, { recursive: true });
-    await writeFile(join(testDir, '.rith', 'commands', 'my-cmd.md'), '# Test', {
-      flag: 'w',
-    }).catch(async () => {
-      await mkdir(join(testDir, '.rith', 'commands'), { recursive: true });
-      await writeFile(join(testDir, '.rith', 'commands', 'my-cmd.md'), '# Test');
-    });
     mockSendQueryDag.mockClear();
     mockGetAgentDag.mockImplementation(() => ({
       sendQuery: mockSendQueryDag,
@@ -5705,7 +5600,7 @@ describe('executeDagWorkflow -- env var injection', () => {
       platform,
       'conv-dag',
       testDir,
-      { name: 'dag-env-test', nodes: [{ id: 'task', command: 'my-cmd' }] },
+      { name: 'dag-env-test', nodes: [{ id: 'task', prompt: 'my-cmd' }] },
       workflowRun,
       'claude',
       join(testDir, 'artifacts'),
@@ -5730,7 +5625,7 @@ describe('executeDagWorkflow -- env var injection', () => {
       platform,
       'conv-dag',
       testDir,
-      { name: 'dag-no-env', nodes: [{ id: 'task', command: 'my-cmd' }] },
+      { name: 'dag-no-env', nodes: [{ id: 'task', prompt: 'my-cmd' }] },
       workflowRun,
       'claude',
       join(testDir, 'artifacts'),
@@ -5754,10 +5649,6 @@ describe('executeDagWorkflow -- Claude SDK advanced options', () => {
       tmpdir(),
       `dag-sdk-opts-test-${Date.now()}-${Math.random().toString(36).slice(2)}`
     );
-    const commandsDir = join(testDir, '.rith', 'commands');
-    await mkdir(commandsDir, { recursive: true });
-    await writeFile(join(commandsDir, 'my-cmd.md'), 'My command prompt');
-
     mockSendQueryDag.mockClear();
     mockGetAgentDag.mockClear();
     mockLogFn.mockClear();
@@ -5801,7 +5692,7 @@ describe('executeDagWorkflow -- Claude SDK advanced options', () => {
       testDir,
       {
         name: 'budget-test',
-        nodes: [{ id: 'step1', command: 'my-cmd', maxBudgetUsd: 2.5 }],
+        nodes: [{ id: 'step1', prompt: 'my-cmd', maxBudgetUsd: 2.5 }],
       },
       workflowRun,
       'claude',
@@ -5852,7 +5743,7 @@ describe('executeDagWorkflow -- Claude SDK advanced options', () => {
         name: 'budget-msg-test',
         nodes: [
           { id: 'ok', prompt: 'do work first' },
-          { id: 'capped', command: 'my-cmd', maxBudgetUsd: 2.5, depends_on: ['ok'] },
+          { id: 'capped', prompt: 'my-cmd', maxBudgetUsd: 2.5, depends_on: ['ok'] },
         ],
       },
       workflowRun,
@@ -5896,7 +5787,7 @@ describe('executeDagWorkflow -- Claude SDK advanced options', () => {
       testDir,
       {
         name: 'err-exec-test',
-        nodes: [{ id: 'step1', command: 'my-cmd' }],
+        nodes: [{ id: 'step1', prompt: 'my-cmd' }],
       },
       workflowRun,
       'claude',
@@ -5950,7 +5841,7 @@ describe('executeDagWorkflow -- Claude SDK advanced options', () => {
       testDir,
       {
         name: 'success-stop-seq-test',
-        nodes: [{ id: 'classify', command: 'my-cmd' }],
+        nodes: [{ id: 'classify', prompt: 'my-cmd' }],
       },
       workflowRun,
       'claude',
@@ -5983,7 +5874,7 @@ describe('executeDagWorkflow -- Claude SDK advanced options', () => {
       testDir,
       {
         name: 'workflow-effort-test',
-        nodes: [{ id: 'step1', command: 'my-cmd' }],
+        nodes: [{ id: 'step1', prompt: 'my-cmd' }],
         effort: 'high',
       },
       workflowRun,
@@ -6013,7 +5904,7 @@ describe('executeDagWorkflow -- Claude SDK advanced options', () => {
       testDir,
       {
         name: 'node-effort-override-test',
-        nodes: [{ id: 'step1', command: 'my-cmd', effort: 'max' }],
+        nodes: [{ id: 'step1', prompt: 'my-cmd', effort: 'max' }],
         effort: 'low',
       },
       workflowRun,
@@ -6037,10 +5928,6 @@ describe('executeDagWorkflow -- cost tracking', () => {
 
   beforeEach(async () => {
     testDir = join(tmpdir(), `dag-cost-test-${Date.now()}-${Math.random().toString(36).slice(2)}`);
-    const commandsDir = join(testDir, '.rith', 'commands');
-    await mkdir(commandsDir, { recursive: true });
-    await writeFile(join(commandsDir, 'my-cmd.md'), 'My command prompt');
-
     mockSendQueryDag.mockClear();
     mockGetAgentDag.mockClear();
     mockLogFn.mockClear();
@@ -6300,14 +6187,9 @@ describe('executeDagWorkflow -- script nodes', () => {
       user_message: 'script test message',
     });
 
-    // Write a command file for the downstream AI node
-    const commandsDir = join(testDir, '.rith', 'commands');
-    await mkdir(commandsDir, { recursive: true });
-    await writeFile(join(commandsDir, 'use-result.md'), 'Use: $compute.output');
-
     const nodes: DagNode[] = [
       { id: 'compute', script: 'console.log("42")', runtime: 'bun' },
-      { id: 'use', command: 'use-result', depends_on: ['compute'] },
+      { id: 'use', prompt: 'Use: $compute.output', depends_on: ['compute'] },
     ];
 
     await executeDagWorkflow(
@@ -6581,11 +6463,6 @@ describe('executeDagWorkflow -- script nodes', () => {
 
     const artifactsDir = join(testDir, 'artifacts');
 
-    // Write a downstream command so we can inspect the substituted prompt
-    const commandsDir = join(testDir, '.rith', 'commands');
-    await mkdir(commandsDir, { recursive: true });
-    await writeFile(join(commandsDir, 'check-output.md'), 'Got: $script-out.output');
-
     const nodes: DagNode[] = [
       {
         id: 'script-out',
@@ -6593,7 +6470,7 @@ describe('executeDagWorkflow -- script nodes', () => {
         script: 'console.log("id=$WORKFLOW_ID artifacts=$ARTIFACTS_DIR")',
         runtime: 'bun',
       },
-      { id: 'check', command: 'check-output', depends_on: ['script-out'] },
+      { id: 'check', prompt: 'Got: $script-out.output', depends_on: ['script-out'] },
     ];
 
     await executeDagWorkflow(
@@ -6854,10 +6731,7 @@ describe('executeDagWorkflow -- MCP failure filtering', () => {
 
   beforeEach(async () => {
     testDir = join(tmpdir(), `dag-mcp-filter-${Date.now()}-${Math.random().toString(36).slice(2)}`);
-    const commandsDir = join(testDir, '.rith', 'commands');
-    await mkdir(commandsDir, { recursive: true });
-    await writeFile(join(commandsDir, 'my-cmd.md'), 'cmd prompt');
-
+    await mkdir(testDir, { recursive: true });
     mockSendQueryDag.mockClear();
     mockGetAgentDag.mockClear();
   });
@@ -6891,7 +6765,7 @@ describe('executeDagWorkflow -- MCP failure filtering', () => {
       testDir,
       {
         name: 'mcp-filter-test',
-        nodes: [{ id: 'review', command: 'my-cmd', ...(nodeMcpPath ? { mcp: nodeMcpPath } : {}) }],
+        nodes: [{ id: 'review', prompt: 'my-cmd', ...(nodeMcpPath ? { mcp: nodeMcpPath } : {}) }],
       },
       makeWorkflowRun(),
       'claude',

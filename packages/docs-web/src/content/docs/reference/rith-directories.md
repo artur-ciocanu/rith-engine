@@ -91,10 +91,6 @@ getRithWorktreesPath(): string
 getRithConfigPath(): string
 // Returns: ${RITH_HOME}/config.yaml
 
-// Get command folder search paths (priority order)
-getCommandFolderSearchPaths(configuredFolder?: string): string[]
-// Returns: ['.rith/commands'] + configuredFolder if specified
-```
 
 ### Docker Detection
 

@@ -8,7 +8,7 @@ sidebar:
   order: 8
 ---
 
-In [Chapter 7](/book/first-workflow/) you built a workflow that runs commands in sequence, one after another. That covers a lot of ground — plan, implement, validate, review. But there's a class of problems sequential steps can't solve cleanly: "run this node only if the previous result was a bug, not a feature request" or "wait for three independent reviewers to finish, then merge their findings."
+In [Chapter 7](/book/first-workflow/) you built a workflow that runs steps in sequence, one after another. That covers a lot of ground — plan, implement, validate, review. But there's a class of problems sequential steps can't solve cleanly: "run this node only if the previous result was a bug, not a feature request" or "wait for three independent reviewers to finish, then merge their findings."
 
 That's what **DAG workflows** (Directed Acyclic Graphs) are for. Instead of a straight line, you're describing a graph: which nodes exist, which depend on which, and under what conditions each node should run. Rith Engine's `nodes:` format gives you that graph.
 
@@ -33,17 +33,16 @@ If your workflow needs an "if this, then that" branch — or if you want to expr
 
 ### Nodes and Dependencies
 
-A **node** is the atomic unit of work in a DAG workflow. Each node has a unique `id`, something to run (`command:`, `prompt:`, or `bash:`), and optionally a list of nodes it depends on.
+A **node** is the atomic unit of work in a DAG workflow. Each node has a unique `id`, something to run (`prompt:`, `bash:`, or `skills:`), and optionally a list of nodes it depends on.
 
 ```yaml
 nodes:
   - id: investigate
-    command: investigate-issue
+    prompt: "Investigate the reported issue. Identify root cause and affected files."
 
   - id: implement
-    command: implement-changes
+    prompt: "Implement changes to fix the issue based on the investigation."
     depends_on: [investigate]
-```
 
 Rith Engine won't start `implement` until `investigate` completes successfully. If `investigate` fails, `implement` is skipped.
 
@@ -51,21 +50,20 @@ Rith Engine won't start `implement` until `investigate` completes successfully. 
 
 Nodes with no shared dependencies run **concurrently**. Rith Engine groups nodes into topological layers and runs each layer in parallel:
 
-```yaml
 nodes:
   - id: scope
-    command: create-review-scope
+    prompt: "Create a review scope: identify changed files, summarize the PR intent."
 
   - id: code-review
-    command: code-review-agent
+    prompt: "Review code quality, patterns, and correctness."
     depends_on: [scope]
 
   - id: security-review
-    command: security-review-agent
+    prompt: "Review for security vulnerabilities and unsafe patterns."
     depends_on: [scope]
 
   - id: synthesize
-    command: synthesize-reviews
+    prompt: "Synthesize review findings into a single report."
     depends_on: [code-review, security-review]
 ```
 
@@ -107,7 +105,7 @@ description: |
 
 nodes:
   - id: classify
-    command: classify-issue
+    prompt: "Classify the issue as BUG or FEATURE."
     output_format:
       type: object
       properties:
@@ -117,25 +115,24 @@ nodes:
       required: [type]
 
   - id: investigate
-    command: investigate-bug
+    prompt: "Investigate the bug. Identify root cause and write a fix plan."
     depends_on: [classify]
     when: "$classify.output.type == 'BUG'"
 
   - id: plan
-    command: plan-feature
+    prompt: "Plan the feature implementation. Write a detailed spec."
     depends_on: [classify]
     when: "$classify.output.type == 'FEATURE'"
 
   - id: implement
-    command: implement-changes
+    prompt: "Implement the changes based on the investigation or plan."
     depends_on: [investigate, plan]
     trigger_rule: none_failed_min_one_success
 
   - id: create-pr
-    command: create-pr
+    prompt: "Create a pull request with the changes."
     depends_on: [implement]
     context: fresh
-```
 
 ### Run and Observe
 
@@ -196,7 +193,7 @@ You can also use `$nodeId.output` directly inside `prompt:` text to pass context
 
 ```yaml
 - id: classify
-  command: classify-issue
+  prompt: "Classify this issue as BUG or FEATURE."
   output_format:
     type: object
     properties:
@@ -230,21 +227,18 @@ The classify-and-route example uses `none_failed_min_one_success` on `implement`
 
 ## Node Types
 
-Rith Engine supports seven node types. Exactly one mode field is required per node:
+Rith Engine supports six node types. Exactly one mode field is required per node:
 
 | Type | Syntax | When to use |
 |------|--------|-------------|
-| **Command** | `command: my-command` | Load a command from `.rith/commands/my-command.md`. The standard choice. |
-| **Prompt** | `prompt: "inline instructions..."` | Quick, one-off instructions that don't need a reusable command file. |
+| **Prompt** | `prompt: "inline instructions..."` | Send instructions to an AI agent. The standard choice. |
 | **Bash** | `bash: "shell command"` | Run a shell script without AI. Stdout is captured as `$nodeId.output`. Deterministic operations only. |
 | **Script** | `script: "..." ` + `runtime: bun \| uv` | Run TypeScript/JavaScript (bun) or Python (uv) without AI. Inline code or named reference to `.rith/scripts/`. Stdout captured as `$nodeId.output`. See [Script Nodes](/guides/script-nodes/). |
 | **Loop** | `loop: { prompt: "...", until: SIGNAL }` | Repeat an AI prompt until a completion signal appears in the output. See [Loop Nodes](/guides/loop-nodes/). |
 | **Approval** | `approval: { message: "..." }` | Pause the workflow for a human approve/reject decision. See [Approval Nodes](/guides/approval-nodes/). |
 | **Cancel** | `cancel: "reason string"` | Terminate the workflow run (status: cancelled, not failed). Usually gated with `when:`. |
 
-**Command** is the most common. Use it for anything you'll reuse across workflows.
-
-**Prompt** is convenient for glue nodes — summarizing outputs, formatting data — where the logic is simple and workflow-specific.
+**Prompt** is the most common. Use it for any AI task — investigation, implementation, review, classification.
 
 **Bash** is powerful for deterministic shell operations: running tests, checking git status, reading a file, fetching an API. The AI doesn't run the bash command; your shell does. The output becomes a variable for downstream nodes:
 
@@ -253,9 +247,8 @@ Rith Engine supports seven node types. Exactly one mode field is required per no
   bash: "bun run test 2>&1 | tail -20"
 
 - id: fix-failures
-  command: fix-test-failures
-  depends_on: [check-tests]
   prompt: "Test output: $check-tests.output\n\nFix any failures."
+  depends_on: [check-tests]
 ```
 
 **Script** is for deterministic work that needs a real programming language — parsing JSON, transforming data between AI nodes, calling typed HTTP clients. Use `runtime: bun` for TypeScript/JavaScript and `runtime: uv` for Python:
@@ -290,18 +283,15 @@ Rith Engine supports seven node types. Exactly one mode field is required per no
 
 **Approval** pauses the workflow for human review. The downstream nodes don't run until the user approves via the CLI:
 
-```yaml
-interactive: true                 # required for approval gates
-
 nodes:
   - id: plan
-    command: plan-feature
+    prompt: "Create a plan for $USER_MESSAGE"
   - id: review-gate
     approval:
       message: "Review the plan above."
     depends_on: [plan]
   - id: implement
-    command: implement
+    prompt: "Implement the approved plan."
     depends_on: [review-gate]
 ```
 
@@ -330,6 +320,6 @@ nodes:
 
 ---
 
-You now have the full DAG toolkit. The same commands you built in Chapters 6 and 7 work as nodes — `command:` is the bridge. The difference is the wiring between them: explicit dependencies, conditional paths, and parallel execution by default.
+You now have the full DAG toolkit. Prompts work as nodes — `prompt:` is the primary way to give AI instructions. The difference is the wiring between them: explicit dependencies, conditional paths, and parallel execution by default.
 
 [Chapter 9: Hooks and Quality Loops →](/book/hooks-and-quality/) covers the next level: intercepting tool calls to inject guidance, create quality gates, or deny specific actions within a node.

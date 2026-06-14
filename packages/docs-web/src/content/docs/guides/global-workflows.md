@@ -1,6 +1,6 @@
 ---
-title: Global Workflows, Commands, and Scripts
-description: Define user-level workflows, commands, and scripts that apply to every project on your machine.
+title: Global Workflows and Scripts
+description: Define user-level workflows and scripts that apply to every project on your machine.
 category: guides
 area: workflows
 audience: [user]
@@ -9,13 +9,12 @@ sidebar:
   order: 9
 ---
 
-Workflows placed in `~/.rith/workflows/`, commands in `~/.rith/commands/`, and scripts in `~/.rith/scripts/` are loaded globally -- they appear in every project and can be invoked from any repository. Workflows and commands carry the `source: 'global'` label; scripts resolve under the same repo-wins-over-home precedence.
+Workflows placed in `~/.rith/workflows/` and scripts in `~/.rith/scripts/` are loaded globally -- they appear in every project and can be invoked from any repository. Workflows carry the `source: 'global'` label; scripts resolve under the same repo-wins-over-home precedence.
 
 ## Paths
 
 ```
 ~/.rith/workflows/
-~/.rith/commands/
 ~/.rith/scripts/
 ```
 
@@ -23,14 +22,13 @@ Or, if you have set `RITH_HOME`:
 
 ```
 $RITH_HOME/workflows/
-$RITH_HOME/commands/
 $RITH_HOME/scripts/
 ```
 
 Create the directories if they do not exist:
 
 ```bash
-mkdir -p ~/.rith/workflows ~/.rith/commands ~/.rith/scripts
+mkdir -p ~/.rith/workflows ~/.rith/scripts
 ```
 
 > **Note on location.** These are direct children of `~/.rith/` -- same level as `workspaces/`, `rith.db`, and `config.yaml`. Earlier Rith Engine versions stored global workflows at `~/.rith/.rith/workflows/`; see [Migrating from the old path](#migrating-from-the-old-path) below.
@@ -46,16 +44,15 @@ Each directory supports one level of subfolders for grouping, matching the exist
 │   └── weekly-cleanup.yaml     # ✅ resolvable as `weekly-cleanup`
 └── team/personal/too-deep.yaml # ❌ ignored — 2 levels down
 ```
-
-Resolution is by **filename without extension** (for commands) or **exact filename** (for workflows), regardless of which subfolder the file lives in. Duplicate basenames within the same scope are a user error -- keep each name unique within `~/.rith/commands/` (or `<repoRoot>/.rith/commands/`), across whatever subfolders you use.
+Resolution is by **exact filename** (for workflows) or **script name** (for scripts), regardless of which subfolder the file lives in. Duplicate basenames within the same scope are a user error -- keep each name unique within the scope, across whatever subfolders you use.
 
 ## Load Priority
 
-1. **Bundled defaults** (lowest priority) -- the `rith-*` workflows/commands embedded in the Rith Engine binary.
-2. **Global / home-scoped** -- `~/.rith/workflows/`, `~/.rith/commands/`, `~/.rith/scripts/` (override bundled by filename).
-3. **Repo-specific** -- `<repoRoot>/.rith/workflows/`, `<repoRoot>/.rith/commands/`, `<repoRoot>/.rith/scripts/` (override global by filename).
+1. **Bundled defaults** (lowest priority) -- the `rith-*` workflows embedded in the Rith Engine binary.
+2. **Global / home-scoped** -- `~/.rith/workflows/`, `~/.rith/scripts/` (override bundled by filename).
+3. **Repo-specific** -- `<repoRoot>/.rith/workflows/`, `<repoRoot>/.rith/scripts/` (override global by filename).
 
-Same-named files at a higher scope win. A repo can override a personal helper by dropping a file with the same name in its own `.rith/workflows/`, `.rith/commands/`, or `.rith/scripts/`.
+Same-named files at a higher scope win. A repo can override a personal helper by dropping a file with the same name in its own `.rith/workflows/` or `.rith/scripts/`.
 
 ## Practical Examples
 
@@ -115,28 +112,6 @@ nodes:
       Topic: $ARGUMENTS
 ```
 
-### Personal Command Helpers
-
-Commands placed in `~/.rith/commands/` are available to every workflow on the machine. Useful for prompts you reuse across projects.
-
-```markdown
-<!-- ~/.rith/commands/review-checklist.md -->
-Review the uncommitted changes in the current worktree.
-Check for:
-- Error handling gaps
-- Missing tests
-- Surprising API shapes
-- Unnecessary cleverness
-Be terse. Report findings grouped by file.
-```
-
-A workflow in any repo can then reference it:
-
-```yaml
-nodes:
-  - id: review
-    command: review-checklist
-```
 
 ## Syncing with Dotfiles
 
@@ -146,29 +121,25 @@ If you manage your configuration with a dotfiles repository, you can include you
 # In your dotfiles repo
 dotfiles/
 └── rith/
-    ├── workflows/
-    │   ├── my-review.yaml
-    │   └── explain.yaml
-    └── commands/
-        └── review-checklist.md
+    └── workflows/
+        ├── my-review.yaml
+        └── explain.yaml
 ```
 
 Then symlink during dotfiles setup:
 
 ```bash
 ln -sf ~/dotfiles/rith/workflows ~/.rith/workflows
-ln -sf ~/dotfiles/rith/commands  ~/.rith/commands
 ```
 
 Or copy them as part of your dotfiles install script:
 
 ```bash
-mkdir -p ~/.rith/workflows ~/.rith/commands
+mkdir -p ~/.rith/workflows
 cp ~/dotfiles/rith/workflows/*.yaml ~/.rith/workflows/
-cp ~/dotfiles/rith/commands/*.md    ~/.rith/commands/
 ```
 
-This way your personal workflows and commands travel with you across machines.
+This way your personal workflows travel with you across machines.
 
 ## CLI Support
 
@@ -190,7 +161,7 @@ Pre-refactor versions of Rith Engine stored global workflows at `~/.rith/.rith/w
 mv ~/.rith/.rith/workflows ~/.rith/workflows && rmdir ~/.rith/.rith
 ```
 
-Run it once; the warning stops firing on subsequent invocations. There was no prior home-scoped commands location, so `~/.rith/commands/` is new capability -- nothing to migrate.
+Run it once; the warning stops firing on subsequent invocations.
 
 ## Troubleshooting
 

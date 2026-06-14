@@ -5,7 +5,7 @@
 import { workflowDefinitionSchema } from './schemas/workflow';
 import type { WorkflowDefinition, WorkflowWithSource, WorkflowSource } from './schemas/workflow';
 
-const DEFAULT_NODE = { id: 'default', command: 'test-command' };
+const DEFAULT_NODE = { id: 'default', prompt: 'test prompt' };
 
 type TestWorkflowOverrides = {
   name: string;

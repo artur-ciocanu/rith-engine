@@ -45,7 +45,6 @@ export interface DagRunContext {
   readonly config: WorkflowConfig;
   readonly workflowModel: string | undefined;
   readonly workflowLevelOptions: WorkflowLevelOptions;
-  readonly configuredCommandFolder: string | undefined;
   readonly issueContext: string | undefined;
   /** Single mutator of the run's lifecycle status (cancel / fail / complete / pause). */
   readonly runAggregate: WorkflowRunAggregate;

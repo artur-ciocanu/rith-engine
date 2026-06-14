@@ -111,12 +111,6 @@ export interface RepoConfig {
     copyDefaults?: boolean;
 
     /**
-     * Load default commands
-     * @default true
-     */
-    loadDefaultCommands?: boolean;
-
-    /**
      * Load default workflows
      * @default true
      */
@@ -141,15 +135,14 @@ export interface MergedConfig {
   };
   commands: {
     /**
-     * Additional command folder to search (relative to repo root)
-     * Searched after .rith/commands/ but before .claude/commands/
+     * Additional command folder to search (legacy, ignored)
+     * @deprecated Commands have been replaced by skills.
      */
     folder?: string;
     autoLoad: boolean;
   };
   defaults: {
     copyDefaults: boolean;
-    loadDefaultCommands: boolean;
     loadDefaultWorkflows: boolean;
   };
   /**

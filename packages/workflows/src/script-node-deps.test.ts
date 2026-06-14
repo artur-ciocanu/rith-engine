@@ -39,12 +39,6 @@ const mockLogger = {
 };
 mockModuleScoped('@rith/paths', realPaths, {
   createLogger: mock(() => mockLogger),
-  getCommandFolderSearchPaths: (folder?: string) => {
-    const paths = ['.rith/commands'];
-    if (folder) paths.unshift(folder);
-    return paths;
-  },
-  getDefaultCommandsPath: () => '/nonexistent/defaults',
 });
 
 // --- Imports (after all mock.module calls) ---
@@ -123,7 +117,7 @@ function createMockDeps(): WorkflowDeps {
     loadConfig: mock(() =>
       Promise.resolve({
         commands: {},
-        defaults: { loadDefaultCommands: false, loadDefaultWorkflows: false },
+        defaults: { loadDefaultWorkflows: false },
         provider: {},
       })
     ),
@@ -159,7 +153,7 @@ function makeWorkflowRun(id: string): WorkflowRun {
 const minimalConfig: WorkflowConfig = {
   provider: {},
   commands: {},
-  defaults: { loadDefaultCommands: false, loadDefaultWorkflows: false },
+  defaults: { loadDefaultWorkflows: false },
 };
 
 describe('script node deps field — command construction', () => {

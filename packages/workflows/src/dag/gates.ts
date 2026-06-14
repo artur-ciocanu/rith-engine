@@ -88,7 +88,7 @@ async function recordNodeSkip(
     type: 'node_skipped',
     runId: workflowRun.id,
     nodeId: node.id,
-    nodeName: node.command ?? node.id,
+    nodeName: node.id,
     reason,
   });
 }
@@ -118,7 +118,7 @@ export async function recordNodePreRunFailure(
     type: 'node_failed',
     runId: workflowRun.id,
     nodeId: node.id,
-    nodeName: node.command ?? node.id,
+    nodeName: node.id,
     error: err.message,
   });
   await safeSendMessage(

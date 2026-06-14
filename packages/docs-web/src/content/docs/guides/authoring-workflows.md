@@ -9,11 +9,11 @@ sidebar:
   order: 1
 ---
 
-This guide explains how to create workflows that orchestrate multiple commands into automated pipelines. Read [Authoring Commands](/guides/authoring-commands/) first — workflows are built from commands.
+This guide explains how to create workflows that orchestrate multiple AI steps into automated pipelines.
 
 ## What is a Workflow?
 
-A workflow is a **YAML file** that defines a directed acyclic graph (DAG) of commands to execute. Workflows enable:
+A workflow is a **YAML file** that defines a directed acyclic graph (DAG) of AI steps to execute. Workflows enable:
 
 - **Multi-step automation**: Chain multiple AI agents together
 - **Parallel execution**: Independent nodes run concurrently
@@ -27,10 +27,10 @@ description: Investigate and fix a GitHub issue end-to-end
 
 nodes:
   - id: investigate
-    command: investigate-issue
+    prompt: "Investigate the reported GitHub issue. Identify root cause and affected files."
 
   - id: implement
-    command: implement-issue
+    prompt: "Implement the fix based on the investigation findings."
     depends_on: [investigate]
     context: fresh
 ```
@@ -53,8 +53,8 @@ Workflows live in `.rith/workflows/` relative to the working directory:
 │   ├── my-workflow.yaml
 │   └── review/
 │       └── full-review.yaml    # Subdirectories work
-└── commands/
-    └── [commands used by workflows]
+└── skills/
+    └── [skills used by workflows]
 ```
 
 Rith Engine discovers workflows recursively - subdirectories are fine. If a workflow file fails to load (syntax error, validation failure), it's skipped and the error is reported via `/workflow list`.
@@ -67,7 +67,7 @@ Rith Engine discovers workflows recursively - subdirectories are fine. If a work
 
 ## Workflow Structure
 
-Workflows use DAG-based execution with `nodes:`. Each node runs a command or inline prompt, declares dependencies, and supports conditional branching:
+Workflows use DAG-based execution with `nodes:`. Each node runs an inline prompt or shell command, declares dependencies, and supports conditional branching:
 
 ```yaml
 name: classify-and-fix
@@ -75,7 +75,7 @@ description: Classify issue type, then run the appropriate fix path
 
 nodes:
   - id: classify
-    command: classify-issue
+    prompt: "Classify the issue as BUG or FEATURE."
     output_format:
       type: object
       properties:
@@ -85,20 +85,19 @@ nodes:
       required: [type]
 
   - id: investigate
-    command: investigate-bug
+    prompt: "Investigate the bug. Identify root cause."
     depends_on: [classify]
     when: "$classify.output.type == 'BUG'"
 
   - id: plan
-    command: plan-feature
+    prompt: "Plan the feature implementation."
     depends_on: [classify]
     when: "$classify.output.type == 'FEATURE'"
 
   - id: implement
-    command: implement-changes
+    prompt: "Implement the changes based on the investigation or plan."
     depends_on: [investigate, plan]
     trigger_rule: none_failed_min_one_success
-```
 
 Nodes without `depends_on` run immediately. Nodes in the same topological layer run concurrently via `Promise.allSettled`. Skipped nodes (failed `when:` condition or `trigger_rule`) propagate their skipped state to dependants.
 
@@ -130,7 +129,7 @@ tags: [GitLab, Review]           # Optional: filter tags for categorization. Ove
 # Required for DAG-based
 nodes:
   - id: classify                 # Unique node ID (used for dependency refs and $id.output)
-    command: classify-issue      # Loads from .rith/commands/classify-issue.md
+    prompt: "Classify the issue as BUG or FEATURE."
     output_format:               # Optional: structured JSON output. Best-effort on Pi (schema appended to prompt, JSON extracted from result text).
       type: object
       properties:
@@ -140,22 +139,22 @@ nodes:
       required: [type]
 
   - id: investigate
-    command: investigate-bug
+    prompt: "Investigate the bug. Identify root cause and affected files."
     depends_on: [classify]       # Wait for classify to complete
     when: "$classify.output.type == 'BUG'"  # Skip if condition is false
 
   - id: plan
-    command: plan-feature
+    prompt: "Plan the feature implementation."
     depends_on: [classify]
     when: "$classify.output.type == 'FEATURE'"
 
   - id: implement
-    command: implement-changes
+    prompt: "Implement the changes."
     depends_on: [investigate, plan]
     trigger_rule: none_failed_min_one_success  # Run if at least one dep succeeded
 
   - id: inline-node
-    prompt: "Summarize the changes made in $implement.output"  # Inline prompt (no command file)
+    prompt: "Summarize the changes made in $implement.output"
     depends_on: [implement]
     context: fresh               # Force fresh session for this node
     model: anthropic/claude-haiku-4-5  # Per-node model override
@@ -164,13 +163,8 @@ nodes:
     # skills: [remotion-best-practices]  # Optional: per-node skills — see skills guide
 ```
 
-### Node Fields
-
-**Node types** — exactly one required per node (mutually exclusive):
-
 | Field | Type | Description |
 |-------|------|-------------|
-| `command` | string | Command name to load from `.rith/commands/` |
 | `prompt` | string | Inline prompt string |
 | `bash` | string | Shell script (no AI). Stdout captured as `$nodeId.output`. Optional `timeout` (ms, default 120000) |
 | `script` | string | TypeScript/JavaScript (via `bun`) or Python (via `uv`) — inline code or named reference to `.rith/scripts/`. Stdout captured as `$nodeId.output`. Requires `runtime: bun` or `runtime: uv`. Optional `deps` (uv only) and `timeout` (ms, default 120000). See [Script Nodes](/guides/script-nodes/) |
@@ -191,7 +185,7 @@ nodes:
 | `retry` | object | — | Per-node retry configuration. See [Retry Configuration](#retry-configuration) |
 | `always_run` | boolean | `false` | Opt out of resume caching: re-run this node on resume even if a prior run completed it. See [Opting Out of Resume Caching](#opting-out-of-resume-caching) |
 
-**AI node options** — apply to `command` and `prompt` nodes:
+**AI node options** — apply to `prompt` nodes:
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
@@ -219,7 +213,7 @@ Pi supports two reasoning controls, settable **per-node** or at the **workflow l
 
 ```yaml
 - id: thorough-review
-  command: review
+  prompt: "Review the code changes."
   effort: high   # 'low' | 'medium' | 'high' | 'max'
 ```
 
@@ -227,7 +221,7 @@ Pi supports two reasoning controls, settable **per-node** or at the **workflow l
 
 ```yaml
 - id: deep-analysis
-  command: analyze
+  prompt: "Analyze the architecture."
   thinking: high                  # string form (e.g. 'high')
 ```
 
@@ -240,11 +234,11 @@ thinking: high       # All nodes use this thinking level
 
 nodes:
   - id: step1
-    command: step1
+    prompt: "Execute step 1."
     # Inherits workflow-level effort and thinking
 
   - id: step2
-    command: step2
+    prompt: "Execute step 2."
     effort: low      # Per-node override — ignores workflow-level effort
 ```
 
@@ -298,18 +292,17 @@ when: "$a.output == 'X' && $b.output == 'Y' || $c.output == 'Z'"
 - Skipped nodes propagate their skipped state to dependants
 
 ### `$node_id.output` Substitution
-
-In node prompts and commands, reference the output of any upstream node:
+In node prompts, reference the output of any upstream node:
 
 ```yaml
 nodes:
   - id: classify
-    command: classify-issue
+    prompt: "Classify the issue as BUG or FEATURE."
 
   - id: fix
-    command: implement-fix
+    prompt: "Implement the fix. Classification: $classify.output"
     depends_on: [classify]
-    # The command file can use $classify.output or $classify.output.field
+    # Downstream prompts can use $classify.output or $classify.output.field
 ```
 
 Variable substitution order:
@@ -323,7 +316,7 @@ Use `output_format` to request JSON output from an AI node. On Pi this is best-e
 ```yaml
 nodes:
   - id: classify
-    command: classify-issue
+    prompt: "Classify the issue as BUG or FEATURE."
     output_format:
       type: object
       properties:
@@ -346,15 +339,15 @@ Restrict which built-in tools a node can use without relying on prompt instructi
 ```yaml
 nodes:
   - id: review
-    command: code-review
+    prompt: "Review the code for quality and correctness."
     allowed_tools: [read, grep, find]   # whitelist — only these tools available
 
   - id: implement
-    command: implement-feature
+    prompt: "Implement the feature."
     denied_tools: [write, bash]         # blacklist — remove these tools
 
   - id: mcp-only
-    command: mcp-command
+    prompt: "Run MCP-specific operations."
     allowed_tools: []                   # empty list = disable all built-in tools
 ```
 
@@ -413,7 +406,7 @@ To customise, add a `retry:` block:
 ```yaml
 nodes:
   - id: flaky-node
-    command: flaky-command
+    prompt: "Run the flaky operation."
     retry:
       max_attempts: 3       # 3 retries = 4 total attempts
       delay_ms: 5000
@@ -600,7 +593,7 @@ nodes:
       message: "Does this plan look good?"
     depends_on: [plan]
   - id: implement
-    command: implement
+    prompt: "Implement the approved plan."
     depends_on: [review-gate]
 ```
 
@@ -610,7 +603,7 @@ Model strings are not validated at load time — they're forwarded to Pi as-is a
 
 ### Resource Validation (CLI)
 
-To validate that all referenced command files, MCP config files, and skill directories exist on disk, run:
+To validate that all referenced MCP config files and skill directories exist on disk, run:
 
 ```bash
 rith validate workflows <name>
@@ -634,10 +627,10 @@ model: anthropic/claude-opus-4-5  # Override config default for this workflow
 
 nodes:
   - id: analyze
-    command: analyze-architecture
+    prompt: "Analyze the architecture of this codebase."
 
   - id: report
-    command: generate-report
+    prompt: "Generate a report based on the analysis."
     depends_on: [analyze]
     context: fresh
 ```
@@ -678,7 +671,7 @@ Good descriptions include:
 
 ## Variable Substitution
 
-All workflows support variable substitution in prompts and commands. The most commonly used:
+All workflows support variable substitution in prompts. The most commonly used:
 
 | Variable | Description |
 |----------|-------------|
@@ -719,10 +712,10 @@ description: |
 
 nodes:
   - id: fix
-    command: analyze-and-fix
+    prompt: "Analyze the bug and implement a fix."
 
   - id: pr
-    command: create-pr
+    prompt: "Create a pull request with the changes."
     depends_on: [fix]
     context: fresh
 ```
@@ -737,10 +730,10 @@ description: |
 
 nodes:
   - id: investigate
-    command: investigate-issue
+    prompt: "Investigate the reported issue. Identify root cause and affected files."
 
   - id: implement
-    command: implement-issue
+    prompt: "Implement the fix based on the investigation."
     depends_on: [investigate]
     context: fresh
 ```
@@ -754,30 +747,30 @@ description: |
 
 nodes:
   - id: scope
-    command: create-review-scope
+    prompt: "Create the review scope: identify changed files, summarize the PR intent."
 
   - id: code-review
-    command: code-review-agent
+    prompt: "Review code quality, patterns, and correctness."
     depends_on: [scope]
     context: fresh
 
   - id: comment-review
-    command: comment-quality-agent
+    prompt: "Review comment quality and documentation."
     depends_on: [scope]
     context: fresh
 
   - id: test-review
-    command: test-coverage-agent
+    prompt: "Review test coverage and quality."
     depends_on: [scope]
     context: fresh
 
   - id: security-review
-    command: security-review-agent
+    prompt: "Review for security vulnerabilities."
     depends_on: [scope]
     context: fresh
 
   - id: synthesize
-    command: synthesize-reviews
+    prompt: "Synthesize all review findings into a single report."
     depends_on: [code-review, comment-review, test-review, security-review]
     context: fresh
 ```
@@ -816,7 +809,7 @@ description: |
 
 nodes:
   - id: classify
-    command: classify-issue
+    prompt: "Classify the issue as BUG or FEATURE."
     output_format:
       type: object
       properties:
@@ -826,22 +819,22 @@ nodes:
       required: [type]
 
   - id: investigate
-    command: investigate-bug
+    prompt: "Investigate the bug. Identify root cause."
     depends_on: [classify]
     when: "$classify.output.type == 'BUG'"
 
   - id: plan
-    command: plan-feature
+    prompt: "Plan the feature implementation."
     depends_on: [classify]
     when: "$classify.output.type == 'FEATURE'"
 
   - id: implement
-    command: implement-changes
+    prompt: "Implement the changes."
     depends_on: [investigate, plan]
     trigger_rule: none_failed_min_one_success
 
   - id: create-pr
-    command: create-pr
+    prompt: "Create a pull request."
     depends_on: [implement]
     context: fresh
 ```
@@ -860,7 +853,7 @@ description: Route to appropriate fix strategy based on issue complexity
 
 nodes:
   - id: analyze
-    command: analyze-complexity
+    prompt: "Analyze the complexity of this issue."
     output_format:
       type: object
       properties:
@@ -870,12 +863,12 @@ nodes:
       required: [complexity]
 
   - id: quick-fix
-    command: quick-fix
+    prompt: "Apply a quick fix for the simple issue."
     depends_on: [analyze]
     when: "$analyze.output.complexity == 'simple'"
 
   - id: deep-fix
-    command: deep-investigation
+    prompt: "Perform a deep investigation and fix for the complex issue."
     depends_on: [analyze]
     when: "$analyze.output.complexity == 'complex'"
 ```
@@ -890,20 +883,20 @@ description: Multi-file migration with automatic checkpoint recovery
 
 nodes:
   - id: plan
-    command: create-migration-plan
+    prompt: "Create the migration plan."
 
   - id: batch-1
-    command: migrate-batch-1
+    prompt: "Execute migration batch 1."
     depends_on: [plan]
     context: fresh
 
   - id: batch-2
-    command: migrate-batch-2
+    prompt: "Execute migration batch 2."
     depends_on: [batch-1]
     context: fresh
 
   - id: validate
-    command: validate-migration
+    prompt: "Validate the migration results."
     depends_on: [batch-2]
     context: fresh
 ```
@@ -920,7 +913,7 @@ description: Refactor with human approval gate
 
 nodes:
   - id: propose
-    command: propose-refactor
+    prompt: "Propose a refactoring plan."
 
   - id: review-gate
     approval:
@@ -928,11 +921,11 @@ nodes:
     depends_on: [propose]
 
   - id: execute
-    command: execute-approved-refactor
+    prompt: "Execute the approved refactoring."
     depends_on: [review-gate]
 
   - id: pr
-    command: create-pr
+    prompt: "Create a pull request."
     depends_on: [execute]
     context: fresh
 ```
@@ -1052,7 +1045,7 @@ Each line is a JSON event (step start, AI response, tool call, etc.).
 
 Before deploying a workflow:
 
-1. **Test each command individually**
+1. **Test each node individually**
    ```bash
    bun run cli workflow run {workflow} "test input"
    ```
@@ -1075,9 +1068,9 @@ Before deploying a workflow:
 
 ## Summary
 
-1. **Workflows orchestrate commands** — YAML files defining a DAG of execution nodes
-2. **`nodes:` define the graph** — each node runs a command, inline prompt, bash script, or loop
-3. **Artifacts are the glue** — commands communicate via files, not in-memory context
+1. **Workflows orchestrate AI steps** — YAML files defining a DAG of execution nodes
+2. **`nodes:` define the graph** — each node runs a prompt, bash script, script, or loop
+3. **Artifacts are the glue** — nodes communicate via files, not in-memory context
 4. **`context: fresh`** — forces a fresh AI session for a node (works from artifacts only)
 5. **Parallel by default** — nodes in the same topological layer run concurrently
 6. **Conditional branching** — `when:` conditions and `trigger_rule` control which nodes run
@@ -1094,4 +1087,4 @@ Before deploying a workflow:
 17. **`sandbox`** — OS-level restrictions; not supported under Pi
 18. **Loop nodes** — use `loop:` within a DAG node for iterative execution until completion signal
 19. **Defaults as templates** — browse `.rith/workflows/defaults/` for real examples to copy and modify
-20. **Test thoroughly** — each command, the artifact flow, and edge cases
+20. **Test thoroughly** — each node, the artifact flow, and edge cases

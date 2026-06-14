@@ -14,10 +14,8 @@ import {
   getRithWorktreesPath,
   getRithConfigPath,
   getHomeWorkflowsPath,
-  getHomeCommandsPath,
   getHomeScriptsPath,
   getLegacyHomeWorkflowsPath,
-  getCommandFolderSearchPaths,
   getWorkflowFolderSearchPaths,
   expandTilde,
   getAppRithBasePath,
@@ -176,38 +174,6 @@ describe('rith-paths', () => {
     });
   });
 
-  describe('getCommandFolderSearchPaths', () => {
-    test('returns .rith/commands and defaults by default', () => {
-      const paths = getCommandFolderSearchPaths();
-      expect(paths).toEqual(['.rith/commands', '.rith/commands/defaults']);
-    });
-
-    test('includes configured folder when provided', () => {
-      const paths = getCommandFolderSearchPaths('.claude/commands/rith');
-      expect(paths).toEqual(['.rith/commands', '.rith/commands/defaults', '.claude/commands/rith']);
-    });
-
-    test('.rith/commands has highest priority', () => {
-      const paths = getCommandFolderSearchPaths('.custom/commands');
-      expect(paths[0]).toBe('.rith/commands');
-    });
-
-    test('.rith/commands/defaults has second priority', () => {
-      const paths = getCommandFolderSearchPaths('.custom/commands');
-      expect(paths[1]).toBe('.rith/commands/defaults');
-    });
-
-    test('does not duplicate .rith/commands if configured', () => {
-      const paths = getCommandFolderSearchPaths('.rith/commands');
-      expect(paths).toEqual(['.rith/commands', '.rith/commands/defaults']);
-    });
-
-    test('does not duplicate .rith/commands/defaults if configured', () => {
-      const paths = getCommandFolderSearchPaths('.rith/commands/defaults');
-      expect(paths).toEqual(['.rith/commands', '.rith/commands/defaults']);
-    });
-  });
-
   describe('getWorkflowFolderSearchPaths', () => {
     test('returns .rith/workflows', () => {
       const paths = getWorkflowFolderSearchPaths();
@@ -248,25 +214,6 @@ describe('rith-paths', () => {
       delete process.env.RITH_HOME;
       delete process.env.RITH_DOCKER;
       expect(getHomeWorkflowsPath()).not.toContain(join('.rith', '.rith'));
-    });
-  });
-
-  describe('getHomeCommandsPath', () => {
-    test('returns ~/.rith/commands by default', () => {
-      delete process.env.RITH_HOME;
-      delete process.env.RITH_DOCKER;
-      expect(getHomeCommandsPath()).toBe(join(homedir(), '.rith', 'commands'));
-    });
-
-    test('returns /.rith/commands in Docker', () => {
-      process.env.RITH_DOCKER = 'true';
-      expect(getHomeCommandsPath()).toBe(join('/', '.rith', 'commands'));
-    });
-
-    test('uses RITH_HOME when set', () => {
-      delete process.env.RITH_DOCKER;
-      process.env.RITH_HOME = '/custom/rith';
-      expect(getHomeCommandsPath()).toBe(join('/custom/rith', 'commands'));
     });
   });
 

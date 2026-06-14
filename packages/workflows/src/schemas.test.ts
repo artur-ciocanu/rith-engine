@@ -13,7 +13,6 @@ import {
 import type {
   WorkflowDefinition,
   DagNode,
-  CommandNode,
   PromptNode,
   BashNode,
   CancelNode,
@@ -25,15 +24,14 @@ import type {
 // Fixtures
 // ---------------------------------------------------------------------------
 
-const commandNode: CommandNode = { id: 'n1', command: 'build' };
-const promptNode: PromptNode = { id: 'n2', prompt: 'Do this inline.' };
+const promptNode: PromptNode = { id: 'n1', prompt: 'Plan the build.' };
 const bashNode: BashNode = { id: 'n3', bash: 'echo hello' };
 const cancelNode: CancelNode = { id: 'n5', cancel: 'Precondition failed' };
 
 const dagWorkflow: WorkflowDefinition = {
   name: 'dag-workflow',
   description: 'DAG execution',
-  nodes: [commandNode, promptNode, bashNode],
+  nodes: [promptNode, bashNode],
 };
 
 // ---------------------------------------------------------------------------
@@ -55,16 +53,12 @@ describe('isBashNode', () => {
     expect(isBashNode(withDeps)).toBe(true);
   });
 
-  test('returns false for a CommandNode', () => {
-    expect(isBashNode(commandNode)).toBe(false);
-  });
-
-  test('returns false for a PromptNode', () => {
+  test('returns false for a PromptNode (prompt field)', () => {
     expect(isBashNode(promptNode)).toBe(false);
   });
 
   test('returns false when bash field is missing', () => {
-    const noCmd = { id: 'x', command: 'build' } as DagNode;
+    const noCmd = { id: 'x', prompt: 'hello' } as DagNode;
     expect(isBashNode(noCmd)).toBe(false);
   });
 
@@ -84,8 +78,8 @@ describe('isCancelNode', () => {
     expect(isCancelNode(cancelNode)).toBe(true);
   });
 
-  test('returns false for a CommandNode', () => {
-    expect(isCancelNode(commandNode)).toBe(false);
+  test('returns false for a PromptNode', () => {
+    expect(isCancelNode(promptNode)).toBe(false);
   });
 
   test('returns false for a PromptNode', () => {
@@ -418,8 +412,7 @@ describe('dagNodeSchema — new Claude SDK options', () => {
 
 describe('isScriptNode', () => {
   const scriptNode: ScriptNode = { id: 's1', script: 'console.log("hi")', runtime: 'bun' };
-  const commandNode: CommandNode = { id: 'n1', command: 'build' };
-  const promptNode: PromptNode = { id: 'n2', prompt: 'Do this inline.' };
+  const promptNode2: PromptNode = { id: 'n2', prompt: 'Do this inline.' };
   const bashNode: BashNode = { id: 'n3', bash: 'echo hello' };
 
   test('returns true for a ScriptNode', () => {
@@ -436,12 +429,8 @@ describe('isScriptNode', () => {
     expect(isScriptNode(withDeps)).toBe(true);
   });
 
-  test('returns false for a CommandNode', () => {
-    expect(isScriptNode(commandNode)).toBe(false);
-  });
-
   test('returns false for a PromptNode', () => {
-    expect(isScriptNode(promptNode)).toBe(false);
+    expect(isScriptNode(promptNode2)).toBe(false);
   });
 
   test('returns false for a BashNode', () => {
@@ -591,19 +580,6 @@ describe('dagNodeSchema — ScriptNode', () => {
       id: 's',
       script: 'console.log("hi")',
       prompt: 'Do something',
-      runtime: 'bun',
-    });
-    expect(result.success).toBe(false);
-    if (!result.success) {
-      expect(result.error.issues[0].message).toContain('mutually exclusive');
-    }
-  });
-
-  test('rejects script + command (mutually exclusive)', () => {
-    const result = dagNodeSchema.safeParse({
-      id: 's',
-      script: 'console.log("hi")',
-      command: 'some-command',
       runtime: 'bun',
     });
     expect(result.success).toBe(false);
